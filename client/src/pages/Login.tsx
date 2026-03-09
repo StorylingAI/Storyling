@@ -43,7 +43,7 @@ export default function Login() {
   };
 
   const handleGoogleSignIn = () => {
-    window.location.href = getLoginUrl();
+    window.location.href = "/api/auth/google";
   };
 
   return (

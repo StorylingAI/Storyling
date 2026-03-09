@@ -68,7 +68,7 @@ export default function SignUp() {
   };
 
   const handleGoogleSignUp = () => {
-    window.location.href = getLoginUrl();
+    window.location.href = "/api/auth/google";
   };
 
   return (
