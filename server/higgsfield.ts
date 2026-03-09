@@ -200,7 +200,14 @@ export async function generateHiggsfieldVideo(
 
     console.error('[Higgsfield] Video generation error:', typeof rawData === 'string' ? rawData.slice(0, 200) : rawData || error.message);
 
-    if (status === 401 || status === 403) {
+    // Check for "not enough credits" before generic auth errors
+    const detailMsg = rawData?.detail || rawData?.error || '';
+    const isCreditsError = typeof detailMsg === 'string' && detailMsg.toLowerCase().includes('not enough credits');
+
+    if (isCreditsError) {
+      console.error('[Higgsfield] Not enough credits');
+      throw new Error('Not enough Higgsfield credits to generate this video. Please add credits to your Higgsfield account.');
+    } else if (status === 401 || status === 403) {
       throw new Error('Higgsfield API authentication failed. Please check your API credentials.');
     } else if (status === 429) {
       throw new Error('Higgsfield API rate limit exceeded. Please try again later.');
