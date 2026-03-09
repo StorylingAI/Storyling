@@ -16,10 +16,10 @@ const corsOptions: cors.CorsOptions = {
   allowedHeaders: ["Content-Type", "Authorization", "stripe-signature"],
 };
 
-// General API rate limit: 100 requests per 15 min per IP
+// General API rate limit: 300 requests per 15 min per IP
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
@@ -53,6 +53,9 @@ function globalErrorHandler(err: Error, _req: Request, res: Response, _next: Nex
 }
 
 export function registerSecurityMiddleware(app: Express) {
+  // Trust proxy (Railway, Docker, etc.) so rate limiting uses real client IP
+  app.set("trust proxy", 1);
+
   // Helmet: security headers + CSP
   app.use(
     helmet({
