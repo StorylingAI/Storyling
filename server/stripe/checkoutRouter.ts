@@ -67,8 +67,8 @@ export const checkoutRouter = router({
 
       // Determine price ID based on billing period (created dynamically if needed)
       const priceId = input.billingPeriod === "monthly"
-        ? await getPremiumMonthlyPriceId(stripe)
-        : await getPremiumAnnualPriceId(stripe);
+        ? await getPremiumMonthlyPriceId(getStripe())
+        : await getPremiumAnnualPriceId(getStripe());
 
       // Validate and apply referral code if provided
       let discountCouponId: string | undefined;
@@ -298,8 +298,8 @@ export const checkoutRouter = router({
       // Calculate pricing and get/create Stripe price dynamically
       const monthlyCost = calculateMonthlyCost(input.tier, input.studentCount);
       const stripePriceId = input.tier === "basic"
-        ? await getBasicPriceId(stripe)
-        : await getPremiumSchoolPriceId(stripe);
+        ? await getBasicPriceId(getStripe())
+        : await getPremiumSchoolPriceId(getStripe());
 
       if (!stripePriceId) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "Invalid subscription tier" });

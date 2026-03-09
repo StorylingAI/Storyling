@@ -1,6 +1,6 @@
 /**
  * Higgsfield Video Generation Integration
- * 
+ *
  * This module handles video generation using Higgsfield's API
  * Documentation: https://docs.higgsfield.ai
  */
@@ -10,10 +10,14 @@ import { storagePut } from './storage';
 
 const HIGGSFIELD_API_KEY_ID = process.env.HIGGSFIELD_API_KEY_ID;
 const HIGGSFIELD_API_KEY_SECRET = process.env.HIGGSFIELD_API_KEY_SECRET;
-const HIGGSFIELD_API_BASE = 'https://api.higgsfield.ai/v1';
+const HIGGSFIELD_API_BASE = 'https://platform.higgsfield.ai';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5000;
+
+function getAuthHeader(): string {
+  return `Key ${HIGGSFIELD_API_KEY_ID}:${HIGGSFIELD_API_KEY_SECRET}`;
+}
 
 function isCloudflareOrServerError(error: any): boolean {
   const status = error.response?.status;
@@ -29,15 +33,15 @@ async function sleep(ms: number) {
 
 interface HiggsfieldGenerationRequest {
   prompt: string;
-  duration?: number; // Duration in seconds (default: 5)
-  aspectRatio?: '16:9' | '9:16' | '1:1'; // Default: 16:9
-  model?: 'standard' | 'pro'; // Default: standard
+  duration?: number;
+  aspectRatio?: '16:9' | '9:16' | '1:1';
+  model?: 'standard' | 'pro';
 }
 
 interface HiggsfieldGenerationResponse {
   videoUrl: string;
   status: 'completed' | 'processing' | 'failed';
-  taskId?: string;
+  requestId?: string;
   error?: string;
 }
 
@@ -55,31 +59,34 @@ export async function generateHiggsfieldVideo(
 
   const { prompt, duration = 5, aspectRatio = '16:9', model = 'standard' } = request;
 
-  console.log('[Higgsfield] Starting video generation:', { prompt, duration, aspectRatio, model });
+  // Map model choice to Higgsfield model path
+  const modelPath = model === 'pro'
+    ? 'higgsfield-ai/dop/pro'
+    : 'higgsfield-ai/dop/standard';
+
+  console.log('[Higgsfield] Starting video generation:', { prompt, duration, aspectRatio, model, modelPath });
 
   try {
-    // Step 1: Create video generation task (with retry for server/Cloudflare errors)
+    // Step 1: Submit video generation request (with retry for server/Cloudflare errors)
     let createResponse: any;
     for (let retry = 0; retry <= MAX_RETRIES; retry++) {
       try {
         createResponse = await axios.post(
-          `${HIGGSFIELD_API_BASE}/generate`,
+          `${HIGGSFIELD_API_BASE}/${modelPath}`,
           {
-            prompt: prompt,
-            duration: duration,
+            prompt,
+            duration,
             aspect_ratio: aspectRatio,
-            model: model,
           },
           {
             headers: {
-              'X-API-Key-ID': HIGGSFIELD_API_KEY_ID,
-              'X-API-Key-Secret': HIGGSFIELD_API_KEY_SECRET,
+              'Authorization': getAuthHeader(),
               'Content-Type': 'application/json',
             },
             timeout: 60000,
           }
         );
-        break; // Success
+        break;
       } catch (err: any) {
         if (isCloudflareOrServerError(err) && retry < MAX_RETRIES) {
           console.warn(`[Higgsfield] Server error (attempt ${retry + 1}/${MAX_RETRIES + 1}), retrying in ${RETRY_DELAY_MS / 1000}s...`);
@@ -90,24 +97,23 @@ export async function generateHiggsfieldVideo(
       }
     }
 
-    const taskId = createResponse.data.task_id || createResponse.data.id;
-    console.log('[Higgsfield] Task created:', taskId);
+    const requestId = createResponse.data.request_id;
+    console.log('[Higgsfield] Request created:', requestId);
 
     // Step 2: Poll for completion (Higgsfield typically takes 30-120 seconds)
     const maxAttempts = 60; // 5 minutes max
     const pollInterval = 5000; // 5 seconds
 
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+      await sleep(pollInterval);
 
       let statusResponse: any;
       try {
         statusResponse = await axios.get(
-          `${HIGGSFIELD_API_BASE}/generate/${taskId}`,
+          `${HIGGSFIELD_API_BASE}/requests/${requestId}/status`,
           {
             headers: {
-              'X-API-Key-ID': HIGGSFIELD_API_KEY_ID,
-              'X-API-Key-Secret': HIGGSFIELD_API_KEY_SECRET,
+              'Authorization': getAuthHeader(),
             },
             timeout: 30000,
           }
@@ -115,7 +121,7 @@ export async function generateHiggsfieldVideo(
       } catch (pollError: any) {
         if (isCloudflareOrServerError(pollError)) {
           console.warn(`[Higgsfield] Server error during polling (attempt ${attempt + 1}), will retry...`);
-          continue; // Skip this poll attempt, try again next loop
+          continue;
         }
         throw pollError;
       }
@@ -123,9 +129,9 @@ export async function generateHiggsfieldVideo(
       const status = statusResponse.data.status;
       console.log(`[Higgsfield] Status check ${attempt + 1}/${maxAttempts}:`, status);
 
-      if (status === 'completed' || status === 'succeeded') {
-        const videoUrl = statusResponse.data.video_url || statusResponse.data.output_url;
-        
+      if (status === 'completed') {
+        const videoUrl = statusResponse.data.video?.url;
+
         if (!videoUrl) {
           throw new Error('Video URL not found in completed response');
         }
@@ -135,7 +141,7 @@ export async function generateHiggsfieldVideo(
         // Step 3: Download video and upload to S3
         const videoResponse = await axios.get(videoUrl, {
           responseType: 'arraybuffer',
-          timeout: 120000, // 2 minute timeout for download
+          timeout: 120000,
         });
 
         const timestamp = Date.now();
@@ -149,20 +155,28 @@ export async function generateHiggsfieldVideo(
         return {
           videoUrl: url,
           status: 'completed',
-          taskId: taskId,
+          requestId,
         };
-      } else if (status === 'failed' || status === 'error') {
+      } else if (status === 'failed') {
         const errorMessage = statusResponse.data.error || 'Video generation failed';
         console.error('[Higgsfield] Generation failed:', errorMessage);
         return {
           videoUrl: '',
           status: 'failed',
-          taskId: taskId,
+          requestId,
           error: errorMessage,
+        };
+      } else if (status === 'nsfw') {
+        console.error('[Higgsfield] Content rejected: NSFW detected');
+        return {
+          videoUrl: '',
+          status: 'failed',
+          requestId,
+          error: 'Content was flagged as inappropriate. Please try a different prompt.',
         };
       }
 
-      // Still processing, continue polling
+      // Still processing (queued or in_progress), continue polling
     }
 
     // Timeout after max attempts
@@ -170,15 +184,14 @@ export async function generateHiggsfieldVideo(
     return {
       videoUrl: '',
       status: 'processing',
-      taskId: taskId,
-      error: 'Video generation timeout - please try again',
+      requestId,
+      error: 'Video generation timeout, please try again',
     };
 
   } catch (error: any) {
     const status = error.response?.status;
     const rawData = error.response?.data;
 
-    // Log clean message, not raw HTML
     if (isCloudflareOrServerError(error)) {
       console.error(`[Higgsfield] Service unavailable (HTTP ${status || 'timeout'})`);
       throw new Error('Video generation service is temporarily unavailable. Please try again in a few minutes.');
@@ -202,37 +215,38 @@ export async function generateHiggsfieldVideo(
 }
 
 /**
- * Check the status of a video generation task
- * @param taskId - Task ID from initial generation request
+ * Check the status of a video generation request
+ * @param requestId - Request ID from initial generation request
  * @returns Current status and video URL if complete
  */
-export async function checkHiggsfieldStatus(taskId: string): Promise<HiggsfieldGenerationResponse> {
+export async function checkHiggsfieldStatus(requestId: string): Promise<HiggsfieldGenerationResponse> {
   if (!HIGGSFIELD_API_KEY_ID || !HIGGSFIELD_API_KEY_SECRET) {
     throw new Error('Higgsfield API credentials are not configured');
   }
 
-  console.log('[Higgsfield] Checking status for task:', taskId);
+  console.log('[Higgsfield] Checking status for request:', requestId);
 
   try {
     const response = await axios.get(
-      `${HIGGSFIELD_API_BASE}/generate/${taskId}`,
+      `${HIGGSFIELD_API_BASE}/requests/${requestId}/status`,
       {
         headers: {
-          'X-API-Key-ID': HIGGSFIELD_API_KEY_ID,
-          'X-API-Key-Secret': HIGGSFIELD_API_KEY_SECRET,
+          'Authorization': getAuthHeader(),
         },
+        timeout: 30000,
       }
     );
 
     const status = response.data.status;
 
-    if (status === 'completed' || status === 'succeeded') {
-      const videoUrl = response.data.video_url || response.data.output_url;
-      
+    if (status === 'completed') {
+      const videoUrl = response.data.video?.url;
+
       if (videoUrl) {
         // Download and upload to S3 if not already done
         const videoResponse = await axios.get(videoUrl, {
           responseType: 'arraybuffer',
+          timeout: 120000,
         });
 
         const timestamp = Date.now();
@@ -244,23 +258,30 @@ export async function checkHiggsfieldStatus(taskId: string): Promise<HiggsfieldG
         return {
           videoUrl: url,
           status: 'completed',
-          taskId: taskId,
+          requestId,
         };
       }
-    } else if (status === 'failed' || status === 'error') {
+    } else if (status === 'failed') {
       return {
         videoUrl: '',
         status: 'failed',
-        taskId: taskId,
+        requestId,
         error: response.data.error || 'Generation failed',
+      };
+    } else if (status === 'nsfw') {
+      return {
+        videoUrl: '',
+        status: 'failed',
+        requestId,
+        error: 'Content was flagged as inappropriate.',
       };
     }
 
-    // Still processing
+    // Still processing (queued or in_progress)
     return {
       videoUrl: '',
       status: 'processing',
-      taskId: taskId,
+      requestId,
     };
 
   } catch (error: any) {
