@@ -59,10 +59,10 @@ export async function generateHiggsfieldVideo(
 
   const { prompt, duration = 5, aspectRatio = '16:9', model = 'standard' } = request;
 
-  // Map model choice to Higgsfield model path
+  // Map model choice to Higgsfield model path (soul = text-to-video)
   const modelPath = model === 'pro'
-    ? 'higgsfield-ai/dop/pro'
-    : 'higgsfield-ai/dop/standard';
+    ? 'higgsfield-ai/soul/pro'
+    : 'higgsfield-ai/soul/standard';
 
   console.log('[Higgsfield] Starting video generation:', { prompt, duration, aspectRatio, model, modelPath });
 
@@ -75,13 +75,14 @@ export async function generateHiggsfieldVideo(
           `${HIGGSFIELD_API_BASE}/${modelPath}`,
           {
             prompt,
-            duration,
             aspect_ratio: aspectRatio,
+            resolution: '720p',
           },
           {
             headers: {
               'Authorization': getAuthHeader(),
               'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
             timeout: 60000,
           }
