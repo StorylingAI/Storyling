@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` ADD `difficulty_level` varchar(10);

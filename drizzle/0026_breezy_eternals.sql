@@ -1,0 +1,1 @@
+ALTER TABLE `level_test_results` MODIFY COLUMN `proficiency_level` enum('A1','A2','B1','B2','C1','C2') NOT NULL;

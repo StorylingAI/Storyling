@@ -1,0 +1,1 @@
+ALTER TABLE `achievements` MODIFY COLUMN `category` enum('streak','stories','quizzes','vocabulary','collections','special') NOT NULL;

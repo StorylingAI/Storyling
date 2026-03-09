@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` ADD `title_translation` varchar(200);

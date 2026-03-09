@@ -1,0 +1,50 @@
+[
+  {
+    "id": "leaderboard",
+    "name": "Leaderboard Banner",
+    "filename": "leaderboard-728x90.png",
+    "width": 728,
+    "height": 90,
+    "description": "Standard leaderboard banner, ideal for website headers and top placements"
+  },
+  {
+    "id": "medium-rectangle",
+    "name": "Medium Rectangle",
+    "filename": "medium-rectangle-300x250.png",
+    "width": 300,
+    "height": 250,
+    "description": "Versatile medium rectangle, perfect for sidebar and inline content"
+  },
+  {
+    "id": "wide-skyscraper",
+    "name": "Wide Skyscraper",
+    "filename": "wide-skyscraper-160x600.png",
+    "width": 160,
+    "height": 600,
+    "description": "Vertical banner for sidebar placements and long-form content"
+  },
+  {
+    "id": "large-rectangle",
+    "name": "Large Rectangle",
+    "filename": "large-rectangle-336x280.png",
+    "width": 336,
+    "height": 280,
+    "description": "Large rectangle for prominent placements and high visibility"
+  },
+  {
+    "id": "mobile-banner",
+    "name": "Mobile Banner",
+    "filename": "mobile-banner-320x50.png",
+    "width": 320,
+    "height": 50,
+    "description": "Compact mobile banner optimized for mobile devices"
+  },
+  {
+    "id": "square",
+    "name": "Square Banner",
+    "filename": "square-250x250.png",
+    "width": 250,
+    "height": 250,
+    "description": "Square format for social media and flexible layouts"
+  }
+]

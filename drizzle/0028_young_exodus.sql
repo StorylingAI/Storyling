@@ -1,0 +1,1 @@
+ALTER TABLE `notifications` MODIFY COLUMN `type` enum('new_follower','new_collection','collection_featured','badge_earned','story_ready') NOT NULL;

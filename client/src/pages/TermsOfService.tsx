@@ -1,0 +1,166 @@
+import { Card, CardContent } from "@/components/ui/card";
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, FileText } from "lucide-react";
+
+export default function TermsOfService() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50">
+      <div className="container py-8 space-y-8 max-w-4xl">
+        {/* Header */}
+        <div className="flex items-center gap-4">
+          <Link href="/">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-4xl font-bold gradient-text flex items-center gap-2">
+              <FileText className="h-8 w-8" />
+              Terms of Service
+            </h1>
+            <p className="text-muted-foreground mt-2">Last updated: January 5, 2026</p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <Card className="rounded-card shadow-playful-lg border-2">
+          <CardContent className="pt-6 space-y-6 prose prose-sm max-w-none">
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Agreement to Terms</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                By accessing or using Storyling AI, you agree to be bound by these Terms of Service and all applicable laws and regulations. If you do not agree with any of these terms, you are prohibited from using this service.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Use License</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                We grant you a personal, non-transferable, non-exclusive license to use the Storyling AI platform for your language learning purposes. This license does not include:
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>Modifying or copying the materials</li>
+                <li>Using the materials for commercial purposes</li>
+                <li>Attempting to reverse engineer any software</li>
+                <li>Removing copyright or proprietary notations</li>
+                <li>Transferring the materials to another person</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">User Accounts</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                When you create an account, you must provide accurate information. You are responsible for:
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>Maintaining the security of your account credentials</li>
+                <li>All activities that occur under your account</li>
+                <li>Notifying us immediately of any unauthorized access</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Subscription and Payment</h2>
+              <h3 className="text-xl font-semibold mb-2">Free Plan</h3>
+              <p className="text-muted-foreground leading-relaxed">
+                Our free plan includes limited features as described on our pricing page.
+              </p>
+
+              <h3 className="text-xl font-semibold mb-2 mt-4">Premium Plan</h3>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>Billed monthly or annually</li>
+                <li>Automatic renewal unless cancelled</li>
+                <li>No refunds for partial months</li>
+                <li>You may cancel anytime from your account settings</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">User Content</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                You retain ownership of content you create (vocabulary lists, collections). By making content public, you grant us a license to display and share that content with other users.
+              </p>
+              <p className="text-muted-foreground leading-relaxed mt-2">
+                You agree not to post content that:
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>Is illegal, harmful, or offensive</li>
+                <li>Infringes on intellectual property rights</li>
+                <li>Contains malware or viruses</li>
+                <li>Violates privacy or impersonates others</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">AI-Generated Content</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                Stories and content generated by our AI are provided "as is" for educational purposes. While we strive for accuracy, we cannot guarantee:
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>100% accuracy of translations or grammar</li>
+                <li>Cultural appropriateness in all contexts</li>
+                <li>Suitability for professional or academic use</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Prohibited Activities</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                You may not:
+              </p>
+              <ul className="list-disc pl-6 text-muted-foreground space-y-2">
+                <li>Use automated systems to access the service (bots, scrapers)</li>
+                <li>Attempt to gain unauthorized access to our systems</li>
+                <li>Interfere with or disrupt the service</li>
+                <li>Resell or redistribute our content</li>
+                <li>Use the service for any illegal purpose</li>
+              </ul>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Intellectual Property</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                The Storyling AI platform, including its design, features, and content, is protected by copyright, trademark, and other intellectual property laws. All rights not expressly granted are reserved.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Disclaimer</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                The service is provided "as is" without warranties of any kind. We do not guarantee that the service will be uninterrupted, secure, or error-free.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Limitation of Liability</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                To the maximum extent permitted by law, Storyling AI shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of the service.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Termination</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                We reserve the right to terminate or suspend your account at any time for violations of these terms. Upon termination, your right to use the service will immediately cease.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Changes to Terms</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                We may revise these terms at any time. Continued use of the service after changes constitutes acceptance of the new terms.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="text-2xl font-bold mb-3">Contact</h2>
+              <p className="text-muted-foreground leading-relaxed">
+                Questions about these Terms? Contact us through our <Link href="/contact" className="text-primary hover:underline">Contact page</Link>.
+              </p>
+            </section>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
