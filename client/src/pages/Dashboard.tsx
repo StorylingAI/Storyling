@@ -34,7 +34,6 @@ import { QuickStartTutorial } from "@/components/QuickStartTutorial";
 import { TutorialChallenges } from "@/components/TutorialChallenges";
 import { useChallengeDetection } from "@/hooks/useChallengeDetection";
 import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
-import { DashboardOnboardingTutorial } from "@/components/DashboardOnboardingTutorial";
 import { WeeklyGoalWidget } from "@/components/WeeklyGoalWidget";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
 import { WeeklyGoalReminder } from "@/components/WeeklyGoalReminder";
@@ -47,29 +46,10 @@ export default function Dashboard() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
-  const [showDashboardTutorial, setShowDashboardTutorial] = useState(false);
-  const [hasSeenDashboardTutorial, setHasSeenDashboardTutorial] = useState(() => {
-    return localStorage.getItem('dashboardTutorialSeen') === 'true';
-  });
   useChallengeDetection(); // Auto-detect challenge completion
 
   // Weekly goal onboarding will auto-show for new users
 
-  // Show dashboard tutorial for first-time users
-  useEffect(() => {
-    if (user && isAuthenticated && !hasSeenDashboardTutorial) {
-      const timer = setTimeout(() => {
-        setShowDashboardTutorial(true);
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [user, isAuthenticated, hasSeenDashboardTutorial]);
-
-  const handleDashboardTutorialComplete = () => {
-    setShowDashboardTutorial(false);
-    localStorage.setItem('dashboardTutorialSeen', 'true');
-    setHasSeenDashboardTutorial(true);
-  };
 
   const completePremiumOnboarding = trpc.auth.completePremiumOnboarding.useMutation();
   const utils = trpc.useUtils();
@@ -527,9 +507,6 @@ export default function Dashboard() {
           completePremiumOnboarding.mutate();
         }}
       />
-    )}
-    {showDashboardTutorial && (
-      <DashboardOnboardingTutorial onComplete={handleDashboardTutorialComplete} />
     )}
     <AppFooter />
     </>
