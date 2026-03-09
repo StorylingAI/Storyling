@@ -165,12 +165,6 @@ export default function Dashboard() {
   return (
     <>
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-teal-50">
-      <div className="container mx-auto px-4 py-8 pb-24 md:pb-8">
-        <EmailVerificationBanner />
-      </div>
-      <QuickStartTutorial />
-      <WeeklyGoalOnboarding />
-      <PremiumWelcomeModal open={showPremiumWelcome} onClose={() => setShowPremiumWelcome(false)} />
       {/* Header */}
       <header className="bg-white/80 backdrop-blur-sm border-b shadow-playful sticky top-0 z-40">
         <div className="container flex h-16 items-center justify-between">
@@ -210,7 +204,12 @@ export default function Dashboard() {
         </div>
       </header>
 
+      <QuickStartTutorial />
+      <WeeklyGoalOnboarding />
+      <PremiumWelcomeModal open={showPremiumWelcome} onClose={() => setShowPremiumWelcome(false)} />
+
       <div className="container py-8 space-y-8">
+        <EmailVerificationBanner />
         {/* Weekly Goal Reminder Banner */}
         <WeeklyGoalReminder />
         {/* Welcome Section - Simplified */}
