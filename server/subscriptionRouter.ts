@@ -6,7 +6,11 @@ import { getDb } from "./db";
 import { users, generatedContent } from "../drizzle/schema";
 import { eq, and, gte, count } from "drizzle-orm";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+  return new Stripe(key);
+}
 
 export const subscriptionRouter = router({
   /**
@@ -41,7 +45,7 @@ export const subscriptionRouter = router({
 
     // Fetch from Stripe
     try {
-      const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId, {
+      const subscription = await getStripe().subscriptions.retrieve(user.stripeSubscriptionId, {
         expand: ["default_payment_method"],
       });
 
@@ -96,7 +100,7 @@ export const subscriptionRouter = router({
     }
 
     try {
-      await stripe.subscriptions.update(user.stripeSubscriptionId, {
+      await getStripe().subscriptions.update(user.stripeSubscriptionId, {
         cancel_at_period_end: true,
       });
 
@@ -125,7 +129,7 @@ export const subscriptionRouter = router({
     }
 
     try {
-      await stripe.subscriptions.update(user.stripeSubscriptionId, {
+      await getStripe().subscriptions.update(user.stripeSubscriptionId, {
         cancel_at_period_end: false,
       });
 
@@ -155,7 +159,7 @@ export const subscriptionRouter = router({
 
     try {
       const origin = ctx.req.headers.origin || process.env.VITE_APP_URL || "https://storyling.ai";
-      const session = await stripe.billingPortal.sessions.create({
+      const session = await getStripe().billingPortal.sessions.create({
         customer: user.stripeCustomerId,
         return_url: `${origin}/settings/subscription`,
       });
@@ -187,7 +191,7 @@ export const subscriptionRouter = router({
       }
 
       try {
-        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const subscription = await getStripe().subscriptions.retrieve(user.stripeSubscriptionId);
         const subscriptionItemId = subscription.items.data[0].id;
 
         // Determine new price ID
@@ -197,7 +201,7 @@ export const subscriptionRouter = router({
             : process.env.STRIPE_PRICE_PREMIUM_ANNUAL!;
 
         // Update subscription with new price
-        await stripe.subscriptions.update(user.stripeSubscriptionId, {
+        await getStripe().subscriptions.update(user.stripeSubscriptionId, {
           items: [
             {
               id: subscriptionItemId,
@@ -232,7 +236,7 @@ export const subscriptionRouter = router({
     }
 
     try {
-      const invoices = await stripe.invoices.list({
+      const invoices = await getStripe().invoices.list({
         customer: user.stripeCustomerId,
         limit: 12, // Last 12 invoices
       });

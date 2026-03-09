@@ -8,7 +8,11 @@ import { organizations, organizationAdmins, users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { calculateMonthlyCost, getStripePriceId, SUBSCRIPTION_PRODUCTS, getPremiumMonthlyPriceId, getPremiumAnnualPriceId, getBasicPriceId, getPremiumSchoolPriceId } from "./products";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
+  return new Stripe(key);
+}
 
 export const checkoutRouter = router({
   /**
@@ -45,7 +49,7 @@ export const checkoutRouter = router({
       let stripeCustomerId = user.stripeCustomerId;
 
       if (!stripeCustomerId) {
-        const customer = await stripe.customers.create({
+        const customer = await getStripe().customers.create({
           email: user.email || undefined,
           name: user.name || undefined,
           metadata: {
@@ -92,10 +96,10 @@ export const checkoutRouter = router({
               const couponId = `REFERRAL_${code.discountPercent}PCT`;
               let coupon;
               try {
-                coupon = await stripe.coupons.retrieve(couponId);
+                coupon = await getStripe().coupons.retrieve(couponId);
               } catch (err) {
                 // Coupon doesn't exist, create it
-                coupon = await stripe.coupons.create({
+                coupon = await getStripe().coupons.create({
                   id: couponId,
                   percent_off: code.discountPercent,
                   duration: "once",
@@ -146,7 +150,7 @@ export const checkoutRouter = router({
       }
 
       const idempotencyKey = crypto.randomUUID() + `-user-${user.id}-${input.billingPeriod}`;
-      const session = await stripe.checkout.sessions.create(sessionConfig, {
+      const session = await getStripe().checkout.sessions.create(sessionConfig, {
         idempotencyKey,
       });
 
@@ -182,7 +186,7 @@ export const checkoutRouter = router({
 
       // Check Stripe for active subscriptions for this customer
       try {
-        const subscriptions = await stripe.subscriptions.list({
+        const subscriptions = await getStripe().subscriptions.list({
           customer: user.stripeCustomerId,
           status: "active",
           limit: 1,
@@ -239,7 +243,7 @@ export const checkoutRouter = router({
 
       // Fetch from Stripe
       try {
-        const subscription = await stripe.subscriptions.retrieve(user.stripeSubscriptionId);
+        const subscription = await getStripe().subscriptions.retrieve(user.stripeSubscriptionId);
 
         return {
           tier: user.subscriptionTier,
@@ -305,7 +309,7 @@ export const checkoutRouter = router({
       let stripeCustomerId = org.stripeCustomerId;
 
       if (!stripeCustomerId) {
-        const customer = await stripe.customers.create({
+        const customer = await getStripe().customers.create({
           email: org.contactEmail || ctx.user.email || undefined,
           name: org.name,
           metadata: {
@@ -324,7 +328,7 @@ export const checkoutRouter = router({
 
       // Create checkout session
       const origin = ctx.req.headers.origin || process.env.VITE_APP_URL || "https://storyling.ai";
-      const session = await stripe.checkout.sessions.create({
+      const session = await getStripe().checkout.sessions.create({
         customer: stripeCustomerId,
         client_reference_id: org.id.toString(),
         mode: "subscription",
@@ -394,7 +398,7 @@ export const checkoutRouter = router({
 
       // Fetch from Stripe
       try {
-        const subscription = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+        const subscription = await getStripe().subscriptions.retrieve(org.stripeSubscriptionId);
 
         return {
           tier: org.subscriptionTier,
@@ -448,10 +452,10 @@ export const checkoutRouter = router({
       }
 
       try {
-        const subscription = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+        const subscription = await getStripe().subscriptions.retrieve(org.stripeSubscriptionId);
         const subscriptionItemId = subscription.items.data[0].id;
 
-        await stripe.subscriptionItems.update(subscriptionItemId, {
+        await getStripe().subscriptionItems.update(subscriptionItemId, {
           quantity: input.newStudentCount,
         });
 
@@ -492,7 +496,7 @@ export const checkoutRouter = router({
       }
 
       try {
-        await stripe.subscriptions.update(org.stripeSubscriptionId, {
+        await getStripe().subscriptions.update(org.stripeSubscriptionId, {
           cancel_at_period_end: true,
         });
 
