@@ -16,7 +16,7 @@ function getQueryParam(req: Request, key: string): string | undefined {
 
 function getGoogleRedirectUri(req: Request): string {
   const origin = ENV.isProduction
-    ? "https://storyling.ai"
+    ? "https://www.storyling.ai"
     : `${req.protocol}://${req.get("host")}`;
   return `${origin}/api/auth/google/callback`;
 }
