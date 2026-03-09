@@ -257,7 +257,7 @@ export function QuickStartTutorial() {
   return (
     <>
       {/* Overlay */}
-      <div className="fixed inset-0 bg-black/50 z-40 animate-fade-in" />
+      <div className="fixed inset-0 bg-black/50 z-[1000] animate-fade-in" />
 
       {/* Highlight target element */}
       {step.targetSelector && highlightRect && (
@@ -272,16 +272,17 @@ export function QuickStartTutorial() {
               border: "4px solid #8b5cf6",
               borderRadius: "16px",
               boxShadow: "0 0 0 8px rgba(139, 92, 246, 0.3), 0 0 32px rgba(139, 92, 246, 0.5)",
-              zIndex: 45,
+              zIndex: 1001,
               transition: "all 0.3s ease-in-out",
             }}
           />
           {/* Animated cartoon hand cursor */}
           <div
-            className="fixed pointer-events-none z-50"
+            className="fixed pointer-events-none"
             style={{
               top: `${highlightRect.top + highlightRect.height / 2 - 20}px`,
               left: `${highlightRect.left + highlightRect.width / 2 - 16}px`,
+              zIndex: 1003,
               animation: "bounce 1s ease-in-out infinite",
             }}
           >
@@ -296,8 +297,8 @@ export function QuickStartTutorial() {
 
       {/* Tutorial Card */}
       <Card
-        className="z-50 w-full max-w-md rounded-card shadow-playful-lg border-2 animate-scale-in"
-        style={getTooltipPosition()}
+        className="w-full max-w-md rounded-card shadow-playful-lg border-2 animate-scale-in"
+        style={{ ...getTooltipPosition(), zIndex: 1002 } as React.CSSProperties}
       >
         <CardContent className="p-6 space-y-4">
           <div className="flex items-start justify-between">
