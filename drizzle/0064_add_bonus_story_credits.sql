@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `bonus_story_credits` int DEFAULT 3 NOT NULL;

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Storyling.ai — Hors ligne</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Fredoka', 'Inter', system-ui, sans-serif;
+      background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 50%, #f0fdfa 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #1e1b4b;
+    }
+    .container {
+      text-align: center;
+      padding: 2rem;
+      max-width: 420px;
+    }
+    .icon {
+      font-size: 4rem;
+      margin-bottom: 1rem;
+    }
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+      color: #3b82f6;
+    }
+    p {
+      font-size: 1.1rem;
+      color: #475569;
+      line-height: 1.6;
+      margin-bottom: 1.5rem;
+    }
+    .cta-btn {
+      display: inline-block;
+      padding: 0.75rem 1.5rem;
+      background: linear-gradient(135deg, #3b82f6, #9333ea);
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .cta-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+    }
+    .fallback-msg {
+      display: none;
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: rgba(234, 179, 8, 0.15);
+      border: 1px solid rgba(234, 179, 8, 0.35);
+      border-radius: 12px;
+      color: #92400e;
+      font-size: 0.95rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon"><img src="/flip-mascot.png" alt="Flip" width="80" height="80" onerror="this.outerHTML='&#128214;'" /></div>
+    <h1>Tu es hors ligne</h1>
+    <p>Pas de réseau ? Tes stories déjà lues sont toujours accessibles !</p>
+    <button id="cta-btn" class="cta-btn">Voir mes stories en cache</button>
+    <div id="fallback-msg" class="fallback-msg">
+      Reconnecte-toi pour continuer à apprendre
+    </div>
+  </div>
+  <script>
+    document.getElementById('cta-btn').addEventListener('click', async function() {
+      try {
+        var cached = await caches.match('/index.html');
+        if (cached) {
+          window.location.href = '/';
+        } else {
+          document.getElementById('fallback-msg').style.display = 'block';
+        }
+      } catch(e) {
+        document.getElementById('fallback-msg').style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

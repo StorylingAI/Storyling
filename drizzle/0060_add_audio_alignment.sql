@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` ADD `audio_alignment` json;

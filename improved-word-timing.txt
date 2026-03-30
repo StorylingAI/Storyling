@@ -1,0 +1,65 @@
+  // Calculate word timestamps within current sentence
+  const wordTimestamps = useMemo(() => {
+    if (!audioRef?.current?.duration || !sentenceTimestamps[currentSentenceIndex]) {
+      return [];
+    }
+
+    const sentenceStart = sentenceTimestamps[currentSentenceIndex].startTime;
+    const sentenceEnd = sentenceTimestamps[currentSentenceIndex].endTime;
+    const sentenceDuration = sentenceEnd - sentenceStart;
+    
+    // Calculate total "speaking units" - exclude punctuation, weight by syllables
+    const isChinese = /[\u4e00-\u9fa5]/.test(currentSentence);
+    let totalUnits = 0;
+    const wordUnits = [];
+    
+    words.forEach((word) => {
+      // Remove punctuation for unit calculation
+      const cleanWord = word.replace(/[.,!?;:"'\u00BF\u00A1*，。！？；：""''、]/g, '');
+      if (cleanWord.length === 0) {
+        wordUnits.push(0); // Punctuation-only word
+        return;
+      }
+      
+      let units = 0;
+      if (isChinese) {
+        // Chinese: each character is roughly 1 unit (some are 2 syllables, average ~1.2)
+        units = cleanWord.length * 1.2;
+      } else {
+        // Spanish/English: estimate syllables (very rough: vowel clusters)
+        const vowelClusters = cleanWord.match(/[aeiouáéíóúü]+/gi);
+        units = vowelClusters ? vowelClusters.length : cleanWord.length * 0.3;
+      }
+      
+      wordUnits.push(units);
+      totalUnits += units;
+    });
+    
+    // Add pause time for punctuation
+    let pauseTime = 0;
+    if (currentSentence.match(/[,，]/)) pauseTime += 0.15; // 150ms for commas
+    if (currentSentence.match(/[.。!！?？]/)) pauseTime += 0.25; // 250ms for sentence endings
+    
+    const speakingDuration = Math.max(sentenceDuration - pauseTime, sentenceDuration * 0.8);
+    
+    // Distribute time based on speaking units
+    let currentTime = sentenceStart;
+    return words.map((word, idx) => {
+      const units = wordUnits[idx];
+      const wordDuration = totalUnits > 0 ? (units / totalUnits) * speakingDuration : speakingDuration / words.length;
+      
+      const wordStart = currentTime;
+      const wordEnd = currentTime + wordDuration;
+      
+      // Add pause after punctuation
+      if (word.match(/[,，]/)) {
+        currentTime = wordEnd + 0.15;
+      } else if (word.match(/[.。!！?？]/)) {
+        currentTime = wordEnd + 0.25;
+      } else {
+        currentTime = wordEnd;
+      }
+      
+      return { word, startTime: wordStart, endTime: wordEnd };
+    });
+  }, [words, currentSentence, sentenceTimestamps, currentSentenceIndex, audioRef]);

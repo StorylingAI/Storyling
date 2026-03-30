@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` ADD `source_content_id` int;

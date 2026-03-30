@@ -1,0 +1,632 @@
+import { useAuth } from "@/_core/hooks/useAuth";
+import { useEffect, useState, useMemo } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, Play, Heart, Clock, BookOpen, Sparkles, RefreshCw, Search, X, Filter, FolderPlus, Folder, Plus } from "lucide-react";
+import { trpc } from "@/lib/trpc";
+import { useLocation } from "wouter";
+import { APP_TITLE, APP_LOGO } from "@/const";
+
+export default function Library() {
+  const { user, isAuthenticated } = useAuth();
+  const [, setLocation] = useLocation();
+
+  const { data: library, isLoading } = trpc.content.getLibrary.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  // Debug logging
+  useEffect(() => {
+    if (library && library.length > 0) {
+      console.log('[Library] First story:', library[0]);
+      console.log('[Library] First story title:', library[0].title);
+      console.log('[Library] First story storyText length:', library[0].storyText?.length || 0);
+    }
+  }, [library]);
+
+  const { data: favorites } = trpc.content.getFavorites.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  const favoriteIds = new Set(favorites?.map((f) => f.contentId) || []);
+
+  const regenerateThumbnailMutation = trpc.content.regenerateThumbnail.useMutation({
+    onSuccess: () => {
+      // Invalidate library query to refetch with new thumbnail
+      trpc.useUtils().content.getLibrary.invalidate();
+    },
+  });
+
+  // Search and filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [selectedLanguage, setSelectedLanguage] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<"newest" | "oldest">("newest");
+
+  // Get unique themes and languages from library
+  const themes = useMemo(() => {
+    if (!library) return [];
+    return Array.from(new Set(library.map(c => c.theme)));
+  }, [library]);
+
+  const languages = useMemo(() => {
+    if (!library) return [];
+    return Array.from(new Set(library.map(c => c.targetLanguage).filter(Boolean)));
+  }, [library]);
+
+  // Filter and sort library
+  const filteredLibrary = useMemo(() => {
+    if (!library) return [];
+    
+    let filtered = library;
+
+    // Search by title
+    if (searchQuery) {
+      filtered = filtered.filter(content => {
+        const title = content.title || content.storyText?.substring(0, 60) || `${content.theme} Story`;
+        return title.toLowerCase().includes(searchQuery.toLowerCase());
+      });
+    }
+
+    // Filter by theme
+    if (selectedTheme) {
+      filtered = filtered.filter(content => content.theme === selectedTheme);
+    }
+
+    // Filter by language
+    if (selectedLanguage) {
+      filtered = filtered.filter(content => content.targetLanguage === selectedLanguage);
+    }
+
+    // Sort by date
+    filtered = [...filtered].sort((a, b) => {
+      const dateA = new Date(a.generatedAt).getTime();
+      const dateB = new Date(b.generatedAt).getTime();
+      return sortBy === "newest" ? dateB - dateA : dateA - dateB;
+    });
+
+    return filtered;
+  }, [library, searchQuery, selectedTheme, selectedLanguage, sortBy]);
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery("");
+    setSelectedTheme(null);
+    setSelectedLanguage(null);
+    setSortBy("newest");
+  };
+
+  const hasActiveFilters = searchQuery || selectedTheme || selectedLanguage || sortBy !== "newest";
+
+  // Collections state
+  const [isCreateCollectionOpen, setIsCreateCollectionOpen] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState("");
+  const [newCollectionDescription, setNewCollectionDescription] = useState("");
+  const [newCollectionColor, setNewCollectionColor] = useState("#8B5CF6");
+  const [selectedLanguageTab, setSelectedLanguageTab] = useState<string>("all");
+
+  const { data: collections } = trpc.collections.getMyCollections.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+
+  const createCollectionMutation = trpc.collections.createCollection.useMutation({
+    onSuccess: () => {
+      trpc.useUtils().collections.getMyCollections.invalidate();
+      setIsCreateCollectionOpen(false);
+      setNewCollectionName("");
+      setNewCollectionDescription("");
+      setNewCollectionColor("#8B5CF6");
+    },
+  });
+
+  const handleCreateCollection = () => {
+    if (!newCollectionName.trim()) return;
+    createCollectionMutation.mutate({
+      name: newCollectionName,
+      description: newCollectionDescription || undefined,
+      color: newCollectionColor,
+    });
+  };
+
+  // Language-based filtering
+  const languageFilteredLibrary = useMemo(() => {
+    if (!filteredLibrary) return [];
+    if (selectedLanguageTab === "all") return filteredLibrary;
+    return filteredLibrary.filter(content => content.targetLanguage === selectedLanguageTab);
+  }, [filteredLibrary, selectedLanguageTab]);
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md rounded-card shadow-playful-lg border-2">
+          <CardContent className="pt-6 text-center space-y-4">
+            <img src="/flip-mascot.png" alt="Flip" className="w-24 h-24 mx-auto" />
+            <h3 className="text-xl font-bold">Sign in to continue</h3>
+            <p className="text-muted-foreground">Please sign in to view your library</p>
+            <Button 
+              onClick={() => setLocation("/")}
+              className="rounded-button gradient-primary text-white hover-lift active-scale border-0 transition-all"
+            >
+              Go to Home
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50 flex flex-col items-center justify-center gap-4">
+        <img src="/flip-mascot.png" alt="Loading" className="w-24 h-24 animate-flip" />
+        <p className="text-muted-foreground">Loading your library...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50">
+      {/* Header */}
+      <header className="border-b bg-white/80 backdrop-blur-sm sticky top-0 z-50 shadow-playful">
+        <div className="container flex h-16 items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={APP_LOGO} alt="Storyling.ai" className="h-10 w-10" />
+            <h1 className="text-2xl font-bold gradient-text-primary">{APP_TITLE}</h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-muted-foreground hidden sm:inline">
+              {user?.name || "friend"}! 👋
+            </span>
+            <Button 
+              variant="outline" 
+              onClick={() => setLocation("/")}
+              className="rounded-button hover-lift active-scale transition-all"
+            >
+              Create New Story
+            </Button>
+          </div>
+        </div>
+      </header>
+
+      <section className="container py-12">
+        <div className="mb-8 animate-bounce-in flex items-center justify-between">
+          <div>
+            <h2 className="text-4xl font-bold mb-2">My Library</h2>
+            <p className="text-lg text-muted-foreground">
+              Your personalized language learning content
+            </p>
+          </div>
+          <Dialog open={isCreateCollectionOpen} onOpenChange={setIsCreateCollectionOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-button gradient-primary text-white hover-lift border-0">
+                <FolderPlus className="mr-2 h-4 w-4" />
+                New Collection
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="rounded-card">
+              <DialogHeader>
+                <DialogTitle>Create Collection</DialogTitle>
+                <DialogDescription>
+                  Organize your stories into custom collections
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Collection Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g., Business Vocabulary"
+                    value={newCollectionName}
+                    onChange={(e) => setNewCollectionName(e.target.value)}
+                    className="rounded-button"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description (optional)</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="What's this collection about?"
+                    value={newCollectionDescription}
+                    onChange={(e) => setNewCollectionDescription(e.target.value)}
+                    className="rounded-button"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="color">Color</Label>
+                  <div className="flex gap-2">
+                    {["#8B5CF6", "#EC4899", "#14B8A6", "#F59E0B", "#84CC16", "#3B82F6"].map(color => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`w-10 h-10 rounded-full border-2 transition-all hover-lift ${
+                          newCollectionColor === color ? "border-foreground scale-110" : "border-transparent"
+                        }`}
+                        style={{ backgroundColor: color }}
+                        onClick={() => setNewCollectionColor(color)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsCreateCollectionOpen(false)} className="rounded-button">
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleCreateCollection}
+                  disabled={!newCollectionName.trim() || createCollectionMutation.isPending}
+                  className="rounded-button gradient-primary text-white border-0"
+                >
+                  {createCollectionMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    "Create Collection"
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* Search and Filters */}
+        {library && library.length > 0 && (
+          <div className="mb-6 space-y-4 animate-slide-up">
+            {/* Search Bar */}
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search stories by title..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 pr-10 rounded-button h-12"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Filter Buttons */}
+            <div className="flex flex-wrap gap-2 items-center">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Filter className="h-4 w-4" />
+                <span className="font-medium">Filters:</span>
+              </div>
+              
+              {/* Theme Filters */}
+              {themes.map(theme => (
+                <Badge
+                  key={theme}
+                  variant={selectedTheme === theme ? "default" : "outline"}
+                  className="rounded-full cursor-pointer hover-lift active-scale transition-all"
+                  onClick={() => setSelectedTheme(selectedTheme === theme ? null : theme)}
+                >
+                  {theme}
+                </Badge>
+              ))}
+
+              {/* Language Filters */}
+              {languages.map(lang => (
+                <Badge
+                  key={lang}
+                  variant={selectedLanguage === lang ? "default" : "outline"}
+                  className="rounded-full cursor-pointer hover-lift active-scale transition-all"
+                  onClick={() => setSelectedLanguage(selectedLanguage === lang ? null : lang)}
+                >
+                  {lang}
+                </Badge>
+              ))}
+
+              {/* Sort Options */}
+              <Badge
+                variant={sortBy === "newest" ? "default" : "outline"}
+                className="rounded-full cursor-pointer hover-lift active-scale transition-all"
+                onClick={() => setSortBy("newest")}
+              >
+                Newest First
+              </Badge>
+              <Badge
+                variant={sortBy === "oldest" ? "default" : "outline"}
+                className="rounded-full cursor-pointer hover-lift active-scale transition-all"
+                onClick={() => setSortBy("oldest")}
+              >
+                Oldest First
+              </Badge>
+
+              {/* Clear Filters Button */}
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="rounded-button hover-lift active-scale transition-all"
+                >
+                  <X className="mr-1 h-3 w-3" />
+                  Clear All
+                </Button>
+              )}
+            </div>
+
+            {/* Active Filters Summary */}
+            {hasActiveFilters && (
+              <div className="text-sm text-muted-foreground">
+                Showing {filteredLibrary.length} of {library.length} stories
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Collections Section */}
+        {collections && collections.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Folder className="h-6 w-6" />
+              My Collections
+            </h3>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {collections.map(collection => (
+                <Card
+                  key={collection.id}
+                  className="rounded-card shadow-playful hover-lift active-scale transition-all border-2 cursor-pointer"
+                  onClick={() => setLocation(`/collection/${collection.id}`)}
+                >
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3 mb-2">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center"
+                        style={{ backgroundColor: collection.color }}
+                      >
+                        <Folder className="h-6 w-6 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="font-bold line-clamp-1">{collection.name}</h4>
+                        <p className="text-sm text-muted-foreground">{collection.itemCount} stories</p>
+                      </div>
+                    </div>
+                    {collection.description && (
+                      <p className="text-sm text-muted-foreground line-clamp-2 mt-2">
+                        {collection.description}
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Language Tabs */}
+        {!library || library.length === 0 ? (
+          <Card className="rounded-card shadow-playful-lg border-2 animate-bounce-in">
+            <CardContent className="py-16 text-center space-y-6">
+              <img src="/flip-mascot.png" alt="Flip" className="w-32 h-32 mx-auto animate-float" />
+              <div>
+                <h3 className="text-2xl font-bold mb-2">No content yet</h3>
+                <p className="text-muted-foreground text-lg max-w-md mx-auto">
+                  Start creating your first story to begin your learning journey! Flip is excited to help you learn.
+                </p>
+              </div>
+              <Button 
+                onClick={() => setLocation("/")}
+                className="rounded-button gradient-warm text-white hover-lift hover-glow active-scale border-0 h-12 text-lg px-8 transition-all"
+              >
+                <Sparkles className="mr-2 h-5 w-5" />
+                Create Your First Story
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs value={selectedLanguageTab} onValueChange={setSelectedLanguageTab} className="w-full">
+            <TabsList className="mb-6 rounded-button">
+              <TabsTrigger value="all" className="rounded-button">All Languages</TabsTrigger>
+              {languages.map(lang => (
+                <TabsTrigger key={lang} value={lang} className="rounded-button">
+                  {lang}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <TabsContent value={selectedLanguageTab} className="mt-0">
+              {languageFilteredLibrary.length === 0 ? (
+          <Card className="rounded-card shadow-playful-lg border-2 animate-bounce-in">
+            <CardContent className="py-16 text-center space-y-6">
+              <BookOpen className="w-16 h-16 mx-auto text-muted-foreground" />
+              <div>
+                <h3 className="text-2xl font-bold mb-2">No stories found</h3>
+                <p className="text-muted-foreground text-lg max-w-md mx-auto">
+                  Try adjusting your search or filters to find what you're looking for.
+                </p>
+              </div>
+              <Button 
+                onClick={clearFilters}
+                variant="outline"
+                className="rounded-button hover-lift active-scale transition-all"
+              >
+                Clear All Filters
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Tabs value={selectedLanguageTab} onValueChange={setSelectedLanguageTab} className="w-full">
+            <TabsList className="mb-6 rounded-button">
+              <TabsTrigger value="all" className="rounded-button">All Languages</TabsTrigger>
+              {languages.map(lang => (
+                <TabsTrigger key={lang} value={lang} className="rounded-button">
+                  {lang}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <TabsContent value={selectedLanguageTab} className="mt-0">
+              {languageFilteredLibrary.length === 0 ? (
+                <Card className="rounded-card shadow-playful-lg border-2 animate-bounce-in">
+                  <CardContent className="py-16 text-center space-y-6">
+                    <BookOpen className="w-16 h-16 mx-auto text-muted-foreground" />
+                    <div>
+                      <h3 className="text-2xl font-bold mb-2">No stories found</h3>
+                      <p className="text-muted-foreground text-lg max-w-md mx-auto">
+                        Try adjusting your search or filters to find what you're looking for.
+                      </p>
+                    </div>
+                    <Button 
+                      onClick={clearFilters}
+                      variant="outline"
+                      className="rounded-button hover-lift active-scale transition-all"
+                    >
+                      Clear All Filters
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {languageFilteredLibrary.map((content) => (
+              <Card 
+                key={content.id} 
+                className="overflow-hidden rounded-card shadow-playful hover-lift hover-glow active-scale transition-all border-2 animate-slide-up cursor-pointer"
+              >
+                {/* Thumbnail Image */}
+                <div className="relative w-full h-48 bg-gradient-to-br from-purple-100 via-teal-100 to-pink-100 overflow-hidden">
+                  {content.thumbnailUrl ? (
+                    <img 
+                      src={content.thumbnailUrl} 
+                      alt={content.title || content.theme}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        // Fallback to gradient background if image fails to load
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="text-6xl opacity-30">
+                        {content.mode === "podcast" ? "🎙️" : "🎬"}
+                      </div>
+                    </div>
+                  )}
+                  {/* Status badge overlay */}
+                  {content.status === "generating" && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <div className="text-white text-center space-y-2">
+                        <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                        <p className="text-sm font-medium">Generating...</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <Badge 
+                        variant={content.mode === "podcast" ? "default" : "secondary"}
+                        className="rounded-full"
+                      >
+                        {content.mode === "podcast" ? "🎙️ Podcast" : "🎬 Film"}
+                      </Badge>
+                      <CardTitle className="mt-2 line-clamp-2 text-lg">
+                        {content.title || content.storyText?.substring(0, 60) || `${content.theme} Story`}
+                      </CardTitle>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`rounded-full hover-scale active-scale transition-all ${favoriteIds.has(content.id) ? "text-pink-500" : ""}`}
+                    >
+                      <Heart
+                        className="h-5 w-5"
+                        fill={favoriteIds.has(content.id) ? "currentColor" : "none"}
+                      />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Play className="h-4 w-4" />
+                      {content.playCount || 0} plays
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-4 w-4" />
+                      {new Date(content.generatedAt).toLocaleDateString()}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="outline" className="rounded-full">{content.theme}</Badge>
+                    {content.voiceType && <Badge variant="outline" className="rounded-full">{content.voiceType}</Badge>}
+                    {content.cinematicStyle && (
+                      <Badge variant="outline" className="rounded-full">{content.cinematicStyle}</Badge>
+                    )}
+                  </div>
+
+                  {content.status === "generating" && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground p-3 bg-primary/5 rounded-xl">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Generating content...
+                    </div>
+                  )}
+
+                  {content.status === "failed" && (
+                    <div className="text-sm text-destructive p-3 bg-destructive/5 rounded-xl">
+                      Generation failed - please try again
+                    </div>
+                  )}
+
+                  {content.status === "completed" && (
+                    <div className="space-y-2">
+                      <Button
+                        className="w-full rounded-button gradient-primary text-white hover-lift border-0 h-11"
+                        onClick={() => setLocation(`/content/${content.id}`)}
+                      >
+                        <Play className="mr-2 h-4 w-4" />
+                        {content.mode === "podcast" ? "Listen Now" : "Watch Now"}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full rounded-button hover-lift active-scale transition-all"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          regenerateThumbnailMutation.mutate({ contentId: content.id });
+                        }}
+                        disabled={regenerateThumbnailMutation.isPending}
+                      >
+                        {regenerateThumbnailMutation.isPending ? (
+                          <>
+                            <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                            Generating...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-3 w-3" />
+                            Regenerate Thumbnail
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        )}
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` MODIFY COLUMN `thumbnail_style` enum('realistic','illustrated','minimalist','pixar') DEFAULT 'pixar';

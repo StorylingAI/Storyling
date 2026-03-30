@@ -1,0 +1,1 @@
+ALTER TABLE `collections` ADD `view_count` int DEFAULT 0 NOT NULL;

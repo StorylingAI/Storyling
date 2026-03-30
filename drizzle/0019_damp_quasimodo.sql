@@ -1,0 +1,1 @@
+ALTER TABLE `collections` ADD `clone_count` int DEFAULT 0 NOT NULL;
