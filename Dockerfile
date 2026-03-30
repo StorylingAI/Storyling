@@ -6,9 +6,8 @@ WORKDIR /app
 # Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy package files and patches (needed before install)
+# Copy package files
 COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
 
 # Install dependencies
 RUN pnpm install --frozen-lockfile
@@ -29,9 +28,8 @@ RUN corepack enable && corepack prepare pnpm@latest --activate
 # Install ffmpeg for video stitching
 RUN apk add --no-cache ffmpeg
 
-# Copy package files, patches, and install production deps only
+# Copy package files and install production deps only
 COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
 RUN pnpm install --frozen-lockfile --prod
 
 # Copy built assets from builder
