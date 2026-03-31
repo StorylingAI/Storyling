@@ -177,7 +177,7 @@ function FeaturedCollectionsGrid() {
                   backgroundColor: card.bg,
                   borderTop: `5px solid ${card.border}`,
                 }}
-                onClick={() => setLocation("/discovery?tab=collections")}
+                onClick={() => setLocation("/discover?tab=collections")}
               >
                 {/* Cover image */}
                 <div className="w-full h-36 overflow-hidden">
@@ -227,7 +227,7 @@ function FeaturedCollectionsGrid() {
           <Button
             variant="outline"
             className="rounded-full px-8 py-3 border-2 border-purple-400 text-purple-700 hover:bg-purple-50 transition-all hover:-translate-y-0.5 font-bold"
-            onClick={() => setLocation("/discovery?tab=collections")}
+            onClick={() => setLocation("/discover?tab=collections")}
             style={{ fontFamily: "Fredoka, sans-serif" }}
           >
             View All Collections
