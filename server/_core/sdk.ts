@@ -259,15 +259,18 @@ class SDKServer {
     const session = await this.verifySession(sessionCookie);
 
     if (!session) {
+      console.warn("[Auth] verifySession returned null — cookie present:", !!sessionCookie);
       throw ForbiddenError("Invalid session cookie");
     }
 
     const sessionUserId = session.openId;
+    console.log("[Auth] Session verified for openId:", sessionUserId);
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
 
     // If user not in DB, sync from OAuth server automatically
     if (!user) {
+      console.warn("[Auth] User not found in DB for openId:", sessionUserId);
       try {
         const userInfo = await this.getUserInfoWithJwt(sessionCookie ?? "");
         await db.upsertUser({
