@@ -7,24 +7,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
 import { APP_TITLE, APP_LOGO } from "@/const";
 import { Loader2 } from "lucide-react";
 
 export default function Login() {
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const signInMutation = trpc.emailAuth.signIn.useMutation({
-    onSuccess: () => {
+    onSuccess: async (data) => {
+      if (!data.emailVerified) {
+        toast.info("Please check your inbox and verify your email address.");
+      }
       toast.success("Signed in successfully!");
-      // Redirect to dashboard after successful login
-      setTimeout(() => {
-        setLocation("/app");
-      }, 500);
+      await utils.auth.me.invalidate();
+      setLocation("/app");
     },
     onError: (error) => {
       toast.error(error.message || "Failed to sign in");

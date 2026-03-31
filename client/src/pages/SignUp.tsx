@@ -7,12 +7,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
 import { APP_TITLE, APP_LOGO } from "@/const";
 import { Loader2 } from "lucide-react";
 
 export default function SignUp() {
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -21,22 +21,14 @@ export default function SignUp() {
   const [isLoading, setIsLoading] = useState(false);
 
   const signUpMutation = trpc.emailAuth.signUp.useMutation({
-    onSuccess: () => {
+    onSuccess: async () => {
+      toast.success("Account created! Check your inbox to verify your email.");
+      await utils.auth.me.invalidate();
+
       // Check if user came from affiliate program page
-      const isAffiliateSignup = document.referrer.includes('/affiliates') || 
+      const isAffiliateSignup = document.referrer.includes('/affiliates') ||
                                 window.location.search.includes('source=affiliate');
-      
-      if (isAffiliateSignup) {
-        toast.success("Account created! Redirecting to referral dashboard...");
-        setTimeout(() => {
-          setLocation("/referrals");
-        }, 1000);
-      } else {
-        toast.success("Account created! Redirecting to dashboard...");
-        setTimeout(() => {
-          setLocation("/app");
-        }, 1000);
-      }
+      setLocation(isAffiliateSignup ? "/referrals" : "/app");
     },
     onError: (error) => {
       toast.error(error.message || "Failed to create account");
@@ -68,7 +60,7 @@ export default function SignUp() {
   };
 
   const handleGoogleSignUp = () => {
-    window.location.href = getLoginUrl();
+    window.location.href = "/api/auth/google";
   };
 
   return (

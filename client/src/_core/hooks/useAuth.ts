@@ -31,7 +31,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   const isAuthPending =
     meQuery.isLoading ||
-    (meQuery.isFetching && typeof meQuery.data === "undefined") ||
+    (meQuery.isFetching && !meQuery.data) ||
     logoutMutation.isPending;
 
   const logout = useCallback(async () => {
