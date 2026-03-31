@@ -219,6 +219,17 @@ function FeaturedCollectionsGrid() {
                   }}
                   onClick={() => col.shareToken ? setLocation(`/shared/${col.shareToken}`) : setLocation("/discover")}
                 >
+                  {/* Cover image */}
+                  {col.coverImage && (
+                    <div className="w-full h-36 overflow-hidden">
+                      <img
+                        src={col.coverImage}
+                        alt={col.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
                   <div className="p-5 md:p-6 flex-1 flex flex-col">
                     {/* Avatar + Name row */}
                     <div className="flex items-center gap-3 mb-3">

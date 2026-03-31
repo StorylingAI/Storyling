@@ -37,6 +37,15 @@ export const discoveryRouter = router({
         );
       }
 
+      // Subquery for first story thumbnail
+      const firstThumbnail = sql<string>`(
+        SELECT gc.thumbnail_url FROM collection_items ci2
+        INNER JOIN generated_content gc ON gc.id = ci2.content_id
+        WHERE ci2.collection_id = ${collections.id} AND gc.thumbnail_url IS NOT NULL
+        ORDER BY ci2.position ASC, ci2.id ASC
+        LIMIT 1
+      )`.as("coverImage");
+
       // Get trending collections (most clones in the past week)
       const trendingCollections = await db
         .select({
@@ -50,6 +59,7 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
+          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -74,6 +84,7 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
+          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -98,6 +109,7 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
+          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -156,6 +168,7 @@ export const discoveryRouter = router({
                   userId: collections.userId,
                   userName: users.name,
                   itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
+                  coverImage: firstThumbnail,
                 })
                 .from(collections)
                 .innerJoin(users, eq(collections.userId, users.id))
