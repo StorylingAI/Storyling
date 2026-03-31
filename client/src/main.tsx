@@ -88,6 +88,7 @@ createRoot(document.getElementById("root")!).render(
       persistOptions={{
         persister,
         maxAge: 24 * 60 * 60 * 1000,
+        buster: "auth-fix-v1",
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
             // Never persist auth queries — session state must be verified fresh

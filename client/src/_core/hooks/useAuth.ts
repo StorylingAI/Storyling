@@ -1,6 +1,7 @@
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
+import { useIsRestoring } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 type UseAuthOptions = {
@@ -13,16 +14,12 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
   const utils = trpc.useUtils();
   const redirectAttempted = useRef(false);
+  const isRestoring = useIsRestoring();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
-    // Retry up to 2 times with a delay — prevents false logouts from transient DB errors
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false,
-    // Always verify session freshness on mount — stale cached null from IndexedDB
-    // would otherwise skip the refetch and cause redirect loops after OAuth.
-    // isAuthPending shows a spinner only when data is null, so authenticated
-    // users see the cached page instantly with a silent background refetch.
     staleTime: 0,
   });
 
@@ -32,7 +29,12 @@ export function useAuth(options?: UseAuthOptions) {
     },
   });
 
+  // Treat auth as pending while IndexedDB cache is restoring, while the
+  // initial fetch is running, or while a refetch is in progress with no
+  // authenticated data yet.  This prevents premature redirects when stale
+  // null data is hydrated from persistence before the network response arrives.
   const isAuthPending =
+    isRestoring ||
     meQuery.isLoading ||
     (meQuery.isFetching && !meQuery.data) ||
     logoutMutation.isPending;
