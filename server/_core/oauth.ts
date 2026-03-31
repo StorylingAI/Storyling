@@ -159,21 +159,25 @@ export function registerOAuthRoutes(app: Express) {
       const googleUser = await getGoogleUserInfo(tokens.access_token);
 
       const openId = `google_${googleUser.sub}`;
+      const userName = googleUser.name || googleUser.email || "";
+
+      console.log("[Google OAuth] User authenticated:", { openId, name: userName, email: googleUser.email });
 
       await db.upsertUser({
         openId,
-        name: googleUser.name || null,
+        name: userName || null,
         email: googleUser.email ?? null,
         loginMethod: "google",
         lastSignedIn: new Date(),
       });
 
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: googleUser.name || "",
+        name: userName,
         expiresInMs: ONE_YEAR_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      console.log("[Google OAuth] Setting session cookie with options:", { domain: cookieOptions.domain, secure: cookieOptions.secure, sameSite: cookieOptions.sameSite });
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       res.redirect(302, "/app");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,9 +10,23 @@ import { trpc } from "@/lib/trpc";
 import { APP_TITLE, APP_LOGO } from "@/const";
 import { Loader2 } from "lucide-react";
 
+const OAUTH_ERROR_MESSAGES: Record<string, string> = {
+  google_denied: "Google sign-in was cancelled.",
+  google_failed: "Google sign-in failed. Please try again.",
+};
+
 export default function Login() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
+
+  useEffect(() => {
+    const error = new URLSearchParams(window.location.search).get("error");
+    if (error) {
+      toast.error(OAUTH_ERROR_MESSAGES[error] || "Sign-in failed. Please try again.");
+      // Clean up URL
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
