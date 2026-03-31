@@ -51,13 +51,15 @@ export default function Collections() {
     shareToken: string | null;
   } | null>(null);
 
+  const utils = trpc.useUtils();
+
   const { data: collections, isLoading } = trpc.collections.getMyCollections.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
   const createMutation = trpc.collections.createCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
       setIsCreateOpen(false);
       setNewName("");
       setNewDescription("");
@@ -67,7 +69,7 @@ export default function Collections() {
 
   const deleteMutation = trpc.collections.deleteCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
     },
   });
 
