@@ -243,6 +243,7 @@ export default function AdventureMap() {
   const [, setLocation] = useLocation();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
+  const [hoveredNavItem, setHoveredNavItem] = useState<string | null>(null);
   const [isContinueCtaHovered, setIsContinueCtaHovered] = useState(false);
   const [worldReady, setWorldReady] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -579,28 +580,58 @@ export default function AdventureMap() {
                       backdropFilter: "blur(18px)",
                     }}
                   >
-                    {desktopNavItems.map(nav => (
-                      <button
-                        key={nav.label}
-                        type="button"
-                        onClick={() => setLocation(nav.path)}
-                        className="rounded-[14px] px-6 py-2.5 text-[15px] font-semibold transition-all"
-                        style={{
-                          fontFamily: "Fredoka, sans-serif",
-                          color: nav.active
-                            ? "#FFFFFF"
-                            : "rgba(255,255,255,0.82)",
-                          background: nav.active
-                            ? "linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%)"
-                            : "transparent",
-                          boxShadow: nav.active
-                            ? "inset 0 1px 0 rgba(255,255,255,0.34), 0 8px 18px rgba(18,12,47,0.16)"
-                            : "none",
-                        }}
-                      >
-                        {nav.label}
-                      </button>
-                    ))}
+                    {desktopNavItems.map(nav => {
+                      const isHovered = hoveredNavItem === nav.label;
+                      const isHighlighted = nav.active || isHovered;
+
+                      return (
+                        <button
+                          key={nav.label}
+                          type="button"
+                          onClick={() => setLocation(nav.path)}
+                          onMouseEnter={() => setHoveredNavItem(nav.label)}
+                          onMouseLeave={() => setHoveredNavItem(current =>
+                            current === nav.label ? null : current
+                          )}
+                          onFocus={() => setHoveredNavItem(nav.label)}
+                          onBlur={() => setHoveredNavItem(current =>
+                            current === nav.label ? null : current
+                          )}
+                          className="group relative overflow-hidden rounded-[14px] px-6 py-2.5 text-[15px] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70"
+                          style={{
+                            fontFamily: "Fredoka, sans-serif",
+                            color: isHighlighted
+                              ? "#FFFFFF"
+                              : "rgba(255,255,255,0.82)",
+                            background: nav.active
+                              ? isHovered
+                                ? "linear-gradient(180deg, rgba(255,255,255,0.46) 0%, rgba(255,255,255,0.24) 100%)"
+                                : "linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%)"
+                              : isHovered
+                                ? "linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.1) 100%)"
+                                : "transparent",
+                            boxShadow: nav.active
+                              ? isHovered
+                                ? "inset 0 1px 0 rgba(255,255,255,0.42), 0 10px 22px rgba(18,12,47,0.2), 0 0 0 1px rgba(255,255,255,0.12)"
+                                : "inset 0 1px 0 rgba(255,255,255,0.34), 0 8px 18px rgba(18,12,47,0.16)"
+                              : isHovered
+                                ? "inset 0 1px 0 rgba(255,255,255,0.28), 0 8px 18px rgba(18,12,47,0.16)"
+                                : "none",
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-0 rounded-[14px] transition-opacity duration-200"
+                            style={{
+                              opacity: isHovered ? 1 : nav.active ? 0.5 : 0,
+                              background:
+                                "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.02) 100%)",
+                            }}
+                          />
+                          <span className="relative">{nav.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
