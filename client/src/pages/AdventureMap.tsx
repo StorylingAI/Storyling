@@ -243,6 +243,7 @@ export default function AdventureMap() {
   const [, setLocation] = useLocation();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
+  const [isContinueCtaHovered, setIsContinueCtaHovered] = useState(false);
   const [worldReady, setWorldReady] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [zoomState, setZoomState] = useState<{
@@ -328,6 +329,19 @@ export default function AdventureMap() {
   const continueId = continueStory?.id;
   const weeklyProgress = Math.min((storiesThisWeek / weeklyGoal) * 100, 100);
   const continuePath = continueId ? `/content/${continueId}` : "/library";
+  const continueButtonStyle = {
+    fontFamily: "Fredoka, sans-serif",
+    background: isContinueCtaHovered
+      ? "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(243,249,255,0.2) 100%)"
+      : "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(235,244,255,0.1) 100%)",
+    border: isContinueCtaHovered
+      ? "1px solid rgba(255,255,255,0.4)"
+      : "1px solid rgba(255,255,255,0.24)",
+    boxShadow: isContinueCtaHovered
+      ? "0 14px 30px rgba(16,10,45,0.24), inset 0 1px 0 rgba(255,255,255,0.44), 0 0 0 1px rgba(191,230,255,0.18)"
+      : "0 10px 24px rgba(16,10,45,0.16), inset 0 1px 0 rgba(255,255,255,0.32)",
+    backdropFilter: "blur(16px)",
+  };
   const profilePath = user?.id ? `/profile/${user.id}` : "/settings";
   const desktopNavItems = [
     { label: "Home", path: "/app", active: true },
@@ -719,24 +733,29 @@ export default function AdventureMap() {
                       <button
                         type="button"
                         onClick={() => setLocation(continuePath)}
-                        className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[15px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.97]"
-                        style={{
-                          fontFamily: "Fredoka, sans-serif",
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(235,244,255,0.1) 100%)",
-                          border: "1px solid rgba(255,255,255,0.24)",
-                          boxShadow:
-                            "0 10px 24px rgba(16,10,45,0.16), inset 0 1px 0 rgba(255,255,255,0.32)",
-                          backdropFilter: "blur(16px)",
-                        }}
+                        onMouseEnter={() => setIsContinueCtaHovered(true)}
+                        onMouseLeave={() => setIsContinueCtaHovered(false)}
+                        onFocus={() => setIsContinueCtaHovered(true)}
+                        onBlur={() => setIsContinueCtaHovered(false)}
+                        className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-full px-4 py-3 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.97]"
+                        style={continueButtonStyle}
                         title={
                           continueTitle
                             ? `Continue ${continueTitle}`
                             : "Continue reading"
                         }
                       >
-                        Continue Reading
-                        <ArrowRight className="h-4 w-4" />
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-200"
+                          style={{
+                            opacity: isContinueCtaHovered ? 1 : 0,
+                            background:
+                              "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(190,233,255,0.08) 100%)",
+                          }}
+                        />
+                        <span className="relative">Continue Reading</span>
+                        <ArrowRight className="relative h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
                       </button>
                     </div>
                   </div>
