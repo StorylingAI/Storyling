@@ -161,6 +161,7 @@ export function Chatbot({ context }: ChatbotProps) {
   // Hide on auth pages
   const hideOnPages = ['/login', '/signup', '/verify-email'];
   const shouldHide = hideOnPages.some(p => location.startsWith(p));
+  const useEmbeddedLauncher = location === '/app' || location === '/dashboard';
 
   // Resolve quick chips
   const quickChips = context?.storyTitle
@@ -303,7 +304,7 @@ export function Chatbot({ context }: ChatbotProps) {
   return (
     <>
       {/* Floating Bubble */}
-      {!isOpen && (
+      {!isOpen && !useEmbeddedLauncher && (
         <button
           onClick={() => setIsOpen(true)}
           className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-50 group"
@@ -329,10 +330,12 @@ export function Chatbot({ context }: ChatbotProps) {
       {/* Chat Window */}
       {isOpen && (
         <div
-          className={`fixed bottom-6 right-6 z-50 bg-white rounded-2xl shadow-2xl border border-gray-200/60 flex flex-col overflow-hidden transition-all duration-200 ${
-            isMinimized ? 'h-16 w-80' : 'w-[380px] h-[580px]'
+          className={`fixed z-50 bg-white rounded-2xl shadow-2xl border border-gray-200/60 flex flex-col overflow-hidden transition-all duration-200 ${
+            useEmbeddedLauncher ? 'bottom-24 right-2 sm:bottom-6 sm:right-6' : 'bottom-6 right-2 sm:right-6'
+          } ${
+            isMinimized ? 'h-16 w-[calc(100vw-1rem)] sm:w-80' : 'w-[calc(100vw-1rem)] sm:w-[380px] h-[580px]'
           }`}
-          style={{ maxHeight: 'calc(100vh - 6rem)' }}
+          style={{ maxHeight: useEmbeddedLauncher ? 'calc(100vh - 7.5rem)' : 'calc(100vh - 6rem)' }}
         >
           {/* Header */}
           <div className="bg-gradient-to-r from-purple-600 via-violet-600 to-teal-500 p-4 flex items-center justify-between flex-shrink-0">

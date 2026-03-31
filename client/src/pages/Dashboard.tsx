@@ -189,6 +189,131 @@ function SparkleStars() {
   );
 }
 
+// ─── Floating Particles (bokeh light dots) ───────────────────────────────────
+// Small luminous orbs drifting gently — mobile-optimized with CSS only
+function FloatingParticles() {
+  const particles = useMemo(() => {
+    return Array.from({ length: 30 }, (_, i) => {
+      const size = 3 + Math.random() * 6;
+      const isLarge = size > 6;
+      const colors = [
+        'rgba(6, 182, 212, 0.6)',    // teal
+        'rgba(139, 92, 246, 0.5)',   // purple
+        'rgba(78, 205, 210, 0.5)',   // cyan
+        'rgba(232, 184, 75, 0.4)',   // gold
+        'rgba(168, 130, 255, 0.45)', // lavender
+      ];
+      return {
+        id: i,
+        left: `${Math.random() * 100}%`,
+        top: `${Math.random() * 100}%`,
+        size,
+        color: colors[i % colors.length],
+        duration: 12 + Math.random() * 20,
+        delay: Math.random() * 15,
+        dx: `${-40 + Math.random() * 80}px`,
+        dy: `${-60 + Math.random() * -40}px`,
+        glow: isLarge,
+      };
+    });
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[2] overflow-hidden" aria-hidden="true">
+      {particles.map((p) => (
+        <span
+          key={p.id}
+          className="absolute rounded-full"
+          style={{
+            left: p.left,
+            top: p.top,
+            width: `${p.size}px`,
+            height: `${p.size}px`,
+            background: p.glow
+              ? `radial-gradient(circle, ${p.color}, transparent 70%)`
+              : p.color,
+            boxShadow: p.glow ? `0 0 ${p.size * 2}px ${p.color}` : 'none',
+            animation: `particle-drift ${p.duration}s ease-in-out ${p.delay}s infinite`,
+            willChange: 'transform',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Pulsing Light Orbs ──────────────────────────────────────────────────────
+// Large soft halos of light that breathe slowly — creates depth and magic
+function LightOrbs() {
+  const orbs = useMemo(() => [
+    { left: '10%', top: '15%', size: 180, color: 'rgba(139, 92, 246, 0.2)', duration: 8, delay: 0 },
+    { left: '75%', top: '25%', size: 220, color: 'rgba(6, 182, 212, 0.15)', duration: 10, delay: 3 },
+    { left: '40%', top: '60%', size: 160, color: 'rgba(168, 130, 255, 0.18)', duration: 12, delay: 1.5 },
+    { left: '85%', top: '70%', size: 200, color: 'rgba(78, 205, 210, 0.15)', duration: 9, delay: 5 },
+    { left: '20%', top: '80%', size: 140, color: 'rgba(232, 184, 75, 0.1)', duration: 11, delay: 7 },
+  ], []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[1] overflow-hidden" aria-hidden="true">
+      {orbs.map((orb, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left: orb.left,
+            top: orb.top,
+            width: `${orb.size}px`,
+            height: `${orb.size}px`,
+            background: `radial-gradient(circle, ${orb.color}, transparent 70%)`,
+            animation: `light-breathe ${orb.duration}s ease-in-out ${orb.delay}s infinite`,
+            willChange: 'transform, opacity',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Shooting Stars ──────────────────────────────────────────────────────────
+// Occasional streaks of light darting across the sky
+function ShootingStars() {
+  const stars = useMemo(() => {
+    return Array.from({ length: 4 }, (_, i) => ({
+      id: i,
+      left: `${10 + Math.random() * 60}%`,
+      top: `${5 + Math.random() * 40}%`,
+      duration: 3 + Math.random() * 2,
+      delay: i * 6 + Math.random() * 4,
+      shootX: `${100 + Math.random() * 150}px`,
+      shootY: `${80 + Math.random() * 120}px`,
+    }));
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[3] overflow-hidden" aria-hidden="true">
+      {stars.map((s) => (
+        <div
+          key={s.id}
+          className="absolute"
+          style={{
+            left: s.left,
+            top: s.top,
+            width: '0px',
+            height: '2px',
+            background: 'linear-gradient(90deg, rgba(255,255,255,0.8), rgba(6,182,212,0.6), transparent)',
+            borderRadius: '2px',
+            boxShadow: '0 0 6px rgba(255,255,255,0.4), 0 0 12px rgba(6,182,212,0.3)',
+            ['--shoot-x' as string]: s.shootX,
+            ['--shoot-y' as string]: s.shootY,
+            animation: `shooting-star ${s.duration}s ease-out ${s.delay}s infinite`,
+            willChange: 'transform, opacity, width',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 // ─── Time-of-day greeting ──────────────────────────────────────────────────────
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -393,6 +518,10 @@ export default function Dashboard() {
       {/* Animated aurora borealis light bands */}
       <AuroraBorealis />
       <SparkleStars />
+      {/* Mobile particle & light effects */}
+      <FloatingParticles />
+      <LightOrbs />
+      <ShootingStars />
 
       <QuickStartTutorial />
       <WeeklyGoalOnboarding />

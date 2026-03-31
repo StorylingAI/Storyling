@@ -1127,6 +1127,39 @@
   100% { transform: translateX(8%) translateY(-2%) rotate(-3deg); opacity: 0.4; }
 }
 
+/* ===== Mobile Particle & Light Effects ===== */
+@keyframes particle-float {
+  0% { transform: translate(0, 0) scale(1); opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(0.3); opacity: 0; }
+}
+
+@keyframes orb-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.15; filter: blur(40px); }
+  50% { transform: scale(1.3); opacity: 0.3; filter: blur(50px); }
+}
+
+@keyframes shooting-star {
+  0% { transform: translate(0, 0) rotate(-45deg); opacity: 0; width: 0; }
+  5% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { transform: translate(var(--shoot-x), var(--shoot-y)) rotate(-45deg); opacity: 0; width: 120px; }
+}
+
+@keyframes particle-drift {
+  0%, 100% { transform: translateY(0) translateX(0); }
+  25% { transform: translateY(-30px) translateX(15px); }
+  50% { transform: translateY(-10px) translateX(-10px); }
+  75% { transform: translateY(-40px) translateX(5px); }
+}
+
+@keyframes light-breathe {
+  0%, 100% { opacity: 0.08; transform: scale(0.8); }
+  33% { opacity: 0.2; transform: scale(1.1); }
+  66% { opacity: 0.12; transform: scale(0.95); }
+}
+
 /* ===== Magical Background Patterns ===== */
 .bg-magical {
   background: linear-gradient(180deg, #F5F3FF 0%, #EFF6FF 50%, #F0FDFA 100%);
