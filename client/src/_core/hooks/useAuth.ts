@@ -19,8 +19,11 @@ export function useAuth(options?: UseAuthOptions) {
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false,
-    // Keep stale data while refetching so the user doesn't flash to login screen
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    // Always verify session freshness on mount — stale cached null from IndexedDB
+    // would otherwise skip the refetch and cause redirect loops after OAuth.
+    // isAuthPending shows a spinner only when data is null, so authenticated
+    // users see the cached page instantly with a silent background refetch.
+    staleTime: 0,
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
