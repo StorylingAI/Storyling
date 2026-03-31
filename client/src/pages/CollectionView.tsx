@@ -20,6 +20,8 @@ export default function CollectionView() {
   const [isAddStoryOpen, setIsAddStoryOpen] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
 
+  const utils = trpc.useUtils();
+
   const { data: collection, isLoading } = trpc.collections.getCollectionById.useQuery(
     { id: collectionId },
     { enabled: isAuthenticated && collectionId > 0 }
@@ -31,20 +33,20 @@ export default function CollectionView() {
 
   const addToCollectionMutation = trpc.collections.addToCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
       setIsAddStoryOpen(false);
     },
   });
 
   const removeFromCollectionMutation = trpc.collections.removeFromCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
     },
   });
 
   const reorderMutation = trpc.collections.reorderCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
     },
   });
   
@@ -247,6 +249,56 @@ export default function CollectionView() {
           </div>
         )}
       </section>
+
+      {/* Add Story Dialog */}
+      <Dialog open={isAddStoryOpen} onOpenChange={setIsAddStoryOpen}>
+        <DialogContent className="max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Add Stories</DialogTitle>
+            <DialogDescription>
+              Select stories from your library to add to this collection.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-2 py-2">
+            {availableStories.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <p>No stories available to add.</p>
+                <p className="text-sm mt-1">Create stories first, then add them here.</p>
+              </div>
+            ) : (
+              availableStories.map((story) => (
+                <div
+                  key={story.id}
+                  className="flex items-center gap-3 p-3 rounded-lg border hover:bg-accent/50 transition-colors"
+                >
+                  <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-purple-100 via-teal-100 to-pink-100 flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {story.thumbnailUrl ? (
+                      <img src={story.thumbnailUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xl">{story.mode === "podcast" ? "🎙️" : "🎬"}</span>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-medium text-sm line-clamp-1">
+                      {story.title || `${story.theme} Story`}
+                    </h4>
+                    <p className="text-xs text-muted-foreground">{story.theme}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => addToCollectionMutation.mutate({ collectionId, contentId: story.id })}
+                    disabled={addToCollectionMutation.isPending}
+                    className="flex-shrink-0"
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Add
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
