@@ -278,14 +278,14 @@ function LightOrbs() {
 // Occasional streaks of light darting across the sky
 function ShootingStars() {
   const stars = useMemo(() => {
-    return Array.from({ length: 4 }, (_, i) => ({
+    return Array.from({ length: 7 }, (_, i) => ({
       id: i,
-      left: `${10 + Math.random() * 60}%`,
-      top: `${5 + Math.random() * 40}%`,
-      duration: 3 + Math.random() * 2,
-      delay: i * 6 + Math.random() * 4,
-      shootX: `${100 + Math.random() * 150}px`,
-      shootY: `${80 + Math.random() * 120}px`,
+      left: `${5 + Math.random() * 70}%`,
+      top: `${3 + Math.random() * 45}%`,
+      duration: 2.5 + Math.random() * 2,
+      delay: i * 4 + Math.random() * 3,
+      shootX: `${120 + Math.random() * 180}px`,
+      shootY: `${90 + Math.random() * 140}px`,
     }));
   }, []);
 
@@ -300,15 +300,134 @@ function ShootingStars() {
             top: s.top,
             width: '0px',
             height: '2px',
-            background: 'linear-gradient(90deg, rgba(255,255,255,0.8), rgba(6,182,212,0.6), transparent)',
+            background: `linear-gradient(90deg, rgba(255,255,255,0.9), ${s.id % 2 === 0 ? 'rgba(168,130,255,0.7)' : 'rgba(6,182,212,0.7)'}, rgba(232,184,75,0.3), transparent)`,
             borderRadius: '2px',
-            boxShadow: '0 0 6px rgba(255,255,255,0.4), 0 0 12px rgba(6,182,212,0.3)',
+            boxShadow: `0 0 8px rgba(255,255,255,0.5), 0 0 16px ${s.id % 2 === 0 ? 'rgba(168,130,255,0.4)' : 'rgba(6,182,212,0.4)'}`,
             ['--shoot-x' as string]: s.shootX,
             ['--shoot-y' as string]: s.shootY,
             animation: `shooting-star ${s.duration}s ease-out ${s.delay}s infinite`,
             willChange: 'transform, opacity, width',
           }}
         />
+      ))}
+    </div>
+  );
+}
+
+// ─── Fireflies — warm pulsing dots drifting on organic paths ─────────────────
+function Fireflies() {
+  const flies = useMemo(() => {
+    return Array.from({ length: 20 }, (_, i) => {
+      const hue = [45, 55, 170, 280, 190][i % 5]; // gold, amber, cyan, violet, teal
+      return {
+        id: i,
+        left: `${5 + Math.random() * 90}%`,
+        top: `${10 + Math.random() * 80}%`,
+        size: 3 + Math.random() * 4,
+        color: `hsla(${hue}, 80%, 65%, 0.8)`,
+        glow: `hsla(${hue}, 90%, 60%, 0.6)`,
+        duration: 8 + Math.random() * 12,
+        delay: Math.random() * 10,
+        pathX: -30 + Math.random() * 60,
+        pathY: -40 + Math.random() * 80,
+      };
+    });
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[4] overflow-hidden" aria-hidden="true">
+      {flies.map((f) => (
+        <span
+          key={f.id}
+          className="absolute rounded-full"
+          style={{
+            left: f.left,
+            top: f.top,
+            width: `${f.size}px`,
+            height: `${f.size}px`,
+            background: f.color,
+            boxShadow: `0 0 ${f.size * 3}px ${f.size}px ${f.glow}`,
+            ['--fly-x' as string]: `${f.pathX}px`,
+            ['--fly-y' as string]: `${f.pathY}px`,
+            animation: `firefly-drift ${f.duration}s ease-in-out ${f.delay}s infinite`,
+            willChange: 'transform, opacity',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Nebula Clouds — slow-moving cosmic color patches ────────────────────────
+function NebulaClouds() {
+  const clouds = useMemo(() => [
+    { left: '-5%', top: '20%', w: 400, h: 250, color1: 'rgba(139, 92, 246, 0.08)', color2: 'rgba(6, 182, 212, 0.05)', dur: 40, delay: 0, rotate: 15 },
+    { left: '55%', top: '50%', w: 350, h: 200, color1: 'rgba(232, 184, 75, 0.06)', color2: 'rgba(168, 130, 255, 0.04)', dur: 50, delay: 5, rotate: -10 },
+    { left: '25%', top: '70%', w: 450, h: 280, color1: 'rgba(6, 182, 212, 0.07)', color2: 'rgba(139, 92, 246, 0.04)', dur: 35, delay: 12, rotate: 8 },
+  ], []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[1] overflow-hidden" aria-hidden="true">
+      {clouds.map((c, i) => (
+        <div
+          key={i}
+          className="absolute"
+          style={{
+            left: c.left,
+            top: c.top,
+            width: `${c.w}px`,
+            height: `${c.h}px`,
+            background: `radial-gradient(ellipse at center, ${c.color1}, ${c.color2} 50%, transparent 75%)`,
+            filter: 'blur(40px)',
+            transform: `rotate(${c.rotate}deg)`,
+            animation: `nebula-float ${c.dur}s ease-in-out ${c.delay}s infinite`,
+            willChange: 'transform, opacity',
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Magic Dust Trail — sparkle arcs sweeping across ─────────────────────────
+function MagicDust() {
+  const trails = useMemo(() => {
+    return Array.from({ length: 3 }, (_, i) => ({
+      id: i,
+      left: `${10 + i * 30}%`,
+      top: `${15 + i * 20}%`,
+      duration: 18 + i * 8,
+      delay: i * 7,
+      arcX: 120 + Math.random() * 100,
+      arcY: -60 - Math.random() * 80,
+    }));
+  }, []);
+
+  return (
+    <div className="absolute inset-0 pointer-events-none z-[4] overflow-hidden" aria-hidden="true">
+      {trails.map((t) => (
+        <div key={t.id} className="absolute" style={{ left: t.left, top: t.top }}>
+          {Array.from({ length: 8 }, (_, j) => (
+            <span
+              key={j}
+              className="absolute rounded-full"
+              style={{
+                width: `${2 + Math.random() * 3}px`,
+                height: `${2 + Math.random() * 3}px`,
+                background: j % 2 === 0
+                  ? 'rgba(232, 184, 75, 0.7)'
+                  : 'rgba(168, 130, 255, 0.6)',
+                boxShadow: j % 2 === 0
+                  ? '0 0 6px 2px rgba(232, 184, 75, 0.4)'
+                  : '0 0 6px 2px rgba(168, 130, 255, 0.3)',
+                ['--dust-x' as string]: `${t.arcX * (0.3 + j * 0.1)}px`,
+                ['--dust-y' as string]: `${t.arcY * (0.4 + j * 0.08)}px`,
+                animation: `magic-dust ${t.duration}s ease-in-out ${t.delay + j * 0.8}s infinite`,
+                willChange: 'transform, opacity',
+              }}
+            />
+          ))}
+        </div>
       ))}
     </div>
   );
@@ -517,11 +636,14 @@ export default function Dashboard() {
     }}>
       {/* Animated aurora borealis light bands */}
       <AuroraBorealis />
+      <NebulaClouds />
       <SparkleStars />
-      {/* Mobile particle & light effects */}
+      {/* Particle & light effects */}
       <FloatingParticles />
       <LightOrbs />
       <ShootingStars />
+      <Fireflies />
+      <MagicDust />
 
       <QuickStartTutorial />
       <WeeklyGoalOnboarding />
@@ -604,17 +726,20 @@ export default function Dashboard() {
                   <div className="space-y-1 pt-1">
                     <button
                       onClick={() => setLocation(`/content/${continueId}`)}
-                      className="inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all"
+                      className="group/cta relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
                       style={{
                         background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
-                        boxShadow: '0 6px 20px -4px rgba(124, 58, 237, 0.5)',
                         fontFamily: 'Fredoka, sans-serif',
                         maxWidth: '100%',
                       }}
                       data-tutorial="continue-reading"
                     >
-                      <span className="truncate">Continue: {continueTitle}</span>
-                      <ArrowRight className="h-4 w-4 shrink-0" />
+                      {/* Shimmer sweep on hover */}
+                      <span className="absolute inset-0 -translate-x-full group-hover/cta:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+                      {/* Glow pulse on hover */}
+                      <span className="absolute inset-0 rounded-full opacity-0 group-hover/cta:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ boxShadow: '0 0 20px 4px rgba(6,182,212,0.5), 0 0 40px 8px rgba(124,58,237,0.3), inset 0 0 12px rgba(255,255,255,0.15)' }} />
+                      <span className="relative truncate">Continue: {continueTitle}</span>
+                      <ArrowRight className="relative h-4 w-4 shrink-0 group-hover/cta:translate-x-1 transition-transform duration-300" />
                     </button>
                     <p className="text-xs text-white/50 font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>
                       {continueStory?.theme && continueStory.theme}
@@ -625,16 +750,17 @@ export default function Dashboard() {
                 ) : (
                   <button
                     onClick={() => setLocation("/create")}
-                    className="inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all"
+                    className="group/cta relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
                     style={{
                       background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
-                      boxShadow: '0 6px 20px -4px rgba(124, 58, 237, 0.5)',
                       fontFamily: 'Fredoka, sans-serif',
                     }}
                     data-tutorial="create-story"
                   >
-                    <Sparkles className="h-4 w-4" />
-                    Create Your First Story
+                    <span className="absolute inset-0 -translate-x-full group-hover/cta:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
+                    <span className="absolute inset-0 rounded-full opacity-0 group-hover/cta:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ boxShadow: '0 0 20px 4px rgba(6,182,212,0.5), 0 0 40px 8px rgba(124,58,237,0.3), inset 0 0 12px rgba(255,255,255,0.15)' }} />
+                    <Sparkles className="relative h-4 w-4 group-hover/cta:animate-spin" style={{ animationDuration: '2s' }} />
+                    <span className="relative">Create Your First Story</span>
                   </button>
                 )}
               </div>
@@ -977,50 +1103,53 @@ export default function Dashboard() {
           {/* Home */}
           <button
             onClick={() => setLocation("/app")}
-            className="flex flex-col items-center gap-0.5 min-w-[56px]"
+            className="group/nav relative flex flex-col items-center gap-0.5 min-w-[56px]"
           >
-            <HomeIcon className="h-6 w-6 text-teal-300" />
+            <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-teal-400 shadow-[0_0_8px_2px_rgba(45,212,191,0.6)]" />
+            <HomeIcon className="h-6 w-6 text-teal-300 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] transition-all duration-300" />
             <span className="text-[10px] font-bold text-teal-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Home</span>
           </button>
 
           {/* Library */}
           <button
             onClick={() => setLocation("/library")}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors"
+            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
           >
-            <BookOpen className="h-6 w-6" />
-            <span className="text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Library</span>
+            <BookOpen className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
+            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Library</span>
           </button>
 
           {/* Create — Raised center button */}
           <button
             onClick={() => setLocation("/create")}
-            className="flex flex-col items-center -mt-7"
+            className="group/create flex flex-col items-center -mt-7"
           >
-            <div className="w-16 h-16 rounded-full shadow-xl flex items-center justify-center hover-lift transition-all" style={{
+            <div className="relative w-16 h-16 rounded-full shadow-xl flex items-center justify-center hover-lift transition-all duration-300 group-hover/create:scale-110" style={{
               background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
               boxShadow: '0 8px 24px -4px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(45, 27, 105, 0.9)',
             }}>
-              <PlusCircle className="h-8 w-8 text-white" />
+              {/* Glow ring on hover */}
+              <span className="absolute inset-[-4px] rounded-full opacity-0 group-hover/create:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: '0 0 20px 6px rgba(6,182,212,0.5), 0 0 40px 12px rgba(124,58,237,0.3)' }} />
+              <PlusCircle className="h-8 w-8 text-white group-hover/create:rotate-90 transition-transform duration-500" />
             </div>
           </button>
 
           {/* Word Bank */}
           <button
             onClick={() => setLocation("/wordbank")}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors"
+            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
           >
-            <Library className="h-6 w-6" />
-            <span className="text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Word Bank</span>
+            <Library className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
+            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Word Bank</span>
           </button>
 
           {/* Profile */}
           <button
             onClick={() => setLocation("/settings")}
-            className="flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors"
+            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
           >
-            <User className="h-6 w-6" />
-            <span className="text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Profile</span>
+            <User className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
+            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Profile</span>
           </button>
         </div>
       </nav>
