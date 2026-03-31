@@ -726,7 +726,7 @@ export default function Dashboard() {
                   <div className="space-y-1 pt-1">
                     <button
                       onClick={() => setLocation(`/content/${continueId}`)}
-                      className="group/cta relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
+                      className="cta-magic-btn relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
                       style={{
                         background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
                         fontFamily: 'Fredoka, sans-serif',
@@ -734,12 +734,12 @@ export default function Dashboard() {
                       }}
                       data-tutorial="continue-reading"
                     >
-                      {/* Shimmer sweep on hover */}
-                      <span className="absolute inset-0 -translate-x-full group-hover/cta:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
-                      {/* Glow pulse on hover */}
-                      <span className="absolute inset-0 rounded-full opacity-0 group-hover/cta:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ boxShadow: '0 0 20px 4px rgba(6,182,212,0.5), 0 0 40px 8px rgba(124,58,237,0.3), inset 0 0 12px rgba(255,255,255,0.15)' }} />
+                      {/* Shimmer sweep */}
+                      <span className="cta-magic-shimmer absolute inset-0 pointer-events-none" />
+                      {/* Glow halo */}
+                      <span className="cta-magic-glow absolute inset-0 rounded-full pointer-events-none" />
                       <span className="relative truncate">Continue: {continueTitle}</span>
-                      <ArrowRight className="relative h-4 w-4 shrink-0 group-hover/cta:translate-x-1 transition-transform duration-300" />
+                      <ArrowRight className="relative h-4 w-4 shrink-0 cta-magic-arrow" />
                     </button>
                     <p className="text-xs text-white/50 font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>
                       {continueStory?.theme && continueStory.theme}
@@ -750,16 +750,16 @@ export default function Dashboard() {
                 ) : (
                   <button
                     onClick={() => setLocation("/create")}
-                    className="group/cta relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
+                    className="cta-magic-btn relative inline-flex items-center gap-2 rounded-full h-11 px-6 text-sm font-bold text-white shadow-lg hover-lift active-scale transition-all overflow-hidden"
                     style={{
                       background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
                       fontFamily: 'Fredoka, sans-serif',
                     }}
                     data-tutorial="create-story"
                   >
-                    <span className="absolute inset-0 -translate-x-full group-hover/cta:translate-x-full transition-transform duration-700 ease-in-out bg-gradient-to-r from-transparent via-white/25 to-transparent pointer-events-none" />
-                    <span className="absolute inset-0 rounded-full opacity-0 group-hover/cta:opacity-100 transition-opacity duration-300 pointer-events-none" style={{ boxShadow: '0 0 20px 4px rgba(6,182,212,0.5), 0 0 40px 8px rgba(124,58,237,0.3), inset 0 0 12px rgba(255,255,255,0.15)' }} />
-                    <Sparkles className="relative h-4 w-4 group-hover/cta:animate-spin" style={{ animationDuration: '2s' }} />
+                    <span className="cta-magic-shimmer absolute inset-0 pointer-events-none" />
+                    <span className="cta-magic-glow absolute inset-0 rounded-full pointer-events-none" />
+                    <Sparkles className="relative h-4 w-4 cta-magic-sparkle" />
                     <span className="relative">Create Your First Story</span>
                   </button>
                 )}
@@ -1103,53 +1103,52 @@ export default function Dashboard() {
           {/* Home */}
           <button
             onClick={() => setLocation("/app")}
-            className="group/nav relative flex flex-col items-center gap-0.5 min-w-[56px]"
+            className="nav-magic-btn relative flex flex-col items-center gap-0.5 min-w-[56px]"
           >
             <span className="absolute -top-1 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-teal-400 shadow-[0_0_8px_2px_rgba(45,212,191,0.6)]" />
-            <HomeIcon className="h-6 w-6 text-teal-300 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] transition-all duration-300" />
+            <HomeIcon className="nav-magic-icon h-6 w-6 text-teal-300" />
             <span className="text-[10px] font-bold text-teal-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Home</span>
           </button>
 
           {/* Library */}
           <button
             onClick={() => setLocation("/library")}
-            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
+            className="nav-magic-btn flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 transition-colors duration-300"
           >
-            <BookOpen className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
-            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Library</span>
+            <BookOpen className="nav-magic-icon h-6 w-6" />
+            <span className="nav-magic-label text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Library</span>
           </button>
 
           {/* Create — Raised center button */}
           <button
             onClick={() => setLocation("/create")}
-            className="group/create flex flex-col items-center -mt-7"
+            className="nav-create-btn flex flex-col items-center -mt-7"
           >
-            <div className="relative w-16 h-16 rounded-full shadow-xl flex items-center justify-center hover-lift transition-all duration-300 group-hover/create:scale-110" style={{
+            <div className="nav-create-circle relative w-16 h-16 rounded-full shadow-xl flex items-center justify-center hover-lift transition-all duration-300" style={{
               background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
               boxShadow: '0 8px 24px -4px rgba(124, 58, 237, 0.5), 0 0 0 4px rgba(45, 27, 105, 0.9)',
             }}>
-              {/* Glow ring on hover */}
-              <span className="absolute inset-[-4px] rounded-full opacity-0 group-hover/create:opacity-100 transition-opacity duration-500 pointer-events-none" style={{ boxShadow: '0 0 20px 6px rgba(6,182,212,0.5), 0 0 40px 12px rgba(124,58,237,0.3)' }} />
-              <PlusCircle className="h-8 w-8 text-white group-hover/create:rotate-90 transition-transform duration-500" />
+              <span className="nav-create-ring" />
+              <PlusCircle className="nav-create-icon h-8 w-8 text-white" />
             </div>
           </button>
 
           {/* Word Bank */}
           <button
             onClick={() => setLocation("/wordbank")}
-            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
+            className="nav-magic-btn flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 transition-colors duration-300"
           >
-            <Library className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
-            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Word Bank</span>
+            <Library className="nav-magic-icon h-6 w-6" />
+            <span className="nav-magic-label text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Word Bank</span>
           </button>
 
           {/* Profile */}
           <button
             onClick={() => setLocation("/settings")}
-            className="group/nav flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 hover:text-teal-300 transition-colors duration-300"
+            className="nav-magic-btn flex flex-col items-center gap-0.5 min-w-[56px] text-white/50 transition-colors duration-300"
           >
-            <User className="h-6 w-6 group-hover/nav:drop-shadow-[0_0_8px_rgba(45,212,191,0.7)] group-hover/nav:scale-110 transition-all duration-300" />
-            <span className="text-[10px] font-medium group-hover/nav:font-bold transition-all duration-300" style={{ fontFamily: 'Fredoka, sans-serif' }}>Profile</span>
+            <User className="nav-magic-icon h-6 w-6" />
+            <span className="nav-magic-label text-[10px] font-medium" style={{ fontFamily: 'Fredoka, sans-serif' }}>Profile</span>
           </button>
         </div>
       </nav>
