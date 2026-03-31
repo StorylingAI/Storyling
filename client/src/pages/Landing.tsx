@@ -121,6 +121,36 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
+// ===== STATS SECTION =====
+function StatsSection() {
+  const { data: stats } = trpc.discovery.getPublicStats.useQuery();
+
+  const items = [
+    { value: stats?.storiesCreated ?? 0, suffix: "+", label: "Stories Created", color: "text-purple-600" },
+    { value: stats?.languages ?? 0, suffix: "", label: "Languages", color: "text-blue-600" },
+    { value: stats?.activeUsers ?? 0, suffix: "+", label: "Active Learners", color: "text-purple-600" },
+  ];
+
+  return (
+    <section className="py-16 px-4 bg-white">
+      <div className="container">
+        <div className="grid grid-cols-3 gap-5 max-w-4xl mx-auto">
+          {items.map((stat, i) => (
+            <RevealSection key={i} delay={i * 100}>
+              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-purple-50/50 to-blue-50/50 hover:-translate-y-1 transition-all">
+                <div className={`text-3xl md:text-4xl font-bold ${stat.color} mb-2`} style={{ fontFamily: "Fredoka, sans-serif" }}>
+                  <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+                </div>
+                <div className="text-sm text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>{stat.label}</div>
+              </div>
+            </RevealSection>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ===== FEATURED COLLECTIONS =====
 const CARD_COLORS = [
   { bg: "#F3E8FF", border: "#8B5CF6", avatarGrad: "linear-gradient(135deg, #8B5CF6, #7C3AED)" },
@@ -808,27 +838,7 @@ export default function Landing() {
       </section>
 
       {/* ========== STATS ========== */}
-      <section className="py-16 px-4 bg-white">
-        <div className="container">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 max-w-4xl mx-auto">
-            {[
-              { value: 2500000, suffix: "+", label: "Stories Created", color: "text-purple-600" },
-              { value: 19, suffix: "", label: "Languages", color: "text-blue-600" },
-              { value: 97, suffix: "%", label: "Satisfaction Rate", color: "text-teal-600" },
-              { value: 35000, suffix: "+", label: "Active Learners", color: "text-purple-600" },
-            ].map((stat, i) => (
-              <RevealSection key={i} delay={i * 100}>
-                <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-purple-50/50 to-blue-50/50 hover:-translate-y-1 transition-all">
-                  <div className={`text-3xl md:text-4xl font-bold ${stat.color} mb-2`} style={{ fontFamily: "Fredoka, sans-serif" }}>
-                    <AnimatedCounter target={stat.value} suffix={stat.suffix} />
-                  </div>
-                  <div className="text-sm text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>{stat.label}</div>
-                </div>
-              </RevealSection>
-            ))}
-          </div>
-        </div>
-      </section>
+      <StatsSection />
 
       {/* ========== FOR STUDENTS & TEACHERS ========== */}
       <section className="py-20 md:py-28 px-4 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #F5F3FF 0%, #EDE9FE 40%, #F3E8FF 70%, #F5F3FF 100%)" }}>

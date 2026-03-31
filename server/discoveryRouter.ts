@@ -181,4 +181,28 @@ export const discoveryRouter = router({
         personalized: personalizedCollections,
       };
     }),
+
+  // Public stats for landing page
+  getPublicStats: publicProcedure.query(async () => {
+    const db = await getDb();
+    if (!db) throw new Error("Database unavailable");
+
+    const [storiesResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(generatedContent);
+
+    const [usersResult] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(users);
+
+    const [languagesResult] = await db
+      .select({ count: sql<number>`COUNT(DISTINCT ${vocabularyLists.targetLanguage})` })
+      .from(vocabularyLists);
+
+    return {
+      storiesCreated: storiesResult?.count ?? 0,
+      activeUsers: usersResult?.count ?? 0,
+      languages: languagesResult?.count ?? 0,
+    };
+  }),
 });
