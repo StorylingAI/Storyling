@@ -297,12 +297,12 @@ function VoicePreview() {
       {/* Voice Type Grid */}
       <div className="space-y-4">
         {voiceTypes.map((voice) => (
-          <div key={voice.value} className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
+          <div key={voice.value} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 border rounded-lg">
+            <div className="min-w-0">
               <p className="font-medium">{voice.label}</p>
-              <p className="text-sm text-muted-foreground">Sample: "{sampleTexts[selectedLanguage]}"</p>
+              <p className="text-sm text-muted-foreground truncate">Sample: "{sampleTexts[selectedLanguage]}"</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               <Button
                 variant="outline"
                 size="sm"
@@ -610,7 +610,7 @@ export function Settings() {
       <MobileNav title="Settings" backPath="/app" />
 
 
-      <div className="container max-w-4xl py-8">
+      <div className="container max-w-4xl px-4 sm:px-6 py-8">
         {/* Breadcrumb */}
         <Breadcrumb
           items={[

@@ -24,6 +24,7 @@ import {
   Bell,
   ArrowLeft,
   BookMarked,
+  UserCircle,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 
@@ -244,6 +245,7 @@ export function MobileNav({
               <p className="px-4 py-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Account
               </p>
+              {user?.id && renderNavItem({ icon: UserCircle, label: "Profile", path: `/profile/${user.id}` })}
               {accountItems.map(renderNavItem)}
             </div>
           </div>

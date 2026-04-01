@@ -1,5 +1,5 @@
 import { useParams, useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { trpc } from "@/lib/trpc";
@@ -31,12 +31,6 @@ export default function Profile() {
   const [showFollowers, setShowFollowers] = useState(false);
   const [showFollowing, setShowFollowing] = useState(false);
   const utils = trpc.useUtils();
-
-  useEffect(() => {
-    if (currentUser && userId && currentUser.id === parseInt(userId, 10)) {
-      setLocation("/settings");
-    }
-  }, [currentUser, userId, setLocation]);
 
   const { data: profile, isLoading } = trpc.leaderboard.getUserProfile.useQuery(
     { userId: parseInt(userId!) },
