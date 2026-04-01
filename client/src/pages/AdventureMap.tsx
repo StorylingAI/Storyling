@@ -11,9 +11,9 @@ import { useChallengeDetection } from "@/hooks/useChallengeDetection";
 import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
 
-const BG_DESKTOP = "/images/storyling_desktop_bg.png";
+const BG_DESKTOP = "/images/dashboardBg.webp";
 const BG_MOBILE = "/images/storyling_mobileLargeBg.png";
-const DESKTOP_ART_ASPECT_RATIO = 1536 / 1024;
+const DESKTOP_ART_ASPECT_RATIO = 2752 / 1536;
 const DESKTOP_ART_HEIGHT_RATIO = 1 / DESKTOP_ART_ASPECT_RATIO;
 const MOBILE_ART_ASPECT_RATIO = 800 / 890;
 
@@ -36,9 +36,9 @@ const BUILDINGS: Building[] = [
     description:
       "Write your own adventure story in any language and let AI guide the journey.",
     path: "/create",
-    desktop: { left: 66, top: 33, width: 25, height: 44 },
+    desktop: { left: 18, top: 8, width: 24, height: 26 },
     mobile: { left: 7, top: 6, width: 64, height: 22 },
-    zoomTarget: { x: 80, y: 56 },
+    zoomTarget: { x: 28, y: 22 },
   },
   {
     id: "library",
@@ -47,9 +47,9 @@ const BUILDINGS: Building[] = [
     description:
       "Open your saved stories, continue reading, and revisit your latest adventures.",
     path: "/library",
-    desktop: { left: 33, top: 20, width: 33, height: 35 },
+    desktop: { left: 76, top: 4, width: 23, height: 36 },
     mobile: { left: 14, top: 70, width: 42, height: 26 },
-    zoomTarget: { x: 49, y: 39 },
+    zoomTarget: { x: 88, y: 22 },
   },
   {
     id: "wordbank",
@@ -58,9 +58,9 @@ const BUILDINGS: Building[] = [
     description:
       "Review and practice the vocabulary you collected across your stories.",
     path: "/wordbank",
-    desktop: { left: 19, top: 38, width: 25, height: 40 },
+    desktop: { left: 7, top: 44, width: 28, height: 30 },
     mobile: { left: 12, top: 28, width: 35, height: 18 },
-    zoomTarget: { x: 31, y: 58 },
+    zoomTarget: { x: 21, y: 57 },
   },
   {
     id: "chat",
@@ -69,9 +69,9 @@ const BUILDINGS: Building[] = [
     description:
       "Practice conversation with Booki whenever you want a language buddy.",
     path: "__chat__",
-    desktop: { left: 45, top: 43, width: 21, height: 29 },
+    desktop: { left: 66, top: 44, width: 29, height: 31 },
     mobile: { left: 40, top: 52, width: 39, height: 18 },
-    zoomTarget: { x: 55, y: 63 },
+    zoomTarget: { x: 81, y: 58 },
   },
   {
     id: "profile",
