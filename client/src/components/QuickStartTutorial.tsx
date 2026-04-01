@@ -13,6 +13,10 @@ interface TutorialStep {
   position?: "top" | "bottom" | "left" | "right";
 }
 
+interface QuickStartTutorialProps {
+  autoScrollTargets?: boolean;
+}
+
 const tutorialSteps: TutorialStep[] = [
   {
     id: "welcome",
@@ -41,20 +45,40 @@ const tutorialSteps: TutorialStep[] = [
     position: "bottom",
   },
   {
-    id: "progress",
-    title: "Track Your Progress",
-    description: "Monitor your learning streak, weekly goals, and achievements to stay motivated!",
-    targetSelector: "[data-tutorial='progress']",
-    position: "bottom",
-  },
-  {
     id: "complete",
     title: "You're All Set! 🚀",
     description: "Start creating your first story and begin your language learning adventure. You can always access help from Settings.",
   },
 ];
 
-export function QuickStartTutorial() {
+function isTargetFullyVisible(rect: DOMRect, padding = 24) {
+  return (
+    rect.top >= padding &&
+    rect.left >= padding &&
+    rect.bottom <= window.innerHeight - padding &&
+    rect.right <= window.innerWidth - padding
+  );
+}
+
+function resetAncestorScroll(target: HTMLElement) {
+  let ancestor = target.parentElement;
+
+  while (ancestor) {
+    if (ancestor.scrollTop !== 0) {
+      ancestor.scrollTop = 0;
+    }
+
+    if (ancestor.scrollLeft !== 0) {
+      ancestor.scrollLeft = 0;
+    }
+
+    ancestor = ancestor.parentElement;
+  }
+}
+
+export function QuickStartTutorial({
+  autoScrollTargets = true,
+}: QuickStartTutorialProps) {
   const [isActive, setIsActive] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const [hasSeenTutorial, setHasSeenTutorial] = useState(false);
@@ -84,6 +108,42 @@ export function QuickStartTutorial() {
   const [highlightRect, setHighlightRect] = useState<DOMRect | null>(null);
 
   useEffect(() => {
+    if (!isActive || autoScrollTargets) return;
+
+    const lockedScrollX = 0;
+    const lockedScrollY = 0;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+
+    const keepViewportLocked = () => {
+      if (window.scrollX !== lockedScrollX || window.scrollY !== lockedScrollY) {
+        window.scrollTo({
+          top: lockedScrollY,
+          left: lockedScrollX,
+          behavior: "instant",
+        });
+      }
+    };
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    keepViewportLocked();
+
+    window.addEventListener("scroll", keepViewportLocked, true);
+
+    return () => {
+      window.removeEventListener("scroll", keepViewportLocked, true);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      window.scrollTo({
+        top: lockedScrollY,
+        left: lockedScrollX,
+        behavior: "instant",
+      });
+    };
+  }, [autoScrollTargets, isActive]);
+
+  useEffect(() => {
     // Scroll target element into view and update highlight when step changes
     if (isActive && step.targetSelector) {
       const selector = step.targetSelector;
@@ -92,16 +152,32 @@ export function QuickStartTutorial() {
       const updateHighlight = () => {
         const target = document.querySelector(selector) as HTMLElement;
         if (target) {
-          // Make sure element is visible and scrolled into view
-          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          
+          if (!autoScrollTargets) {
+            window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+            resetAncestorScroll(target);
+          }
+
+          const currentRect = target.getBoundingClientRect();
+          const shouldScroll =
+            autoScrollTargets && !isTargetFullyVisible(currentRect);
+
+          if (shouldScroll) {
+            target.scrollIntoView({
+              behavior: "smooth",
+              block: "center",
+              inline: "center",
+            });
+          }
+
+          const updateDelay = shouldScroll ? 300 : 0;
+
           // Update highlight rectangle
           setTimeout(() => {
             const rect = target.getBoundingClientRect();
             setHighlightRect(rect);
             // Play pop sound when cursor appears
             tutorialSounds.playPopSound();
-          }, 300); // Wait for scroll to complete
+          }, updateDelay);
         } else {
           console.warn(`Tutorial: Element not found for selector: ${selector}`);
           setHighlightRect(null);
@@ -129,7 +205,7 @@ export function QuickStartTutorial() {
     } else {
       setHighlightRect(null);
     }
-  }, [currentStep, isActive, step.targetSelector]);
+  }, [autoScrollTargets, currentStep, isActive, step.targetSelector]);
 
   const handleNext = () => {
     tutorialSounds.playClickSound();
@@ -172,7 +248,13 @@ export function QuickStartTutorial() {
         variant="ghost"
         size="sm"
         onClick={restartTutorial}
-        className="fixed bottom-4 left-4 z-50 rounded-button hover-lift active-scale transition-all"
+        className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full px-5 hover-lift active-scale transition-all sm:bottom-6"
+        style={{
+          background: "linear-gradient(180deg, rgba(255,250,241,0.96) 0%, rgba(247,231,202,0.92) 100%)",
+          border: "1px solid rgba(138,106,68,0.28)",
+          boxShadow: "0 12px 24px rgba(82,58,34,0.14), inset 0 1px 0 rgba(255,255,255,0.75)",
+          color: "#5A3F29",
+        }}
       >
         <Sparkles className="h-4 w-4 mr-2" />
         Show Tutorial

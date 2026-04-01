@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
-import { ArrowRight, BookOpen, Flame, Settings, Sparkles } from "lucide-react";
+import { Settings, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,11 +11,12 @@ import { useChallengeDetection } from "@/hooks/useChallengeDetection";
 import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
 
-const BG_DESKTOP = "/images/dashboardBg.webp";
+const BG_DESKTOP = "/images/dashboardBg2.jpg";
 const BG_MOBILE = "/images/storyling_mobileLargeBg.png";
-const DESKTOP_ART_ASPECT_RATIO = 2752 / 1536;
+const DESKTOP_ART_ASPECT_RATIO = 1920 / 1389;
 const DESKTOP_ART_HEIGHT_RATIO = 1 / DESKTOP_ART_ASPECT_RATIO;
 const MOBILE_ART_ASPECT_RATIO = 800 / 890;
+const DESKTOP_WORLD_VERTICAL_SHIFT = 72;
 
 interface Building {
   id: string;
@@ -36,9 +37,9 @@ const BUILDINGS: Building[] = [
     description:
       "Write your own adventure story in any language and let AI guide the journey.",
     path: "/create",
-    desktop: { left: 18, top: 8, width: 24, height: 26 },
+    desktop: { left: 1, top: 18, width: 42, height: 29 },
     mobile: { left: 7, top: 6, width: 64, height: 22 },
-    zoomTarget: { x: 28, y: 22 },
+    zoomTarget: { x: 22, y: 27 },
   },
   {
     id: "library",
@@ -47,9 +48,9 @@ const BUILDINGS: Building[] = [
     description:
       "Open your saved stories, continue reading, and revisit your latest adventures.",
     path: "/library",
-    desktop: { left: 76, top: 4, width: 23, height: 36 },
+    desktop: { left: 71, top: 17, width: 27, height: 34 },
     mobile: { left: 14, top: 70, width: 42, height: 26 },
-    zoomTarget: { x: 88, y: 22 },
+    zoomTarget: { x: 84, y: 29 },
   },
   {
     id: "wordbank",
@@ -58,9 +59,9 @@ const BUILDINGS: Building[] = [
     description:
       "Review and practice the vocabulary you collected across your stories.",
     path: "/wordbank",
-    desktop: { left: 7, top: 44, width: 28, height: 30 },
+    desktop: { left: 0, top: 48, width: 34, height: 32 },
     mobile: { left: 12, top: 28, width: 35, height: 18 },
-    zoomTarget: { x: 21, y: 57 },
+    zoomTarget: { x: 16, y: 61 },
   },
   {
     id: "chat",
@@ -69,9 +70,9 @@ const BUILDINGS: Building[] = [
     description:
       "Practice conversation with Booki whenever you want a language buddy.",
     path: "__chat__",
-    desktop: { left: 66, top: 44, width: 29, height: 31 },
+    desktop: { left: 64, top: 51, width: 32, height: 31 },
     mobile: { left: 40, top: 52, width: 39, height: 18 },
-    zoomTarget: { x: 81, y: 58 },
+    zoomTarget: { x: 80, y: 62 },
   },
   {
     id: "profile",
@@ -268,6 +269,36 @@ export default function AdventureMap() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverscroll =
+      document.documentElement.style.overscrollBehavior;
+    const previousBodyOverscroll = document.body.style.overscrollBehavior;
+
+    const keepViewportAtTop = () => {
+      if (window.scrollX !== 0 || window.scrollY !== 0) {
+        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+      }
+    };
+
+    document.documentElement.style.overflow = "hidden";
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overscrollBehavior = "none";
+    document.body.style.overscrollBehavior = "none";
+    keepViewportAtTop();
+    window.addEventListener("scroll", keepViewportAtTop, true);
+
+    return () => {
+      window.removeEventListener("scroll", keepViewportAtTop, true);
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overscrollBehavior =
+        previousHtmlOverscroll;
+      document.body.style.overscrollBehavior = previousBodyOverscroll;
+    };
+  }, []);
+
   const utils = trpc.useUtils();
 
   useEffect(() => {
@@ -299,42 +330,6 @@ export default function AdventureMap() {
 
     return () => window.clearInterval(pollInterval);
   }, [user, isAuthenticated, utils]);
-
-  const { data: progressData } = trpc.progress.get.useQuery(undefined, {
-    enabled: isAuthenticated,
-  });
-  const { data: continueStory } =
-    trpc.storyProgress.getMostRecentInProgress.useQuery(undefined, {
-      enabled: isAuthenticated,
-    });
-
-  const progress =
-    progressData && progressData.length > 0
-      ? {
-          currentStreak: Math.max(
-            ...progressData.map((p: any) => p.currentStreak)
-          ),
-          storiesThisWeek: progressData.reduce(
-            (sum: number, p: any) => sum + p.totalStoriesGenerated,
-            0
-          ),
-        }
-      : { currentStreak: 0, storiesThisWeek: 0 };
-
-  const currentStreak = progress.currentStreak;
-  const weeklyGoal = 5;
-  const storiesThisWeek = progress.storiesThisWeek;
-  const continueTitle = continueStory?.title || continueStory?.theme || null;
-  const continueId = continueStory?.id;
-  const weeklyProgress = Math.min((storiesThisWeek / weeklyGoal) * 100, 100);
-  const continuePath = continueId ? `/content/${continueId}` : "/library";
-  const profilePath = "/settings";
-  const desktopNavItems = [
-    { label: "Home", path: "/app", active: true },
-    { label: "Library", path: "/library", active: false },
-    { label: "Word Bank", path: "/wordbank", active: false },
-    { label: "Settings", path: profilePath, active: false },
-  ];
 
   const handleBuildingClick = (building: Building) => {
     setZoomState({
@@ -448,17 +443,14 @@ export default function AdventureMap() {
         }
       `}</style>
 
-      <QuickStartTutorial />
+      <QuickStartTutorial autoScrollTargets={false} />
       <WeeklyGoalOnboarding />
       <PremiumWelcomeModal
         open={showPremiumWelcome}
         onClose={() => setShowPremiumWelcome(false)}
       />
 
-      <div
-        className="relative"
-        style={{ height: "100dvh", overflow: "hidden" }}
-      >
+      <div className="fixed inset-0 overflow-hidden">
         {!isMobile ? (
           <div
             className="relative h-full w-full overflow-hidden"
@@ -469,7 +461,7 @@ export default function AdventureMap() {
               style={{
                 backgroundImage: `url(${BG_DESKTOP})`,
                 backgroundSize: "cover",
-                backgroundPosition: "center",
+                backgroundPosition: "top",
                 backgroundRepeat: "no-repeat",
                 filter: "blur(30px) brightness(0.7)",
                 transform: "scale(1.08)",
@@ -485,16 +477,17 @@ export default function AdventureMap() {
             />
 
             <div className="absolute inset-0 overflow-hidden">
-              <div
-                className="absolute left-1/2 top-1/2 overflow-hidden"
-                style={{
-                  width: `max(100vw, calc(100dvh * ${DESKTOP_ART_ASPECT_RATIO}))`,
-                  height: `max(100dvh, calc(100vw * ${DESKTOP_ART_HEIGHT_RATIO}))`,
-                  transform: `translate(-50%, -50%) scale(${zoomState.active ? 1.24 : 1})`,
-                  transformOrigin: `${zoomState.targetX}% ${zoomState.targetY}%`,
-                  transition: "transform 0.4s ease-out, transform-origin 0.1s",
-                  animation: "world-fade-in 0.3s ease-out both",
-                }}
+                <div
+                  className="absolute left-1/2 top-1/2 overflow-hidden"
+                  style={{
+                    width: `max(100vw, calc(100dvh * ${DESKTOP_ART_ASPECT_RATIO}))`,
+                    height: `max(100dvh, calc(100vw * ${DESKTOP_ART_HEIGHT_RATIO}))`,
+                    top: `calc(50% + ${DESKTOP_WORLD_VERTICAL_SHIFT}px)`,
+                    transform: `translate(-50%, -50%) scale(${zoomState.active ? 1.24 : 1})`,
+                    transformOrigin: `${zoomState.targetX}% ${zoomState.targetY}%`,
+                    transition: "transform 0.4s ease-out, transform-origin 0.1s",
+                    animation: "world-fade-in 0.3s ease-out both",
+                  }}
               >
                 <div
                   className="absolute inset-0"
@@ -514,239 +507,69 @@ export default function AdventureMap() {
                   }}
                 />
 
-                <nav
-                  className="absolute z-30 flex items-center justify-between px-6 py-4"
+                <div
+                  className="pointer-events-none absolute z-30 px-6 py-5"
                   style={{
-                    left: "max(0px, calc((100% - 100vw) / 2))",
-                    right: "max(0px, calc((100% - 100vw) / 2))",
-                    top: "max(0px, calc((100% - 100dvh) / 2))",
+                    left: "max(0px, calc((100% - 100vw) / 2 + 56px))",
+                    right: "max(0px, calc((100% - 100vw) / 2 + 56px))",
+                    top: `max(0px, calc((100% - 100dvh) / 2 + 6px - ${DESKTOP_WORLD_VERTICAL_SHIFT}px))`,
                     opacity: worldReady ? 1 : 0,
                     transition: "opacity 0.5s ease 0.15s",
                   }}
                 >
-                  <div className="flex items-center gap-3 shrink-0">
-                    <div
-                      className="flex h-12 w-12 items-center justify-center rounded-xl"
-                      style={{
-                        background:
-                          "linear-gradient(180deg, rgba(255,248,234,0.28) 0%, rgba(210,208,255,0.12) 100%)",
-                        border: "1px solid rgba(255,255,255,0.22)",
-                        boxShadow:
-                          "0 8px 20px rgba(18,12,47,0.22), inset 0 1px 0 rgba(255,255,255,0.34)",
-                        backdropFilter: "blur(14px)",
-                      }}
-                    >
-                      <img
-                        src={APP_LOGO}
-                        alt=""
-                        className="h-9 w-9 object-contain"
-                      />
-                    </div>
-
-                    <span
-                      className="text-[23px] font-bold text-[#F8EDE2]"
+                  <div className="mx-auto max-w-4xl text-center">
+                    <h1
+                      className="text-[44px] font-semibold uppercase tracking-[0.06em] text-[#4C3524]"
                       style={{
                         fontFamily: 'Georgia, "Times New Roman", serif',
-                        textShadow: "0 3px 10px rgba(0,0,0,0.35)",
+                        textShadow: "0 2px 12px rgba(255,248,230,0.55)",
                       }}
                     >
-                      {APP_TITLE}
-                    </span>
-                  </div>
-
-                  <div
-                    className="hidden items-center gap-2 rounded-[18px] px-3 py-2 lg:flex"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(229,228,255,0.12) 100%)",
-                      border: "1px solid rgba(255,255,255,0.24)",
-                      boxShadow:
-                        "0 16px 36px rgba(18,12,47,0.2), inset 0 1px 0 rgba(255,255,255,0.28)",
-                      backdropFilter: "blur(18px)",
-                    }}
-                  >
-                    {desktopNavItems.map(nav => (
-                      <button
-                        key={nav.label}
-                        type="button"
-                        onClick={() => setLocation(nav.path)}
-                        className="rounded-[14px] px-6 py-2.5 text-[15px] font-semibold transition-all"
-                        style={{
-                          fontFamily: "Fredoka, sans-serif",
-                          color: nav.active
-                            ? "#FFFFFF"
-                            : "rgba(255,255,255,0.82)",
-                          background: nav.active
-                            ? "linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%)"
-                            : "transparent",
-                          boxShadow: nav.active
-                            ? "inset 0 1px 0 rgba(255,255,255,0.34), 0 8px 18px rgba(18,12,47,0.16)"
-                            : "none",
-                        }}
-                      >
-                        {nav.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setLocation("/create")}
-                      className="flex items-center rounded-full px-6 py-3 text-[15px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.97]"
-                      style={{
-                        fontFamily: "Fredoka, sans-serif",
-                        background:
-                          "linear-gradient(135deg, rgba(132,95,255,0.98) 0%, rgba(189,92,255,0.98) 100%)",
-                        border: "1px solid rgba(255,255,255,0.18)",
-                        boxShadow:
-                          "0 10px 26px rgba(152,101,255,0.45), inset 0 1px 0 rgba(255,255,255,0.3)",
-                      }}
-                    >
-                      Create Story
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setLocation("/settings")}
-                      className="flex h-12 w-12 items-center justify-center rounded-full transition-all hover:brightness-110 active:scale-[0.97]"
-                      style={{
-                        color: "#F5F0FF",
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(226,227,255,0.12) 100%)",
-                        border: "1px solid rgba(255,255,255,0.24)",
-                        boxShadow:
-                          "0 12px 26px rgba(18,12,47,0.2), inset 0 1px 0 rgba(255,255,255,0.34)",
-                        backdropFilter: "blur(16px)",
-                      }}
-                      aria-label="Open settings"
-                    >
-                      <Settings className="h-5 w-5" />
-                    </button>
-                  </div>
-                </nav>
-
-                <div
-                  className="absolute z-20 flex"
-                  style={{
-                    left: "max(20px, calc((100% - 100vw) / 2 + 20px))",
-                    top: "max(102px, calc((100% - 100dvh) / 2 + 102px))",
-                    bottom: "max(20px, calc((100% - 100dvh) / 2 + 20px))",
-                    width: "clamp(190px, 15vw, 214px)",
-                    opacity: worldReady ? 1 : 0,
-                    transition: "opacity 0.6s ease 0.3s",
-                  }}
-                >
-                  <div
-                    className="relative flex w-full flex-col justify-between overflow-hidden rounded-[18px] px-5 py-5"
-                    style={{
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.2) 0%, rgba(204,230,255,0.1) 18%, rgba(255,255,255,0.08) 100%)",
-                      border: "1px solid rgba(255,255,255,0.22)",
-                      boxShadow:
-                        "0 18px 46px rgba(16, 10, 45, 0.28), inset 0 1px 0 rgba(255,255,255,0.3)",
-                      backdropFilter: "blur(24px)",
-                    }}
-                  >
+                      Story Village Navigation
+                    </h1>
                     <div
-                      className="absolute inset-0 pointer-events-none"
+                      className="mx-auto mt-2 h-px w-full max-w-[720px]"
                       style={{
                         background:
-                          "radial-gradient(circle at 35% 18%, rgba(255,255,255,0.2) 0%, transparent 22%), radial-gradient(circle at 70% 74%, rgba(149,223,255,0.16) 0%, transparent 26%)",
+                          "linear-gradient(90deg, transparent 0%, rgba(121,88,55,0.28) 18%, rgba(121,88,55,0.55) 50%, rgba(121,88,55,0.28) 82%, transparent 100%)",
                       }}
                     />
-
-                    <div className="relative space-y-5">
-                      <div className="flex justify-center">
-                        <div
-                          className="flex h-24 w-24 items-center justify-center rounded-full"
-                          style={{
-                            background:
-                              "linear-gradient(180deg, rgba(255,255,255,0.88) 0%, rgba(225,223,255,0.7) 100%)",
-                            border: "3px solid rgba(255,255,255,0.52)",
-                            boxShadow:
-                              "0 12px 24px rgba(16,10,45,0.18), inset 0 1px 0 rgba(255,255,255,0.72)",
-                          }}
-                        >
-                          <img
-                            src={APP_LOGO}
-                            alt=""
-                            className="h-16 w-16 object-contain"
-                          />
-                        </div>
-                      </div>
-
-                      <div
-                        className="space-y-4"
-                        style={{ fontFamily: "Fredoka, sans-serif" }}
-                      >
-                        <div className="flex items-center gap-2 text-[16px] font-semibold text-white">
-                          <Flame className="h-4 w-4 text-[#FFB25F]" />
-                          <span>{currentStreak} day streak</span>
-                        </div>
-
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-[16px] font-medium text-white/90">
-                            <BookOpen className="h-4 w-4 text-[#B9F0FF]" />
-                            <span>
-                              {storiesThisWeek}/{weeklyGoal} stories this week
-                            </span>
-                          </div>
-
-                          <div
-                            className="overflow-hidden rounded-full"
-                            style={{
-                              height: 12,
-                              background: "rgba(255,255,255,0.22)",
-                              boxShadow: "inset 0 2px 6px rgba(16,10,45,0.14)",
-                            }}
-                          >
-                            <div
-                              className="h-full rounded-full transition-all duration-500"
-                              style={{
-                                width: `${weeklyProgress}%`,
-                                background:
-                                  "linear-gradient(90deg, #A855F7 0%, #D946EF 100%)",
-                                boxShadow: "0 0 18px rgba(212,119,255,0.42)",
-                              }}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setLocation(continuePath)}
-                        className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[15px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.97]"
-                        style={{
-                          fontFamily: "Fredoka, sans-serif",
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(235,244,255,0.1) 100%)",
-                          border: "1px solid rgba(255,255,255,0.24)",
-                          boxShadow:
-                            "0 10px 24px rgba(16,10,45,0.16), inset 0 1px 0 rgba(255,255,255,0.32)",
-                          backdropFilter: "blur(16px)",
-                        }}
-                        title={
-                          continueTitle
-                            ? `Continue ${continueTitle}`
-                            : "Continue reading"
-                        }
-                      >
-                        Continue Reading
-                        <ArrowRight className="h-4 w-4" />
-                      </button>
-                    </div>
+                    <p
+                      className="mt-2 text-[20px] font-medium uppercase tracking-[0.22em] text-[#6A4A33]"
+                      style={{
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        textShadow: "0 1px 8px rgba(255,248,230,0.42)",
+                      }}
+                    >
+                      Explore the Realm of Tales
+                    </p>
+                    <p
+                      className="mx-auto mt-4 max-w-[760px] text-[20px] leading-relaxed text-[#5E4631]"
+                      style={{
+                        fontFamily: 'Georgia, "Times New Roman", serif',
+                        textShadow: "0 1px 8px rgba(255,248,230,0.32)",
+                      }}
+                    >
+                      Welcome to our enchanting world where every building tells a story and every path leads to adventure.
+                      Discover the creative heart of our narrative universe.
+                    </p>
                   </div>
                 </div>
 
                 {DESKTOP_SCENE_BUILDINGS.map((building, index) => {
                   const zone = building.desktop;
+                  const tutorialTarget =
+                    building.id === "create"
+                      ? "create-story"
+                      : building.id === "library"
+                      ? "library"
+                      : building.id === "wordbank"
+                      ? "wordbank"
+                      : undefined;
                   return (
                     <div
                       key={building.id}
+                      data-tutorial={tutorialTarget}
                       style={{
                         position: "absolute",
                         left: `${zone.left}%`,
@@ -826,6 +649,26 @@ export default function AdventureMap() {
                     ))}
                   </div>
                 )}
+
+                <button
+                  type="button"
+                  onClick={() => setLocation("/settings")}
+                  className="absolute z-30 flex h-12 w-12 items-center justify-center rounded-full transition-all hover:brightness-105 active:scale-[0.97]"
+                  style={{
+                    right: "max(20px, calc((100% - 100vw) / 2 + 24px))",
+                    bottom: `max(24px, calc((100% - 100dvh) / 2 + 24px + ${DESKTOP_WORLD_VERTICAL_SHIFT}px))`,
+                    color: "#5A3F29",
+                    background:
+                      "linear-gradient(180deg, rgba(255,250,241,0.95) 0%, rgba(248,232,204,0.9) 100%)",
+                    border: "1px solid rgba(138,106,68,0.28)",
+                    boxShadow:
+                      "0 12px 24px rgba(82,58,34,0.16), inset 0 1px 0 rgba(255,255,255,0.7)",
+                    backdropFilter: "blur(10px)",
+                  }}
+                  aria-label="Open settings"
+                >
+                  <Settings className="h-5 w-5" />
+                </button>
               </div>
             </div>
           </div>
