@@ -11,8 +11,8 @@ import { useChallengeDetection } from "@/hooks/useChallengeDetection";
 import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
 
-const BG_DESKTOP = "/images/dashboardBg2.jpg";
-const BG_MOBILE = "/images/storyling_mobileLargeBg.png";
+const BG_DESKTOP = "/images/dashboardBg2.webp";
+const BG_MOBILE = "/images/storyling_mobileLargeBg.webp";
 const DESKTOP_ART_ASPECT_RATIO = 1920 / 1389;
 const DESKTOP_ART_HEIGHT_RATIO = 1 / DESKTOP_ART_ASPECT_RATIO;
 const MOBILE_ART_ASPECT_RATIO = 800 / 890;
