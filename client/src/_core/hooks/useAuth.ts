@@ -1,7 +1,6 @@
 import { getLoginUrl } from "@/const";
 import { trpc } from "@/lib/trpc";
 import { TRPCClientError } from "@trpc/client";
-import { useIsRestoring } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 type UseAuthOptions = {
@@ -14,13 +13,14 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
   const utils = trpc.useUtils();
   const redirectAttempted = useRef(false);
-  const isRestoring = useIsRestoring();
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
+    // Retry up to 2 times with a delay — prevents false logouts from transient DB errors
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false,
-    staleTime: 0,
+    // Keep stale data while refetching so the user doesn't flash to login screen
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -29,14 +29,9 @@ export function useAuth(options?: UseAuthOptions) {
     },
   });
 
-  // Treat auth as pending while IndexedDB cache is restoring, while the
-  // initial fetch is running, or while a refetch is in progress with no
-  // authenticated data yet.  This prevents premature redirects when stale
-  // null data is hydrated from persistence before the network response arrives.
   const isAuthPending =
-    isRestoring ||
     meQuery.isLoading ||
-    (meQuery.isFetching && !meQuery.data) ||
+    (meQuery.isFetching && typeof meQuery.data === "undefined") ||
     logoutMutation.isPending;
 
   const logout = useCallback(async () => {

@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { BookMarked, BookOpen, Globe, Home, Plus, User } from "lucide-react";
+import { BookMarked, BookOpen, Globe, Home, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_LOGO, APP_TITLE } from "@/const";
-import { useAuth } from "@/_core/hooks/useAuth";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
   const [location] = useLocation();
-  const { user } = useAuth();
 
   const appPages = [
     "/app",
@@ -60,8 +58,6 @@ export function Footer() {
 
   const isDashboard = location === "/app" || location === "/dashboard";
   const showBottomNav = isDashboard && !isLargeDesktop;
-  const profileHref = user?.id ? `/profile/${user.id}` : "/settings";
-
   const isActive = (path: string, matchPath?: string) => {
     const activePath = matchPath ?? path;
     if (activePath === "/app") return location === "/app" || location === "/dashboard";
@@ -76,7 +72,7 @@ export function Footer() {
 
   const rightNavItems = [
     { href: "/wordbank", label: "Word Bank", icon: BookMarked, matchPath: "/wordbank" },
-    { href: profileHref, label: "Profile", icon: User, matchPath: "/profile" },
+    { href: "/settings", label: "Settings", icon: Settings, matchPath: "/profile" },
   ];
 
   return (

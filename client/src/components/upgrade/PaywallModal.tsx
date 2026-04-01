@@ -111,7 +111,7 @@ export function PaywallModal({
   skipToStep2 = false,
 }: PaywallModalProps) {
   const [step, setStep] = useState<1 | 2>(skipToStep2 ? 2 : 1);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 

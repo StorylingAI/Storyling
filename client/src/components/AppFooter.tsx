@@ -61,7 +61,7 @@ export function AppFooter() {
           <div className="space-y-3">
             <h4 className="font-bold text-gray-900">Account & Support</h4>
             <nav className="flex flex-col space-y-2.5 text-sm">
-              <Link href="/settings/profile" className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors">
+              <Link href="/settings" className="flex items-center gap-2 text-gray-500 hover:text-blue-600 transition-colors">
                 <Settings className="h-4 w-4" />
                 Settings
               </Link>

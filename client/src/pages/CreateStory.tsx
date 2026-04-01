@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Upload, ArrowRight, Sparkles, BookOpen, Headphones, Film, ArrowLeft, FileText, X, Volume2, Info, Camera, Check } from "lucide-react";
+import { Loader2, Upload, ArrowRight, Sparkles, BookOpen, Headphones, Film, ArrowLeft, FileText, X, Volume2, Camera, Check } from "lucide-react";
 import { APP_TITLE, APP_LOGO, getLoginUrl } from "@/const";
 import { DEFAULT_FILM_NARRATOR_GENDER, DEFAULT_FILM_VOICE_TYPE } from "@shared/filmDefaults";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -206,7 +206,7 @@ export default function CreateStory() {
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
-  const csvInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
 
   // Get user's preferred translation language
@@ -569,30 +569,106 @@ export default function CreateStory() {
     setExtractedVocab(prev => prev.map(w => ({ ...w, selected: !allSelected })));
   };
 
-  const handleDocumentUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const mergeVocabularyWords = (incomingWords: string[]) => {
+    const cleanedWords = incomingWords
+      .map(word => word.trim())
+      .filter(Boolean);
+
+    if (cleanedWords.length === 0) {
+      return 0;
+    }
+
+    setVocabularyText(prev => {
+      const existingWords = prev
+        .split(/[,ï¼Œã€\n]/)
+        .map(word => word.trim())
+        .filter(Boolean);
+
+      return Array.from(new Set([...existingWords, ...cleanedWords])).join(", ");
+    });
+
+    return cleanedWords.length;
+  };
+
+  const getResolvedMimeType = (file: File) => {
+    if (file.type) {
+      return file.type;
+    }
+
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    switch (extension) {
+      case "pdf":
+        return "application/pdf";
+      case "docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      case "doc":
+        return "application/msword";
+      case "txt":
+        return "text/plain";
+      case "csv":
+        return "text/csv";
+      case "xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      default:
+        return file.type;
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const mimeType = getResolvedMimeType(file);
     const validTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "application/msword",
       "text/plain",
+      "text/csv",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ];
 
-    if (!validTypes.includes(file.type)) {
-      toast.error("Please upload a PDF, Word document, or text file");
+    if (!validTypes.includes(mimeType)) {
+      toast.error("Please upload a PDF, Word, Excel (.xlsx), TXT, or CSV file");
+      e.target.value = "";
       return;
     }
 
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       toast.error("File size must be less than 10MB");
+      e.target.value = "";
+      return;
+    }
+
+    if (mimeType === "text/csv") {
+      try {
+        const text = await file.text();
+        const words = text
+          .split(/[,\n]/)
+          .map(word => word.trim())
+          .filter(Boolean);
+
+        if (words.length === 0) {
+          toast.error("No words found in the CSV file");
+          e.target.value = "";
+          return;
+        }
+
+        const importedWords = mergeVocabularyWords(words);
+        setUploadedFileName(file.name);
+        toast.success(`Imported ${importedWords} words from ${file.name}`);
+      } catch (error) {
+        toast.error("Failed to read CSV file");
+      } finally {
+        e.target.value = "";
+      }
       return;
     }
 
     if (!targetLanguage) {
       toast.error("Please select a target language first");
+      e.target.value = "";
       return;
     }
 
@@ -612,7 +688,7 @@ export default function CreateStory() {
         uploadDocumentMutation.mutate({
           fileData: base64Data,
           fileName: file.name,
-          mimeType: file.type,
+          mimeType,
           targetLanguage: effectiveLanguage,
           maxWords: 50,
         });
@@ -932,117 +1008,57 @@ export default function CreateStory() {
                     <span>
                       {vocabularyText.trim().split(/[,，、\n]/).map(w => w.trim()).filter(Boolean).length} words
                     </span>
-                    <div className="flex gap-1 items-center flex-wrap">
-                      <div className="flex items-center gap-0.5">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="rounded-lg text-xs h-8 px-2 text-gray-500 hover:text-purple-600"
-                          onClick={() => photoInputRef.current?.click()}
-                          disabled={isProcessingPhoto || !targetLanguage}
-                        >
+                    <div className="grid w-full gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        onClick={() => photoInputRef.current?.click()}
+                        disabled={isProcessingPhoto || !targetLanguage}
+                        className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-purple-300 hover:bg-purple-50/60 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600">
                           {isProcessingPhoto ? (
-                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Camera className="mr-1 h-3.5 w-3.5" />
+                            <Camera className="h-4 w-4" />
                           )}
-                          Take Photo
-                        </Button>
-                        <div className="group relative">
-                          <Info className="h-3.5 w-3.5 text-gray-300 cursor-help" />
-                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-3 bg-white text-gray-700 text-xs rounded-lg shadow-lg border z-50">
-                            <p className="font-semibold mb-1">Take Photo Feature</p>
-                            <p>Snap a picture of your vocab list, textbook page, or handwritten notes. Our AI will automatically extract the vocabulary words!</p>
-                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="rounded-lg text-xs h-8 px-2 text-gray-500 hover:text-purple-600"
-                          onClick={() => document.getElementById('document-upload')?.click()}
-                          disabled={isUploadingDocument}
-                        >
+                        <p className="text-sm font-semibold text-gray-800">Upload Photo</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Choose from your camera roll or take a new photo of notes, a worksheet, or a textbook page.
+                        </p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isUploadingDocument}
+                        className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-purple-300 hover:bg-purple-50/60 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-teal-100 text-teal-600">
                           {isUploadingDocument ? (
-                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <FileText className="mr-1 h-3.5 w-3.5" />
+                            <Upload className="h-4 w-4" />
                           )}
-                          Import Document
-                        </Button>
-                        <div className="group relative">
-                          <Info className="h-3.5 w-3.5 text-gray-300 cursor-help" />
-                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-3 bg-white text-gray-700 text-xs rounded-lg shadow-lg border z-50">
-                            <p className="font-semibold mb-1">Import Document</p>
-                            <p>Upload a PDF, DOCX, or TXT file to automatically extract vocabulary words.</p>
-                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-0.5">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="rounded-lg text-xs h-8 px-2 text-gray-500 hover:text-purple-600"
-                          onClick={() => csvInputRef.current?.click()}
-                        >
-                          <Upload className="mr-1 h-3.5 w-3.5" />
-                          Upload CSV
-                        </Button>
-                        <div className="group relative">
-                          <Info className="h-3.5 w-3.5 text-gray-300 cursor-help" />
-                          <div className="absolute right-0 bottom-full mb-2 hidden group-hover:block w-56 p-3 bg-white text-gray-700 text-xs rounded-lg shadow-lg border z-50">
-                            <p className="font-semibold mb-1">CSV Format</p>
-                            <p>Upload a CSV file with one word per line or comma-separated.</p>
-                          </div>
-                        </div>
-                      </div>
-                      <input
-                        ref={csvInputRef}
-                        type="file"
-                        accept=".csv"
-                        className="hidden"
-                        onChange={async (e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            try {
-                              const text = await file.text();
-                              const words = text
-                                .split(/[,\n]/)  
-                                .map(w => w.trim())
-                                .filter(Boolean);
-                              
-                              if (words.length === 0) {
-                                toast.error("No words found in CSV file");
-                                return;
-                              }
-                              
-                              setVocabularyText(words.join(", "));
-                              toast.success(`Imported ${words.length} words from CSV`);
-                              
-                              if (csvInputRef.current) {
-                                csvInputRef.current.value = "";
-                              }
-                            } catch (error) {
-                              toast.error("Failed to read CSV file");
-                            }
-                          }
-                        }}
-                      />
+                        <p className="text-sm font-semibold text-gray-800">Upload File</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Import vocabulary from PDF, Word, Excel (.xlsx), TXT, or CSV files.
+                        </p>
+                      </button>
                     </div>
                   </div>
                   <input
-                    id="document-upload"
+                    ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.docx,.doc,.txt"
+                    accept=".pdf,.docx,.doc,.txt,.csv,.xlsx"
                     className="hidden"
-                    onChange={handleDocumentUpload}
+                    onChange={handleFileUpload}
                   />
                   <input
                     ref={photoInputRef}
                     type="file"
                     accept="image/*"
-                    capture="environment"
                     className="hidden"
                     onChange={handlePhotoUpload}
                   />

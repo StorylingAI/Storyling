@@ -68,6 +68,18 @@ export function SubscriptionSettings() {
     },
   });
 
+  const switchBillingMutation = trpc.subscription.switchBillingPeriod.useMutation({
+    onSuccess: (_data, variables) => {
+      toast.success("Billing Updated", {
+        description: `Your plan is now set to ${variables.newPeriod} billing.`,
+      });
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -171,6 +183,40 @@ export function SubscriptionSettings() {
                 </div>
               )}
             </div>
+
+            {subscription.billingPeriod && (
+              <div className="rounded-lg border bg-muted/30 p-4 space-y-3">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Change Billing Cycle</p>
+                    <p className="text-sm text-muted-foreground">
+                      Switch between monthly and annual billing at any time.
+                    </p>
+                  </div>
+                  <div className="inline-flex rounded-full border bg-background p-1">
+                    {(["monthly", "annual"] as const).map((period) => (
+                      <Button
+                        key={period}
+                        variant={subscription.billingPeriod === period ? "default" : "ghost"}
+                        size="sm"
+                        onClick={() => {
+                          if (period !== subscription.billingPeriod) {
+                            switchBillingMutation.mutate({ newPeriod: period });
+                          }
+                        }}
+                        disabled={switchBillingMutation.isPending}
+                        className="rounded-full capitalize"
+                      >
+                        {period}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Annual billing shows the lower monthly equivalent and applies proration automatically when you switch.
+                </p>
+              </div>
+            )}
 
             {isCancelled && (
               <Alert>
@@ -310,22 +356,22 @@ export function SubscriptionSettings() {
       {!isPremium && usage && (
         <Card>
           <CardHeader>
-            <CardTitle>Daily Usage</CardTitle>
-            <CardDescription>Track your story creation today</CardDescription>
+            <CardTitle>Usage</CardTitle>
+            <CardDescription>Track your free-plan story creation this month</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Stories Created Today</span>
+                <span>Stories Created This Month</span>
                 <span className="font-medium">
-                  {usage.storiesToday} / {usage.storiesLimit ?? '\u221e'}
+                  {usage.storiesThisMonth} / {usage.storiesLimit ?? '\u221e'}
                 </span>
               </div>
               <div className="w-full bg-secondary rounded-full h-2">
                 <div
                   className="bg-primary h-2 rounded-full transition-all"
                   style={{
-                    width: `${usage.storiesLimit ? Math.min((usage.storiesToday / usage.storiesLimit) * 100, 100) : 0}%`,
+                    width: `${usage.storiesLimit ? Math.min((usage.storiesThisMonth / usage.storiesLimit) * 100, 100) : 0}%`,
                   }}
                 />
               </div>

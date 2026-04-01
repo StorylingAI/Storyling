@@ -51,15 +51,13 @@ export default function Collections() {
     shareToken: string | null;
   } | null>(null);
 
-  const utils = trpc.useUtils();
-
   const { data: collections, isLoading } = trpc.collections.getMyCollections.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
   const createMutation = trpc.collections.createCollection.useMutation({
     onSuccess: () => {
-      utils.collections.getMyCollections.invalidate();
+      trpc.useUtils().collections.getMyCollections.invalidate();
       setIsCreateOpen(false);
       setNewName("");
       setNewDescription("");
@@ -69,7 +67,7 @@ export default function Collections() {
 
   const deleteMutation = trpc.collections.deleteCollection.useMutation({
     onSuccess: () => {
-      utils.collections.getMyCollections.invalidate();
+      trpc.useUtils().collections.getMyCollections.invalidate();
     },
   });
 
@@ -233,68 +231,6 @@ export default function Collections() {
           </div>
         )}
       </section>
-
-      {/* Create Collection Dialog */}
-      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Create New Collection</DialogTitle>
-            <DialogDescription>
-              Organize your stories by theme, topic, or learning goal.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g. Travel Japanese"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="What's this collection about?"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Color</Label>
-              <div className="flex gap-2">
-                {colorOptions.map((color) => (
-                  <button
-                    key={color}
-                    className={`w-8 h-8 rounded-full border-2 transition-all ${newColor === color ? "border-foreground scale-110" : "border-transparent"}`}
-                    style={{ backgroundColor: color }}
-                    onClick={() => setNewColor(color)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={handleCreate}
-              disabled={!newName.trim() || createMutation.isPending}
-              className="bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 border-0"
-            >
-              {createMutation.isPending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <FolderPlus className="mr-2 h-4 w-4" />
-              )}
-              Create
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Share Collection Modal */}
       {shareModalCollection && (

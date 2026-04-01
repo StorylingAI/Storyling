@@ -16,6 +16,7 @@ import { MobileNav } from "../components/MobileNav";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
+import { Input } from "../components/ui/input";
 
 function BulkImport() {
   const { data: user } = trpc.auth.me.useQuery();
@@ -488,6 +489,69 @@ function LanguagePreference() {
   );
 }
 
+function AccountProfileSettings() {
+  const { data: user } = trpc.auth.me.useQuery();
+  const utils = trpc.useUtils();
+  const [displayName, setDisplayName] = useState("");
+
+  const updateProfile = trpc.auth.updateProfile.useMutation({
+    onSuccess: () => {
+      utils.auth.me.invalidate();
+    },
+  });
+
+  useEffect(() => {
+    setDisplayName(user?.name || "");
+  }, [user?.name]);
+
+  const trimmedName = displayName.trim();
+  const savedName = (user?.name || "").trim();
+  const hasChanges = trimmedName.length > 0 && trimmedName !== savedName;
+
+  return (
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="display-name" className="text-base font-semibold">
+          Display Name
+        </Label>
+        <p className="text-sm text-muted-foreground">
+          This is the name shown in your account and public profile.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <Input
+            id="display-name"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            placeholder="Enter your display name"
+            maxLength={120}
+            className="sm:max-w-md"
+          />
+          <Button
+            onClick={() => updateProfile.mutate({ name: trimmedName })}
+            disabled={!hasChanges || updateProfile.isPending}
+          >
+            {updateProfile.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              "Save Name"
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-base font-semibold">Email Address</Label>
+        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+          {user?.email || "No email available"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function Settings() {
   // Display settings from localStorage
   const [showPinyin, setShowPinyin] = useState(() => {
@@ -676,7 +740,11 @@ export function Settings() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <LanguagePreference />
+            <div className="space-y-6">
+              <AccountProfileSettings />
+              <Separator />
+              <LanguagePreference />
+            </div>
           </CardContent>
         </Card>
 

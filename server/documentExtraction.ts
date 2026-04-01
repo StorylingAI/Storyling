@@ -4,7 +4,8 @@
  * Extracts text content from various document formats:
  * - PDF files
  * - Word documents (DOCX)
- * - Plain text files (TXT)
+ * - Excel spreadsheets (XLSX)
+ * - Plain text files (TXT / CSV)
  */
 
 import { exec } from "child_process";
@@ -61,6 +62,106 @@ print('\\n'.join(text))
 }
 
 /**
+ * Extract text from an Excel spreadsheet using Python's standard library.
+ */
+async function extractTextFromXLSX(filePath: string): Promise<string> {
+  try {
+    const pythonScript = `
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+
+MAIN_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
+DOC_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+
+def qname(namespace, name):
+    return f"{{{namespace}}}{name}"
+
+shared_strings = []
+sheet_rows = []
+
+with zipfile.ZipFile(sys.argv[1]) as workbook:
+    if "xl/sharedStrings.xml" in workbook.namelist():
+        root = ET.fromstring(workbook.read("xl/sharedStrings.xml"))
+        for item in root.findall(qname(MAIN_NS, "si")):
+            texts = [node.text or "" for node in item.iter(qname(MAIN_NS, "t"))]
+            shared_strings.append("".join(texts))
+
+    workbook_xml = ET.fromstring(workbook.read("xl/workbook.xml"))
+    relationships_xml = ET.fromstring(workbook.read("xl/_rels/workbook.xml.rels"))
+    relationships = {
+        rel.attrib.get("Id"): rel.attrib.get("Target", "")
+        for rel in relationships_xml.findall(qname(REL_NS, "Relationship"))
+    }
+
+    sheets = workbook_xml.find(qname(MAIN_NS, "sheets"))
+    if sheets is not None:
+        for sheet in sheets.findall(qname(MAIN_NS, "sheet")):
+            relation_id = sheet.attrib.get(qname(DOC_REL_NS, "id"))
+            target = relationships.get(relation_id)
+            if not target:
+                continue
+
+            normalized_target = target.lstrip("/")
+            if normalized_target.startswith("../"):
+                normalized_target = normalized_target[3:]
+            if not normalized_target.startswith("xl/"):
+                normalized_target = f"xl/{normalized_target}"
+
+            if normalized_target not in workbook.namelist():
+                continue
+
+            sheet_xml = ET.fromstring(workbook.read(normalized_target))
+            for row in sheet_xml.findall(f".//{qname(MAIN_NS, 'row')}"):
+                values = []
+                for cell in row.findall(qname(MAIN_NS, "c")):
+                    cell_type = cell.attrib.get("t")
+                    value = ""
+
+                    if cell_type == "inlineStr":
+                        inline_str = cell.find(qname(MAIN_NS, "is"))
+                        if inline_str is not None:
+                            texts = [node.text or "" for node in inline_str.iter(qname(MAIN_NS, "t"))]
+                            value = "".join(texts)
+                    else:
+                        value_node = cell.find(qname(MAIN_NS, "v"))
+                        if value_node is not None and value_node.text is not None:
+                            if cell_type == "s":
+                                try:
+                                    index = int(value_node.text)
+                                    value = shared_strings[index] if 0 <= index < len(shared_strings) else ""
+                                except ValueError:
+                                    value = value_node.text
+                            else:
+                                value = value_node.text
+
+                    value = value.strip()
+                    if value:
+                        values.append(value)
+
+                if values:
+                    sheet_rows.append(", ".join(values))
+
+print("\\n".join(sheet_rows))
+`;
+
+    const scriptPath = `/tmp/extract_xlsx_${randomBytes(8).toString("hex")}.py`;
+    await writeFile(scriptPath, pythonScript);
+
+    try {
+      const { stdout } = await execAsync(`python3 "${scriptPath}" "${filePath}"`);
+      return stdout.trim();
+    } finally {
+      await unlink(scriptPath);
+    }
+  } catch (error) {
+    console.error("[extractTextFromXLSX] Error:", error);
+    throw new Error("Failed to extract text from XLSX");
+  }
+}
+
+/**
  * Extract text from a plain text file
  */
 async function extractTextFromTXT(filePath: string): Promise<string> {
@@ -91,7 +192,9 @@ export async function extractTextFromDocument(
     mimeType === "application/msword"
   ) {
     return extractTextFromDOCX(filePath);
-  } else if (mimeType === "text/plain") {
+  } else if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    return extractTextFromXLSX(filePath);
+  } else if (mimeType === "text/plain" || mimeType === "text/csv") {
     return extractTextFromTXT(filePath);
   } else {
     throw new Error(`Unsupported document type: ${mimeType}`);

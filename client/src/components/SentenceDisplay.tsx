@@ -109,6 +109,37 @@ export function SentenceDisplay({
       .replace(/~~(.+?)~~/g, '$1');
   }, [storyText]);
 
+  const safeAudioAlignment = useMemo(() => {
+    if (
+      !audioAlignment ||
+      !Array.isArray(audioAlignment.characters) ||
+      !Array.isArray(audioAlignment.character_start_times_seconds) ||
+      !Array.isArray(audioAlignment.character_end_times_seconds)
+    ) {
+      return null;
+    }
+
+    const minLength = Math.min(
+      audioAlignment.characters.length,
+      audioAlignment.character_start_times_seconds.length,
+      audioAlignment.character_end_times_seconds.length
+    );
+
+    if (minLength === 0) {
+      return null;
+    }
+
+    return {
+      characters: audioAlignment.characters.slice(0, minLength),
+      character_start_times_seconds: audioAlignment.character_start_times_seconds
+        .slice(0, minLength)
+        .map((value) => Number(value)),
+      character_end_times_seconds: audioAlignment.character_end_times_seconds
+        .slice(0, minLength)
+        .map((value) => Number(value)),
+    };
+  }, [audioAlignment]);
+
   // Calculate sentence timestamps using real alignment data or improved weighted fallback
   const sentenceTimestamps = useMemo(() => {
     if (!audioDuration || !sentences.length) {
@@ -116,10 +147,10 @@ export function SentenceDisplay({
     }
 
     // === STRATEGY 1: Use real ElevenLabs alignment data ===
-    if (audioAlignment && audioAlignment.characters.length > 0) {
-      const alignChars = audioAlignment.characters;
-      const startTimes = audioAlignment.character_start_times_seconds;
-      const endTimes = audioAlignment.character_end_times_seconds;
+    if (safeAudioAlignment) {
+      const alignChars = safeAudioAlignment.characters;
+      const startTimes = safeAudioAlignment.character_start_times_seconds;
+      const endTimes = safeAudioAlignment.character_end_times_seconds;
       
       // Build the aligned text from the alignment characters
       const alignedText = alignChars.join('');
@@ -226,7 +257,7 @@ export function SentenceDisplay({
     });
     
     return timestamps;
-  }, [sentences, storyText, cleanStoryText, audioDuration, audioAlignment]);
+  }, [sentences, storyText, cleanStoryText, audioDuration, safeAudioAlignment]);
 
 
   // Update current sentence based on audio time
@@ -329,10 +360,10 @@ export function SentenceDisplay({
     const sentenceDuration = sentenceEnd - sentenceStart;
 
     // === Use alignment data for precise word timing ===
-    if (audioAlignment && audioAlignment.characters.length > 0) {
-      const alignChars = audioAlignment.characters;
-      const startTimes = audioAlignment.character_start_times_seconds;
-      const endTimes = audioAlignment.character_end_times_seconds;
+    if (safeAudioAlignment) {
+      const alignChars = safeAudioAlignment.characters;
+      const startTimes = safeAudioAlignment.character_start_times_seconds;
+      const endTimes = safeAudioAlignment.character_end_times_seconds;
       const alignedText = alignChars.join('');
       
       // Find where the current sentence starts in the aligned text
@@ -396,7 +427,7 @@ export function SentenceDisplay({
       currentTime = wordEnd;
       return { word, startTime: wordStart, endTime: wordEnd };
     });
-  }, [words, currentSentence, sentenceTimestamps, currentSentenceIndex, audioRef, audioAlignment]);
+  }, [words, currentSentence, sentenceTimestamps, currentSentenceIndex, audioRef, safeAudioAlignment]);
 
 
   // Update current word based on audio time

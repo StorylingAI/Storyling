@@ -37,15 +37,6 @@ export const discoveryRouter = router({
         );
       }
 
-      // Subquery for first story thumbnail
-      const firstThumbnail = sql<string>`(
-        SELECT gc.thumbnail_url FROM collection_items ci2
-        INNER JOIN generated_content gc ON gc.id = ci2.content_id
-        WHERE ci2.collection_id = ${collections.id} AND gc.thumbnail_url IS NOT NULL
-        ORDER BY ci2.position ASC, ci2.id ASC
-        LIMIT 1
-      )`.as("coverImage");
-
       // Get trending collections (most clones in the past week)
       const trendingCollections = await db
         .select({
@@ -59,7 +50,6 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
-          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -84,7 +74,6 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
-          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -109,7 +98,6 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
-          coverImage: firstThumbnail,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
@@ -168,7 +156,6 @@ export const discoveryRouter = router({
                   userId: collections.userId,
                   userName: users.name,
                   itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
-                  coverImage: firstThumbnail,
                 })
                 .from(collections)
                 .innerJoin(users, eq(collections.userId, users.id))
@@ -194,28 +181,4 @@ export const discoveryRouter = router({
         personalized: personalizedCollections,
       };
     }),
-
-  // Public stats for landing page
-  getPublicStats: publicProcedure.query(async () => {
-    const db = await getDb();
-    if (!db) throw new Error("Database unavailable");
-
-    const [storiesResult] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(generatedContent);
-
-    const [usersResult] = await db
-      .select({ count: sql<number>`COUNT(*)` })
-      .from(users);
-
-    const [languagesResult] = await db
-      .select({ count: sql<number>`COUNT(DISTINCT ${vocabularyLists.targetLanguage})` })
-      .from(vocabularyLists);
-
-    return {
-      storiesCreated: storiesResult?.count ?? 0,
-      activeUsers: usersResult?.count ?? 0,
-      languages: languagesResult?.count ?? 0,
-    };
-  }),
 });

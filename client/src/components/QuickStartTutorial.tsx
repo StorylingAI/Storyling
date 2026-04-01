@@ -172,7 +172,7 @@ export function QuickStartTutorial() {
         variant="ghost"
         size="sm"
         onClick={restartTutorial}
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 rounded-button hover-lift active-scale transition-all"
+        className="fixed bottom-4 left-4 z-50 rounded-button hover-lift active-scale transition-all"
       >
         <Sparkles className="h-4 w-4 mr-2" />
         Show Tutorial

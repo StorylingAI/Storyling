@@ -241,6 +241,21 @@ export const appRouter = router({
           .where(eq(users.id, ctx.user.id));
         return { success: true };
       }),
+    updateProfile: protectedProcedure
+      .input(
+        z.object({
+          name: z.string().trim().min(1).max(120),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const db = await getDb();
+        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        await db
+          .update(users)
+          .set({ name: input.name })
+          .where(eq(users.id, ctx.user.id));
+        return { success: true };
+      }),
     completePremiumOnboarding: protectedProcedure
       .mutation(async ({ ctx }) => {
         const db = await getDb();
@@ -482,7 +497,7 @@ export const appRouter = router({
                   narratorGender: input.narratorGender,
                 },
                 story.storyText
-              );
+              ) as { audioUrl: string; transcript: string; audioAlignment?: any };
               
               console.log("[Podcast Generation] Success! Audio URL:", podcast.audioUrl);
               audioUrl = podcast.audioUrl;
@@ -2622,7 +2637,7 @@ async function processBatchJob(jobId: number) {
             voiceType: item.voiceType,
           },
           story.storyText
-        );
+        ) as { audioUrl: string; transcript: string; audioAlignment?: any };
         audioUrl = podcast.audioUrl;
         if (podcast.audioAlignment) {
           audioAlignment = podcast.audioAlignment;

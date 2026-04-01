@@ -121,56 +121,18 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
-// ===== STATS SECTION =====
-function StatsSection() {
-  const { data: stats } = trpc.discovery.getPublicStats.useQuery();
-
-  const items = [
-    { value: stats?.storiesCreated ?? 0, suffix: "+", label: "Stories Created", color: "text-purple-600" },
-    { value: stats?.languages ?? 0, suffix: "", label: "Languages", color: "text-blue-600" },
-    { value: stats?.activeUsers ?? 0, suffix: "+", label: "Active Learners", color: "text-purple-600" },
-  ];
-
-  return (
-    <section className="py-16 px-4 bg-white">
-      <div className="container">
-        <div className="grid grid-cols-3 gap-5 max-w-4xl mx-auto">
-          {items.map((stat, i) => (
-            <RevealSection key={i} delay={i * 100}>
-              <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-purple-50/50 to-blue-50/50 hover:-translate-y-1 transition-all">
-                <div className={`text-3xl md:text-4xl font-bold ${stat.color} mb-2`} style={{ fontFamily: "Fredoka, sans-serif" }}>
-                  <AnimatedCounter target={stat.value} suffix={stat.suffix} />
-                </div>
-                <div className="text-sm text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>{stat.label}</div>
-              </div>
-            </RevealSection>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
 // ===== FEATURED COLLECTIONS =====
-const CARD_COLORS = [
-  { bg: "#F3E8FF", border: "#8B5CF6", avatarGrad: "linear-gradient(135deg, #8B5CF6, #7C3AED)" },
-  { bg: "#ECFDF5", border: "#10B981", avatarGrad: "linear-gradient(135deg, #10B981, #059669)" },
-  { bg: "#EFF6FF", border: "#3B82F6", avatarGrad: "linear-gradient(135deg, #3B82F6, #2563EB)" },
-  { bg: "#FFFBEB", border: "#F59E0B", avatarGrad: "linear-gradient(135deg, #F59E0B, #D97706)" },
-  { bg: "#FDF2F8", border: "#EC4899", avatarGrad: "linear-gradient(135deg, #EC4899, #DB2777)" },
-  { bg: "#F0FDFA", border: "#14B8A6", avatarGrad: "linear-gradient(135deg, #14B8A6, #0D9488)" },
-];
-
 function FeaturedCollectionsGrid() {
   const [, setLocation] = useLocation();
 
-  const { data: feed } = trpc.discovery.getDiscoveryFeed.useQuery({
-    limit: 6,
-  });
-
-  const collections = feed?.popular?.slice(0, 6) ?? [];
-
-  if (collections.length === 0) return null;
+  const staticCollections = [
+    { initial: "S", name: "Spanish Basics", author: "Maria G.", desc: "Essential vocabulary for beginners starting their Spanish journey", stories: 12, clones: 234, bg: "#F3E8FF", border: "#8B5CF6", avatarGrad: "linear-gradient(135deg, #8B5CF6, #7C3AED)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-spanish_aa6de275.png" },
+    { initial: "C", name: "Chinese HSK 4", author: "James C.", desc: "Business and academic vocabulary for intermediate learners", stories: 8, clones: 189, bg: "#ECFDF5", border: "#10B981", avatarGrad: "linear-gradient(135deg, #10B981, #059669)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-chinese_77bbce34.png" },
+    { initial: "A", name: "Arabic Stories", author: "Aisha R.", desc: "Cultural tales and everyday conversation vocabulary", stories: 15, clones: 156, bg: "#EFF6FF", border: "#3B82F6", avatarGrad: "linear-gradient(135deg, #3B82F6, #2563EB)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-arabic_f4746d76.png" },
+    { initial: "F", name: "French Romance", author: "Sophie L.", desc: "Love stories and romantic vocabulary in French", stories: 6, clones: 312, bg: "#FFFBEB", border: "#F59E0B", avatarGrad: "linear-gradient(135deg, #F59E0B, #D97706)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-french_75e6d136.png" },
+    { initial: "T", name: "Travel Japanese", author: "Kenji M.", desc: "Essential phrases for traveling through Japan", stories: 10, clones: 278, bg: "#FDF2F8", border: "#EC4899", avatarGrad: "linear-gradient(135deg, #EC4899, #DB2777)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-japanese_2ed715f8.png" },
+    { initial: "K", name: "Korean Drama", author: "Min-ji K.", desc: "Learn Korean through popular K-drama dialogues", stories: 9, clones: 201, bg: "#F0FDFA", border: "#14B8A6", avatarGrad: "linear-gradient(135deg, #14B8A6, #0D9488)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-korean_66d306b6.png" },
+  ];
 
   return (
     <section className="py-20 md:py-28 px-4 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #FAFAFA 0%, #F5F3FF08 50%, #FAFAFA 100%)" }}>
@@ -207,72 +169,65 @@ function FeaturedCollectionsGrid() {
         </RevealSection>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 md:gap-6 max-w-6xl mx-auto">
-          {collections.map((col, index) => {
-            const colors = CARD_COLORS[index % CARD_COLORS.length];
-            return (
-              <RevealSection key={col.id} delay={index * 100}>
-                <div
-                  className="rounded-2xl overflow-hidden cursor-pointer hover:-translate-y-2 transition-all h-full flex flex-col shadow-sm hover:shadow-lg"
-                  style={{
-                    backgroundColor: colors.bg,
-                    borderTop: `5px solid ${col.color || colors.border}`,
-                  }}
-                  onClick={() => col.shareToken ? setLocation(`/shared/${col.shareToken}`) : setLocation("/discover")}
-                >
-                  {/* Cover image */}
-                  {col.coverImage && (
-                    <div className="w-full h-36 overflow-hidden">
-                      <img
-                        src={col.coverImage}
-                        alt={col.name}
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                      />
+          {staticCollections.map((card, index) => (
+            <RevealSection key={index} delay={index * 100}>
+              <div
+                className="rounded-2xl overflow-hidden cursor-pointer hover:-translate-y-2 transition-all h-full flex flex-col shadow-sm hover:shadow-lg"
+                style={{
+                  backgroundColor: card.bg,
+                  borderTop: `5px solid ${card.border}`,
+                }}
+                onClick={() => setLocation("/discovery?tab=collections")}
+              >
+                {/* Cover image */}
+                <div className="w-full h-36 overflow-hidden">
+                  <img
+                    src={card.cover}
+                    alt={card.name}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                  />
+                </div>
+                <div className="p-5 md:p-6 flex-1 flex flex-col">
+                  {/* Avatar + Name row */}
+                  <div className="flex items-center gap-3 mb-3">
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-base font-bold shadow-md flex-shrink-0"
+                      style={{ background: card.avatarGrad, fontFamily: "Fredoka, sans-serif" }}
+                    >
+                      {card.initial}
                     </div>
-                  )}
-                  <div className="p-5 md:p-6 flex-1 flex flex-col">
-                    {/* Avatar + Name row */}
-                    <div className="flex items-center gap-3 mb-3">
-                      <div
-                        className="w-11 h-11 rounded-xl flex items-center justify-center text-white text-base font-bold shadow-md flex-shrink-0"
-                        style={{ background: col.color || colors.avatarGrad, fontFamily: "Fredoka, sans-serif" }}
-                      >
-                        {col.name.charAt(0).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h3 className="font-bold text-lg truncate text-gray-900 leading-tight" style={{ fontFamily: "Fredoka, sans-serif" }}>{col.name}</h3>
-                        <p className="text-sm text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>by {col.userName}</p>
-                      </div>
-                    </div>
-                    {/* Description */}
-                    {col.description && (
-                      <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        {col.description}
-                      </p>
-                    )}
-                    {/* Stats row */}
-                    <div className="flex items-center gap-4 text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
-                      <span className="flex items-center gap-1.5">
-                        <BookOpen className="h-4 w-4" />
-                        {col.itemCount} stories
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <Users className="h-4 w-4" />
-                        {col.cloneCount} clones
-                      </span>
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-bold text-lg truncate text-gray-900 leading-tight" style={{ fontFamily: "Fredoka, sans-serif" }}>{card.name}</h3>
+                      <p className="text-sm text-gray-400" style={{ fontFamily: "Outfit, sans-serif" }}>by {card.author}</p>
                     </div>
                   </div>
+                  {/* Description */}
+                  <p className="text-sm text-gray-500 mb-4 line-clamp-2 flex-1 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    {card.desc}
+                  </p>
+                  {/* Stats row */}
+                  <div className="flex items-center gap-4 text-gray-400 text-sm" style={{ fontFamily: "Outfit, sans-serif" }}>
+                    <span className="flex items-center gap-1.5">
+                      <BookOpen className="h-4 w-4" />
+                      {card.stories} stories
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Users className="h-4 w-4" />
+                      {card.clones} clones
+                    </span>
+                  </div>
                 </div>
-              </RevealSection>
-            );
-          })}
+              </div>
+            </RevealSection>
+          ))}
         </div>
 
         <div className="text-center mt-12">
           <Button
             variant="outline"
             className="rounded-full px-8 py-3 border-2 border-purple-400 text-purple-700 hover:bg-purple-50 transition-all hover:-translate-y-0.5 font-bold"
-            onClick={() => setLocation("/discover")}
+            onClick={() => setLocation("/discovery?tab=collections")}
             style={{ fontFamily: "Fredoka, sans-serif" }}
           >
             View All Collections
@@ -289,7 +244,7 @@ export default function Landing() {
   const [, setLocation] = useLocation();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showDemoModal, setShowDemoModal] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("annual");
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isAuthenticated } = useAuth();
@@ -849,7 +804,27 @@ export default function Landing() {
       </section>
 
       {/* ========== STATS ========== */}
-      <StatsSection />
+      <section className="py-16 px-4 bg-white">
+        <div className="container">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-5 max-w-4xl mx-auto">
+            {[
+              { value: 2500000, suffix: "+", label: "Stories Created", color: "text-purple-600" },
+              { value: 19, suffix: "", label: "Languages", color: "text-blue-600" },
+              { value: 97, suffix: "%", label: "Satisfaction Rate", color: "text-teal-600" },
+              { value: 35000, suffix: "+", label: "Active Learners", color: "text-purple-600" },
+            ].map((stat, i) => (
+              <RevealSection key={i} delay={i * 100}>
+                <div className="text-center p-6 rounded-2xl bg-gradient-to-br from-purple-50/50 to-blue-50/50 hover:-translate-y-1 transition-all">
+                  <div className={`text-3xl md:text-4xl font-bold ${stat.color} mb-2`} style={{ fontFamily: "Fredoka, sans-serif" }}>
+                    <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+                  </div>
+                  <div className="text-sm text-gray-500 font-medium" style={{ fontFamily: "Outfit, sans-serif" }}>{stat.label}</div>
+                </div>
+              </RevealSection>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* ========== FOR STUDENTS & TEACHERS ========== */}
       <section className="py-20 md:py-28 px-4 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #F5F3FF 0%, #EDE9FE 40%, #F3E8FF 70%, #F5F3FF 100%)" }}>
@@ -1228,15 +1203,26 @@ export default function Landing() {
             <p className="text-center text-sm text-gray-400 mt-4" style={{ fontFamily: "Outfit, sans-serif" }}>
               Trusted by 35,000+ learners worldwide
             </p>
-            <div className="mt-8 text-center">
+            <div className="mt-8">
               <Link href="/pricing">
                 <button
-                  className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-purple-600 bg-purple-50 hover:bg-purple-100 rounded-full transition-all hover:scale-105"
+                  className="mx-auto flex w-full max-w-2xl items-center justify-between gap-4 rounded-3xl border border-purple-200 bg-gradient-to-r from-purple-50 via-white to-teal-50 px-6 py-5 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg"
                   style={{ fontFamily: "Fredoka, sans-serif" }}
                 >
-                  <Building2 className="h-4 w-4" />
-                  Looking for School or Team plans? View all options
-                  <ArrowRight className="h-4 w-4" />
+                  <div className="flex items-center gap-4">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-purple-600 text-white shadow-lg">
+                      <Building2 className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-base font-semibold text-gray-900">
+                        Looking for School or Team plans?
+                      </p>
+                      <p className="mt-1 text-sm text-gray-500" style={{ fontFamily: "Outfit, sans-serif" }}>
+                        View classroom pricing, bulk seats, and team options.
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-5 w-5 shrink-0 text-purple-600" />
                 </button>
               </Link>
             </div>

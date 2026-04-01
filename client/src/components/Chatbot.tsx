@@ -90,6 +90,56 @@ const QUICK_CHIPS: Record<string, string[]> = {
   ],
 };
 
+function getGuestReply(question: string, mode: GuestChatMode): string {
+  const normalized = question.toLowerCase();
+
+  if (normalized.includes("free")) {
+    return "Yes. You can start for free with starter stories and limited daily usage, then upgrade later if you want unlimited access.";
+  }
+
+  if (normalized.includes("language")) {
+    return "Storyling.ai supports a wide range of languages including Spanish, French, German, Chinese, Japanese, Korean, Arabic, and more.";
+  }
+
+  if (normalized.includes("duolingo")) {
+    return "Storyling.ai focuses on immersive learning through stories, podcasts, and films, so you learn vocabulary in context instead of isolated drills.";
+  }
+
+  if (normalized.includes("film mode")) {
+    return "Film mode turns your vocabulary into a short AI-generated video story, while Podcast mode focuses on audio storytelling and listening practice.";
+  }
+
+  if (normalized.includes("podcast mode")) {
+    return "Podcast mode creates an audio-first story with AI narration, which is great for listening practice and learning on the go.";
+  }
+
+  if (normalized.includes("example story")) {
+    return "You choose a language, level, and vocabulary, then Storyling.ai generates a story around those words so learning feels natural and memorable.";
+  }
+
+  if (normalized.includes("cancel")) {
+    return "Yes. Paid plans can be cancelled anytime from your subscription settings.";
+  }
+
+  if (normalized.includes("mobile app")) {
+    return "The experience is mobile-friendly in the browser today. If you want the full product, the fastest path is to sign in and try it there.";
+  }
+
+  if (normalized.includes("level")) {
+    return "You can choose a CEFR level from A1 to C2 so the generated stories match your current ability.";
+  }
+
+  if (mode === "demo") {
+    return "Storyling.ai lets you upload vocabulary, choose a theme, and generate an immersive story in minutes. Sign up to try the full workflow.";
+  }
+
+  if (mode === "faq") {
+    return "I can help with pricing, supported languages, levels, and how Storyling.ai works. Sign up if you want to test the full product.";
+  }
+
+  return "Storyling.ai helps you learn languages through personalized stories, podcasts, and films. Sign up to create your own and explore the full experience.";
+}
+
 // ─── Typing indicator ─────────────────────────────────────────────────────────
 
 function TypingIndicator() {
@@ -133,6 +183,7 @@ export function Chatbot({ context }: ChatbotProps) {
   const [isMinimized, setIsMinimized] = useState(false);
   const [message, setMessage] = useState('');
   const [conversationId, setConversationId] = useState<number | null>(null);
+  const [queuedMessage, setQueuedMessage] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [hasNewMessage, setHasNewMessage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -177,7 +228,7 @@ export function Chatbot({ context }: ChatbotProps) {
       language: context?.storyLanguage || 'English',
       level: context?.userLevel || 'intermediate',
     },
-    { enabled: isOpen && !shouldHide }
+    { enabled: isAuthenticated && isOpen && !shouldHide }
   );
 
   // Send message mutation
@@ -221,6 +272,54 @@ export function Chatbot({ context }: ChatbotProps) {
     }
   }, [conversationData]);
 
+  const sendAuthenticatedMessage = useCallback((msgText: string) => {
+    if (!conversationId || sendMessageMutation.isPending) return;
+
+    const userMessage: Message = {
+      id: Date.now(),
+      role: 'user',
+      content: msgText,
+      createdAt: new Date(),
+    };
+    setMessages((prev) => [...prev, userMessage]);
+
+    sendMessageMutation.mutate({
+      conversationId,
+      message: msgText,
+      context: context || { page: location },
+    });
+
+    setMessage('');
+  }, [conversationId, sendMessageMutation, context, location]);
+
+  const sendGuestMessage = useCallback((msgText: string) => {
+    const userMessage: Message = {
+      id: Date.now(),
+      role: 'user',
+      content: msgText,
+      createdAt: new Date(),
+    };
+    const assistantMessage: Message = {
+      id: Date.now() + 1,
+      role: 'assistant',
+      content: getGuestReply(msgText, mode as GuestChatMode),
+      createdAt: new Date(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, assistantMessage]);
+    setMessage('');
+  }, [mode]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !conversationId || !queuedMessage || sendMessageMutation.isPending) {
+      return;
+    }
+
+    const pendingMessage = queuedMessage;
+    setQueuedMessage(null);
+    sendAuthenticatedMessage(pendingMessage);
+  }, [conversationId, isAuthenticated, queuedMessage, sendAuthenticatedMessage, sendMessageMutation.isPending]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -243,30 +342,28 @@ export function Chatbot({ context }: ChatbotProps) {
   }, []);
 
   const handleSendMessage = useCallback((text?: string) => {
-    const msgText = text || message;
-    if (!msgText.trim() || !conversationId || sendMessageMutation.isPending) return;
+    const msgText = (text || message).trim();
+    if (!msgText || sendMessageMutation.isPending || queuedMessage) return;
 
-    const userMessage: Message = {
-      id: Date.now(),
-      role: 'user',
-      content: msgText,
-      createdAt: new Date(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
+    if (!isAuthenticated) {
+      sendGuestMessage(msgText);
+      return;
+    }
 
-    sendMessageMutation.mutate({
-      conversationId,
-      message: msgText.trim(),
-      context: context || { page: location },
-    });
+    if (!conversationId) {
+      setQueuedMessage(msgText);
+      setMessage('');
+      return;
+    }
 
-    setMessage('');
-  }, [message, conversationId, sendMessageMutation, context, location]);
+    sendAuthenticatedMessage(msgText);
+  }, [message, conversationId, isAuthenticated, queuedMessage, sendMessageMutation.isPending, sendGuestMessage, sendAuthenticatedMessage]);
 
   const handleModeChange = (newMode: ChatMode) => {
     setMode(newMode);
     setMessages([]);
     setConversationId(null);
+    setQueuedMessage(null);
   };
 
   // ─── Tab configs ───────────────────────────────────────────────────────────
@@ -421,7 +518,7 @@ export function Chatbot({ context }: ChatbotProps) {
                         <button
                           key={chip}
                           onClick={() => handleSendMessage(chip)}
-                          disabled={!conversationId}
+                          disabled={sendMessageMutation.isPending || queuedMessage !== null}
                           className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 border border-purple-200 rounded-full px-3 py-1.5 transition-colors disabled:opacity-50"
                         >
                           {chip}
@@ -490,7 +587,7 @@ export function Chatbot({ context }: ChatbotProps) {
                       <button
                         key={chip}
                         onClick={() => handleSendMessage(chip)}
-                        disabled={!conversationId || sendMessageMutation.isPending}
+                        disabled={sendMessageMutation.isPending || queuedMessage !== null}
                         className="text-xs bg-gray-100 hover:bg-purple-50 hover:text-purple-700 text-gray-600 border border-gray-200 hover:border-purple-200 rounded-full px-2.5 py-1 whitespace-nowrap transition-colors flex-shrink-0 disabled:opacity-50"
                       >
                         {chip}
@@ -508,11 +605,11 @@ export function Chatbot({ context }: ChatbotProps) {
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
                     placeholder={isAuthenticated ? "Ask Booki anything..." : "Ask a question..."}
                     className="flex-1 px-3.5 py-2.5 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white text-sm transition-all placeholder-gray-400"
-                    disabled={sendMessageMutation.isPending || !conversationId}
+                    disabled={sendMessageMutation.isPending || queuedMessage !== null}
                   />
                   <button
                     onClick={() => handleSendMessage()}
-                    disabled={!message.trim() || sendMessageMutation.isPending || !conversationId}
+                    disabled={!message.trim() || sendMessageMutation.isPending || queuedMessage !== null}
                     className="w-10 h-10 bg-gradient-to-br from-purple-500 to-teal-500 text-white rounded-xl flex items-center justify-center hover:shadow-lg hover:shadow-purple-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex-shrink-0"
                     aria-label="Send message"
                   >
@@ -526,8 +623,14 @@ export function Chatbot({ context }: ChatbotProps) {
 
                 {messages.length > 0 && (
                   <button
-                    onClick={() => conversationId && clearConversationMutation.mutate({ conversationId })}
-                    disabled={clearConversationMutation.isPending || !conversationId}
+                    onClick={() => {
+                      if (isAuthenticated) {
+                        if (conversationId) clearConversationMutation.mutate({ conversationId });
+                        return;
+                      }
+                      setMessages([]);
+                    }}
+                    disabled={isAuthenticated ? clearConversationMutation.isPending || !conversationId : messages.length === 0}
                     className="mt-2 text-xs text-gray-400 hover:text-red-400 flex items-center gap-1 transition-colors"
                   >
                     <Trash2 className="w-3 h-3" />

@@ -13,7 +13,7 @@ import { PREMIUM_PRICING, FREE_TIER_LIMITS, SCHOOL_PRICING } from "../../../shar
 export default function Pricing() {
   useScrollToTop();
   const [, setLocation] = useLocation();
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const [referralCode, setReferralCode] = useState("");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const { user } = useAuth();

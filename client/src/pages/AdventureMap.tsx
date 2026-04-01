@@ -12,10 +12,10 @@ import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
 
 const BG_DESKTOP = "/images/storyling_desktop_bg.png";
-const BG_MOBILE = "/images/storyBgBig.png";
+const BG_MOBILE = "/images/storyling_mobileLargeBg.png";
 const DESKTOP_ART_ASPECT_RATIO = 1536 / 1024;
 const DESKTOP_ART_HEIGHT_RATIO = 1 / DESKTOP_ART_ASPECT_RATIO;
-const MOBILE_ART_ASPECT_RATIO = 1728 / 2480;
+const MOBILE_ART_ASPECT_RATIO = 800 / 890;
 
 interface Building {
   id: string;
@@ -37,7 +37,7 @@ const BUILDINGS: Building[] = [
       "Write your own adventure story in any language and let AI guide the journey.",
     path: "/create",
     desktop: { left: 66, top: 33, width: 25, height: 44 },
-    mobile: { left: 28, top: 11, width: 44, height: 24 },
+    mobile: { left: 7, top: 6, width: 64, height: 22 },
     zoomTarget: { x: 80, y: 56 },
   },
   {
@@ -48,7 +48,7 @@ const BUILDINGS: Building[] = [
       "Open your saved stories, continue reading, and revisit your latest adventures.",
     path: "/library",
     desktop: { left: 33, top: 20, width: 33, height: 35 },
-    mobile: { left: 12, top: 35, width: 34, height: 23 },
+    mobile: { left: 14, top: 70, width: 42, height: 26 },
     zoomTarget: { x: 49, y: 39 },
   },
   {
@@ -59,7 +59,7 @@ const BUILDINGS: Building[] = [
       "Review and practice the vocabulary you collected across your stories.",
     path: "/wordbank",
     desktop: { left: 19, top: 38, width: 25, height: 40 },
-    mobile: { left: 48, top: 38, width: 32, height: 22 },
+    mobile: { left: 12, top: 28, width: 35, height: 18 },
     zoomTarget: { x: 31, y: 58 },
   },
   {
@@ -70,7 +70,7 @@ const BUILDINGS: Building[] = [
       "Practice conversation with Booki whenever you want a language buddy.",
     path: "__chat__",
     desktop: { left: 45, top: 43, width: 21, height: 29 },
-    mobile: { left: 31, top: 59, width: 38, height: 22 },
+    mobile: { left: 40, top: 52, width: 39, height: 18 },
     zoomTarget: { x: 55, y: 63 },
   },
   {
@@ -243,8 +243,6 @@ export default function AdventureMap() {
   const [, setLocation] = useLocation();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
-  const [hoveredNavItem, setHoveredNavItem] = useState<string | null>(null);
-  const [isContinueCtaHovered, setIsContinueCtaHovered] = useState(false);
   const [worldReady, setWorldReady] = useState(false);
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
   const [zoomState, setZoomState] = useState<{
@@ -330,25 +328,12 @@ export default function AdventureMap() {
   const continueId = continueStory?.id;
   const weeklyProgress = Math.min((storiesThisWeek / weeklyGoal) * 100, 100);
   const continuePath = continueId ? `/content/${continueId}` : "/library";
-  const continueButtonStyle = {
-    fontFamily: "Fredoka, sans-serif",
-    background: isContinueCtaHovered
-      ? "linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(243,249,255,0.2) 100%)"
-      : "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(235,244,255,0.1) 100%)",
-    border: isContinueCtaHovered
-      ? "1px solid rgba(255,255,255,0.4)"
-      : "1px solid rgba(255,255,255,0.24)",
-    boxShadow: isContinueCtaHovered
-      ? "0 14px 30px rgba(16,10,45,0.24), inset 0 1px 0 rgba(255,255,255,0.44), 0 0 0 1px rgba(191,230,255,0.18)"
-      : "0 10px 24px rgba(16,10,45,0.16), inset 0 1px 0 rgba(255,255,255,0.32)",
-    backdropFilter: "blur(16px)",
-  };
-  const profilePath = user?.id ? `/profile/${user.id}` : "/settings";
+  const profilePath = "/settings";
   const desktopNavItems = [
     { label: "Home", path: "/app", active: true },
     { label: "Library", path: "/library", active: false },
     { label: "Word Bank", path: "/wordbank", active: false },
-    { label: "Profile", path: profilePath, active: false },
+    { label: "Settings", path: profilePath, active: false },
   ];
 
   const handleBuildingClick = (building: Building) => {
@@ -362,8 +347,8 @@ export default function AdventureMap() {
     window.setTimeout(() => {
       if (building.path === "__chat__") {
         window.dispatchEvent(new CustomEvent("open-booki-chat"));
-      } else if (building.path === "/profile" && user?.id) {
-        setLocation(`/profile/${user.id}`);
+      } else if (building.path === "/profile") {
+        setLocation("/settings");
       } else {
         setLocation(building.path);
       }
@@ -580,58 +565,28 @@ export default function AdventureMap() {
                       backdropFilter: "blur(18px)",
                     }}
                   >
-                    {desktopNavItems.map(nav => {
-                      const isHovered = hoveredNavItem === nav.label;
-                      const isHighlighted = nav.active || isHovered;
-
-                      return (
-                        <button
-                          key={nav.label}
-                          type="button"
-                          onClick={() => setLocation(nav.path)}
-                          onMouseEnter={() => setHoveredNavItem(nav.label)}
-                          onMouseLeave={() => setHoveredNavItem(current =>
-                            current === nav.label ? null : current
-                          )}
-                          onFocus={() => setHoveredNavItem(nav.label)}
-                          onBlur={() => setHoveredNavItem(current =>
-                            current === nav.label ? null : current
-                          )}
-                          className="group relative overflow-hidden rounded-[14px] px-6 py-2.5 text-[15px] font-semibold transition-all duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-white/70"
-                          style={{
-                            fontFamily: "Fredoka, sans-serif",
-                            color: isHighlighted
-                              ? "#FFFFFF"
-                              : "rgba(255,255,255,0.82)",
-                            background: nav.active
-                              ? isHovered
-                                ? "linear-gradient(180deg, rgba(255,255,255,0.46) 0%, rgba(255,255,255,0.24) 100%)"
-                                : "linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%)"
-                              : isHovered
-                                ? "linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0.1) 100%)"
-                                : "transparent",
-                            boxShadow: nav.active
-                              ? isHovered
-                                ? "inset 0 1px 0 rgba(255,255,255,0.42), 0 10px 22px rgba(18,12,47,0.2), 0 0 0 1px rgba(255,255,255,0.12)"
-                                : "inset 0 1px 0 rgba(255,255,255,0.34), 0 8px 18px rgba(18,12,47,0.16)"
-                              : isHovered
-                                ? "inset 0 1px 0 rgba(255,255,255,0.28), 0 8px 18px rgba(18,12,47,0.16)"
-                                : "none",
-                          }}
-                        >
-                          <span
-                            aria-hidden="true"
-                            className="pointer-events-none absolute inset-0 rounded-[14px] transition-opacity duration-200"
-                            style={{
-                              opacity: isHovered ? 1 : nav.active ? 0.5 : 0,
-                              background:
-                                "linear-gradient(180deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.02) 100%)",
-                            }}
-                          />
-                          <span className="relative">{nav.label}</span>
-                        </button>
-                      );
-                    })}
+                    {desktopNavItems.map(nav => (
+                      <button
+                        key={nav.label}
+                        type="button"
+                        onClick={() => setLocation(nav.path)}
+                        className="rounded-[14px] px-6 py-2.5 text-[15px] font-semibold transition-all"
+                        style={{
+                          fontFamily: "Fredoka, sans-serif",
+                          color: nav.active
+                            ? "#FFFFFF"
+                            : "rgba(255,255,255,0.82)",
+                          background: nav.active
+                            ? "linear-gradient(180deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.18) 100%)"
+                            : "transparent",
+                          boxShadow: nav.active
+                            ? "inset 0 1px 0 rgba(255,255,255,0.34), 0 8px 18px rgba(18,12,47,0.16)"
+                            : "none",
+                        }}
+                      >
+                        {nav.label}
+                      </button>
+                    ))}
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
@@ -764,29 +719,24 @@ export default function AdventureMap() {
                       <button
                         type="button"
                         onClick={() => setLocation(continuePath)}
-                        onMouseEnter={() => setIsContinueCtaHovered(true)}
-                        onMouseLeave={() => setIsContinueCtaHovered(false)}
-                        onFocus={() => setIsContinueCtaHovered(true)}
-                        onBlur={() => setIsContinueCtaHovered(false)}
-                        className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-full px-4 py-3 text-[15px] font-bold text-white transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.01] focus-visible:ring-2 focus-visible:ring-white/70 active:scale-[0.97]"
-                        style={continueButtonStyle}
+                        className="flex w-full items-center justify-center gap-2 rounded-full px-4 py-3 text-[15px] font-bold text-white transition-all hover:brightness-110 active:scale-[0.97]"
+                        style={{
+                          fontFamily: "Fredoka, sans-serif",
+                          background:
+                            "linear-gradient(180deg, rgba(255,255,255,0.22) 0%, rgba(235,244,255,0.1) 100%)",
+                          border: "1px solid rgba(255,255,255,0.24)",
+                          boxShadow:
+                            "0 10px 24px rgba(16,10,45,0.16), inset 0 1px 0 rgba(255,255,255,0.32)",
+                          backdropFilter: "blur(16px)",
+                        }}
                         title={
                           continueTitle
                             ? `Continue ${continueTitle}`
                             : "Continue reading"
                         }
                       >
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute inset-0 rounded-full transition-opacity duration-200"
-                          style={{
-                            opacity: isContinueCtaHovered ? 1 : 0,
-                            background:
-                              "linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(190,233,255,0.08) 100%)",
-                          }}
-                        />
-                        <span className="relative">Continue Reading</span>
-                        <ArrowRight className="relative h-4 w-4 transition-transform duration-200 group-hover:translate-x-1" />
+                        Continue Reading
+                        <ArrowRight className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
@@ -922,22 +872,30 @@ export default function AdventureMap() {
               <div
                 className="mx-auto flex max-w-md items-center gap-3 rounded-[26px] border px-3 py-3"
                 style={{
-                  borderColor: "rgba(255,255,255,0.34)",
+                  borderColor: "rgba(255,246,224,0.7)",
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.24) 0%, rgba(219,225,255,0.13) 100%)",
+                    "linear-gradient(180deg, rgba(255,248,233,0.9) 0%, rgba(250,236,213,0.78) 100%)",
                   backdropFilter: "blur(18px)",
                   boxShadow:
-                    "0 16px 36px rgba(31, 18, 69, 0.22), inset 0 1px 0 rgba(255,255,255,0.36)",
+                    "0 16px 36px rgba(31, 18, 69, 0.18), inset 0 1px 0 rgba(255,255,255,0.65)",
                 }}
               >
-                <div className="h-11 w-11 shrink-0" aria-hidden="true" />
+                <div
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    background: "rgba(255,255,255,0.7)",
+                    boxShadow: "0 8px 18px rgba(74, 42, 18, 0.12)",
+                  }}
+                >
+                  <img src={APP_LOGO} alt="" className="h-8 w-8 object-contain" />
+                </div>
                 <div className="min-w-0 flex-1 text-center">
                   <h1
                     className="truncate text-[21px] font-semibold"
                     style={{
                       fontFamily: "Fredoka, sans-serif",
-                      color: "#FFE7B3",
-                      animation: "title-shimmer 3.6s ease-in-out infinite",
+                      color: "#7A5230",
+                      letterSpacing: "0.01em",
                     }}
                   >
                     {APP_TITLE}
@@ -949,9 +907,9 @@ export default function AdventureMap() {
                   className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
                   style={{
                     background:
-                      "linear-gradient(180deg, rgba(255,235,173,0.88) 0%, rgba(233,176,78,0.92) 100%)",
+                      "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(249,231,200,0.96) 100%)",
                     boxShadow:
-                      "0 10px 22px rgba(74, 42, 18, 0.22), inset 0 1px 0 rgba(255,255,255,0.56)",
+                      "0 10px 22px rgba(74, 42, 18, 0.16), inset 0 1px 0 rgba(255,255,255,0.75)",
                   }}
                   aria-label="Open settings"
                 >

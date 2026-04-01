@@ -9,7 +9,7 @@ import { extractTextFromDocument, extractVocabularyFromText } from "./documentEx
 export const documentRouter = router({
   /**
    * Upload a document and extract vocabulary words
-   * Supports PDF, DOCX, and TXT files
+   * Supports PDF, DOCX, XLSX, TXT, and CSV files
    */
   uploadAndExtractVocabulary: protectedProcedure
     .input(
@@ -35,12 +35,14 @@ export const documentRouter = router({
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         "application/msword",
         "text/plain",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       ];
 
       if (!supportedTypes.includes(input.mimeType)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Unsupported file type. Please upload PDF, DOCX, or TXT files.",
+          message: "Unsupported file type. Please upload PDF, Word, Excel (.xlsx), TXT, or CSV files.",
         });
       }
 

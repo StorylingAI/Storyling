@@ -11,7 +11,7 @@ interface LibraryOnboardingTutorialProps {
 const tutorialSteps = [
   {
     id: "welcome",
-    title: "Welcome to Your Library! 📚",
+    title: "Welcome to Your Library! ðŸ“š",
     description: "Your personal collection of AI-powered stories. Let's explore how to make the most of it!",
     icon: Library,
     position: "center" as const,
@@ -70,7 +70,6 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
   }, []);
 
   useEffect(() => {
-    // Clean up previous element
     cleanupElement(prevElementRef.current);
 
     if (step.targetSelector) {
@@ -84,48 +83,60 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
           const rect = element.getBoundingClientRect();
           setTargetRect(rect);
 
-          const scrollY = window.scrollY || window.pageYOffset;
-          const scrollX = window.scrollX || window.pageXOffset;
+          const viewportPadding = 16;
+          const tooltipWidth = Math.min(400, window.innerWidth - viewportPadding * 2);
+          const estimatedTooltipHeight = window.innerWidth < 640 ? 300 : 260;
 
-          let top = rect.bottom + scrollY + 16;
-          let left = rect.left + scrollX + rect.width / 2;
+          let top =
+            step.position === "top"
+              ? rect.top - estimatedTooltipHeight - 16
+              : rect.bottom + 16;
 
-          if (step.position === "top") {
-            top = rect.top + scrollY - 220;
+          if (step.position === "top" && top < viewportPadding) {
+            top = rect.bottom + 16;
           }
 
-          // Keep tooltip within viewport
-          const maxLeft = window.innerWidth - 220;
-          const minLeft = 220;
+          const maxTop = Math.max(
+            viewportPadding,
+            window.innerHeight - estimatedTooltipHeight - viewportPadding
+          );
+          top = Math.max(viewportPadding, Math.min(maxTop, top));
+
+          let left = rect.left + rect.width / 2;
+          const minLeft = viewportPadding + tooltipWidth / 2;
+          const maxLeft = window.innerWidth - viewportPadding - tooltipWidth / 2;
           left = Math.max(minLeft, Math.min(maxLeft, left));
 
           setTooltipPosition({ top, left });
         };
 
-        setTimeout(updatePositions, 300);
+        const timeoutId = window.setTimeout(updatePositions, 300);
+        window.addEventListener("resize", updatePositions);
+        window.addEventListener("scroll", updatePositions, { passive: true });
 
-        // Highlight the element
         element.style.position = "relative";
         element.style.zIndex = "1002";
         element.style.boxShadow = "0 0 0 4px rgba(147, 51, 234, 0.5), 0 0 20px rgba(147, 51, 234, 0.2)";
         element.style.borderRadius = "8px";
         element.style.transition = "all 0.3s ease";
-      } else {
-        setTargetRect(null);
-        prevElementRef.current = null;
+
+        return () => {
+          window.clearTimeout(timeoutId);
+          window.removeEventListener("resize", updatePositions);
+          window.removeEventListener("scroll", updatePositions);
+        };
       }
-    } else {
+
       setTargetRect(null);
       prevElementRef.current = null;
+      return;
     }
 
-    return () => {
-      // Don't clean up here — we clean up at the start of the next step
-      // This avoids the stale closure issue
-    };
+    setTargetRect(null);
+    prevElementRef.current = null;
+    return;
   }, [currentStep, step, cleanupElement]);
 
-  // Clean up on unmount
   useEffect(() => {
     return () => {
       cleanupElement(prevElementRef.current);
@@ -146,7 +157,6 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
     onComplete();
   };
 
-  // Build overlay with a cutout hole for the target element
   const renderOverlay = () => {
     if (targetRect) {
       const padding = 6;
@@ -182,13 +192,12 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
         </div>
       );
     }
-    // No target — full overlay for center steps
+
     return (
       <div className="fixed inset-0 bg-black/50 z-[1000]" onClick={handleSkip} />
     );
   };
 
-  // Animated pulse ring around target instead of cartoon hand
   const renderPulseIndicator = () => {
     if (!targetRect) return null;
     return (
@@ -227,10 +236,9 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
       {renderOverlay()}
       {renderPulseIndicator()}
 
-      {/* Tutorial Card */}
       <Card
         className={cn(
-          "fixed z-[1003] w-[400px] shadow-2xl",
+          "fixed z-[1003] w-[calc(100vw-2rem)] max-w-[400px] shadow-2xl",
           step.position === "center" && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
         )}
         style={
@@ -276,7 +284,6 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
             </Button>
           </div>
 
-          {/* Progress Dots */}
           <div className="flex justify-center gap-1.5 mt-4">
             {tutorialSteps.map((_, index) => (
               <div

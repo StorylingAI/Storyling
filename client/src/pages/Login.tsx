@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,39 +7,24 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { getLoginUrl } from "@/const";
 import { APP_TITLE, APP_LOGO } from "@/const";
 import { Loader2 } from "lucide-react";
 
-const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  google_denied: "Google sign-in was cancelled.",
-  google_failed: "Google sign-in failed. Please try again.",
-};
-
 export default function Login() {
   const [, setLocation] = useLocation();
-  const utils = trpc.useUtils();
-
-  useEffect(() => {
-    const error = new URLSearchParams(window.location.search).get("error");
-    if (error) {
-      toast.error(OAUTH_ERROR_MESSAGES[error] || "Sign-in failed. Please try again.");
-      // Clean up URL
-      window.history.replaceState({}, "", "/login");
-    }
-  }, []);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const signInMutation = trpc.emailAuth.signIn.useMutation({
-    onSuccess: async (data) => {
-      if (!data.emailVerified) {
-        toast.info("Please check your inbox and verify your email address.");
-      }
+    onSuccess: () => {
       toast.success("Signed in successfully!");
-      await utils.auth.me.invalidate();
-      setLocation("/app");
+      // Redirect to dashboard after successful login
+      setTimeout(() => {
+        setLocation("/app");
+      }, 500);
     },
     onError: (error) => {
       toast.error(error.message || "Failed to sign in");
