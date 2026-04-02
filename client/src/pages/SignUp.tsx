@@ -7,7 +7,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
-import { getLoginUrl } from "@/const";
 import { APP_TITLE, APP_LOGO } from "@/const";
 import { Loader2 } from "lucide-react";
 
@@ -68,7 +67,7 @@ export default function SignUp() {
   };
 
   const handleGoogleSignUp = () => {
-    window.location.href = getLoginUrl();
+    window.location.href = "/api/auth/google";
   };
 
   return (
