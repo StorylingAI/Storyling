@@ -21,6 +21,9 @@ export function useAuth(options?: UseAuthOptions) {
     refetchOnWindowFocus: false,
     // Keep stale data while refetching so the user doesn't flash to login screen
     staleTime: 5 * 60 * 1000, // 5 minutes
+    // Always refetch on mount after full-page navigations (e.g. OAuth callback redirect)
+    // This ensures the persisted IDB cache doesn't serve stale null auth state
+    refetchOnMount: "always",
   });
 
   const logoutMutation = trpc.auth.logout.useMutation({
@@ -31,7 +34,7 @@ export function useAuth(options?: UseAuthOptions) {
 
   const isAuthPending =
     meQuery.isLoading ||
-    (meQuery.isFetching && typeof meQuery.data === "undefined") ||
+    (meQuery.isFetching && !meQuery.data) ||
     logoutMutation.isPending;
 
   const logout = useCallback(async () => {
