@@ -216,7 +216,7 @@ class SDKServer {
         !isNonEmptyString(openId) ||
         !isNonEmptyString(appId)
       ) {
-        console.warn("[Auth] Session payload missing required fields");
+        console.warn("[Auth] Session payload missing required fields | openId:", openId, "| appId:", appId, "| name:", name);
         return null;
       }
 
@@ -259,7 +259,10 @@ class SDKServer {
     // Regular authentication flow
     const cookies = this.parseCookies(req.headers.cookie);
     const sessionCookie = cookies.get(COOKIE_NAME);
+    console.log("[Auth Debug] Cookie present:", !!sessionCookie, "| Cookie name:", COOKIE_NAME);
+
     const session = await this.verifySession(sessionCookie);
+    console.log("[Auth Debug] Session verified:", !!session, session ? `openId=${session.openId}` : "null");
 
     if (!session) {
       throw ForbiddenError("Invalid session cookie");
@@ -268,6 +271,7 @@ class SDKServer {
     const sessionUserId = session.openId;
     const signedInAt = new Date();
     let user = await db.getUserByOpenId(sessionUserId);
+    console.log("[Auth Debug] User found in DB:", !!user, "| openId:", sessionUserId);
 
     // If user not in DB, sync from OAuth server automatically
     if (!user) {

@@ -174,6 +174,7 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const cookieOptions = getSessionCookieOptions(req);
+      console.log("[Google OAuth] Setting cookie | hostname:", req.hostname, "| domain:", cookieOptions.domain, "| secure:", cookieOptions.secure, "| openId:", openId);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
       res.redirect(302, "/app");
