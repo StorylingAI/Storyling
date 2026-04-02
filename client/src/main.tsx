@@ -85,7 +85,20 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <PersistQueryClientProvider
       client={queryClient}
-      persistOptions={{ persister, maxAge: 24 * 60 * 60 * 1000 }}
+      persistOptions={{
+        persister,
+        maxAge: 24 * 60 * 60 * 1000,
+        dehydrateOptions: {
+          shouldDehydrateQuery: (query) => {
+            // Never persist auth queries — must always be fetched fresh
+            const key = query.queryKey;
+            if (Array.isArray(key) && Array.isArray(key[0]) && key[0][0] === "auth") {
+              return false;
+            }
+            return query.state.status === "success";
+          },
+        },
+      }}
     >
       <App />
     </PersistQueryClientProvider>

@@ -13,28 +13,35 @@ export function useAuth(options?: UseAuthOptions) {
     options ?? {};
   const utils = trpc.useUtils();
   const redirectAttempted = useRef(false);
+  const hasFetchedOnce = useRef(false);
 
   const meQuery = trpc.auth.me.useQuery(undefined, {
     // Retry up to 2 times with a delay — prevents false logouts from transient DB errors
     retry: 2,
     retryDelay: (attemptIndex) => Math.min(1000 * (attemptIndex + 1), 3000),
     refetchOnWindowFocus: false,
-    // Keep stale data while refetching so the user doesn't flash to login screen
-    staleTime: 5 * 60 * 1000, // 5 minutes
-    // Always refetch on mount after full-page navigations (e.g. OAuth callback redirect)
-    // This ensures the persisted IDB cache doesn't serve stale null auth state
+    // Always refetch on mount — never trust stale/persisted cache for auth
+    staleTime: 0,
     refetchOnMount: "always",
+    // Don't persist auth state in IDB cache
+    gcTime: 0,
   });
+
+  // Track when the first real network fetch completes (not cache restoration)
+  if (meQuery.isFetchedAfterMount) {
+    hasFetchedOnce.current = true;
+  }
 
   const logoutMutation = trpc.auth.logout.useMutation({
     onSuccess: () => {
       utils.auth.me.setData(undefined, null);
+      hasFetchedOnce.current = true; // Logout is an intentional null
     },
   });
 
   const isAuthPending =
     meQuery.isLoading ||
-    (meQuery.isFetching && !meQuery.data) ||
+    !hasFetchedOnce.current ||
     logoutMutation.isPending;
 
   const logout = useCallback(async () => {
