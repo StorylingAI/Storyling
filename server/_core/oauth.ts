@@ -169,7 +169,7 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       const sessionToken = await sdk.createSessionToken(openId, {
-        name: googleUser.name || "",
+        name: googleUser.name || googleUser.email || "User",
         expiresInMs: ONE_YEAR_MS,
       });
 
