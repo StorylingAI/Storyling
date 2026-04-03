@@ -253,17 +253,64 @@ function MobileBuildingHotspot({
   entranceDelay: number;
   worldReady: boolean;
 }) {
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLButtonElement>) => {
+      const touch = e.touches[0];
+      if (!touch) return;
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      onHover();
+    },
+    [onHover]
+  );
+
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent<HTMLButtonElement>) => {
+      if (!touchStartRef.current) return;
+
+      const touch = e.changedTouches[0];
+      if (!touch) {
+        touchStartRef.current = null;
+        onLeave();
+        return;
+      }
+
+      const dx = Math.abs(touch.clientX - touchStartRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
+      touchStartRef.current = null;
+
+      // Ignore scroll gestures and only treat short movements as taps.
+      if (dx < 15 && dy < 15) {
+        e.preventDefault();
+        onClick();
+      }
+
+      onLeave();
+    },
+    [onClick, onLeave]
+  );
+
   return (
     <button
       type="button"
       onClick={onClick}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
-      onTouchStart={onHover}
-      onTouchEnd={onLeave}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={onLeave}
       className="absolute inset-0 rounded-[32px] focus:outline-none"
-      style={{ minWidth: 48, minHeight: 48 }}
+      style={{
+        minWidth: 48,
+        minHeight: 48,
+        cursor: "pointer",
+        touchAction: "manipulation",
+        WebkitTapHighlightColor: "transparent",
+        zIndex: 30,
+      }}
       aria-label={building.fullLabel}
+      title={building.fullLabel}
     >
       <div
         className="absolute inset-0 rounded-[32px] pointer-events-none transition-all duration-300"
@@ -1084,6 +1131,7 @@ export default function AdventureMap() {
                         top: `${zone.top}%`,
                         width: `${zone.width}%`,
                         height: `${zone.height}%`,
+                        zIndex: 30,
                       }}
                     >
                       <MobileBuildingHotspot
