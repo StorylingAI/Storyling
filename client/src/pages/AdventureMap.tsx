@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
@@ -125,13 +125,68 @@ const DESKTOP_LANTERNS = [
   { left: 88, top: 50, size: 22, color: "255,185,85" },
 ];
 
+const DESKTOP_FAIRY_DUST = [
+  { left: 15, top: 30, size: 6, duration: "8s", delay: "0s" },
+  { left: 28, top: 55, size: 5, duration: "10s", delay: "1.2s" },
+  { left: 45, top: 40, size: 7, duration: "9s", delay: "0.6s" },
+  { left: 60, top: 65, size: 5, duration: "11s", delay: "1.8s" },
+  { left: 72, top: 35, size: 6, duration: "8.5s", delay: "0.4s" },
+  { left: 85, top: 50, size: 5, duration: "10.5s", delay: "1.4s" },
+  { left: 20, top: 72, size: 5, duration: "9.5s", delay: "2.0s" },
+  { left: 50, top: 20, size: 7, duration: "12s", delay: "0.8s" },
+  { left: 35, top: 80, size: 5, duration: "7.5s", delay: "1.6s" },
+  { left: 68, top: 25, size: 6, duration: "11s", delay: "0.2s" },
+];
+
+const DESKTOP_LIGHT_RAYS = [
+  { left: 72, top: -5, angle: -25, width: 180, height: 600, delay: "0s", duration: "6s" },
+  { left: 82, top: -5, angle: -18, width: 140, height: 550, delay: "2s", duration: "7s" },
+  { left: 62, top: -5, angle: -32, width: 160, height: 580, delay: "4s", duration: "5.5s" },
+];
+
 const MOBILE_SPARKLES = [
-  { left: 18, top: 10, size: 6, delay: "0s" },
-  { left: 77, top: 12, size: 4, delay: "0.8s" },
-  { left: 23, top: 44, size: 5, delay: "1.4s" },
-  { left: 73, top: 56, size: 6, delay: "0.4s" },
-  { left: 64, top: 78, size: 4, delay: "1.1s" },
-  { left: 34, top: 90, size: 5, delay: "1.8s" },
+  { left: 12, top: 8, size: 14, delay: "0s" },
+  { left: 82, top: 10, size: 12, delay: "0.6s" },
+  { left: 25, top: 28, size: 16, delay: "1.2s" },
+  { left: 70, top: 35, size: 14, delay: "0.3s" },
+  { left: 45, top: 18, size: 12, delay: "1.6s" },
+  { left: 55, top: 52, size: 16, delay: "0.9s" },
+  { left: 18, top: 65, size: 14, delay: "1.8s" },
+  { left: 78, top: 72, size: 12, delay: "0.5s" },
+  { left: 35, top: 85, size: 14, delay: "1.4s" },
+  { left: 62, top: 90, size: 12, delay: "2.0s" },
+];
+
+const MOBILE_FIREFLIES = [
+  { left: 10, top: 30, size: 18, duration: "10s", delay: "0s" },
+  { left: 40, top: 50, size: 16, duration: "12s", delay: "0.8s" },
+  { left: 70, top: 35, size: 20, duration: "11s", delay: "0.4s" },
+  { left: 25, top: 70, size: 18, duration: "13s", delay: "1.2s" },
+  { left: 80, top: 65, size: 16, duration: "9s", delay: "1.6s" },
+  { left: 55, top: 20, size: 18, duration: "14s", delay: "0.6s" },
+  { left: 15, top: 88, size: 16, duration: "11.5s", delay: "1.0s" },
+  { left: 65, top: 80, size: 20, duration: "10.5s", delay: "1.8s" },
+];
+
+const MOBILE_LANTERNS = [
+  { left: 15, top: 32, size: 50, color: "255,180,80" },
+  { left: 50, top: 55, size: 44, color: "255,200,100" },
+  { left: 80, top: 42, size: 48, color: "255,170,70" },
+  { left: 30, top: 75, size: 40, color: "255,190,90" },
+  { left: 70, top: 20, size: 44, color: "180,200,255" },
+];
+
+const MOBILE_FAIRY_DUST = [
+  { left: 15, top: 30, size: 10, duration: "7s", delay: "0s" },
+  { left: 45, top: 45, size: 12, duration: "8s", delay: "0.6s" },
+  { left: 75, top: 25, size: 10, duration: "6.5s", delay: "1.0s" },
+  { left: 30, top: 65, size: 12, duration: "9s", delay: "0.4s" },
+  { left: 60, top: 15, size: 10, duration: "7.5s", delay: "1.4s" },
+  { left: 20, top: 80, size: 12, duration: "8.5s", delay: "0.8s" },
+  { left: 85, top: 55, size: 10, duration: "7s", delay: "1.6s" },
+  { left: 50, top: 75, size: 12, duration: "6s", delay: "1.2s" },
+  { left: 10, top: 50, size: 10, duration: "9.5s", delay: "2.0s" },
+  { left: 68, top: 42, size: 12, duration: "8s", delay: "0.2s" },
 ];
 
 function BuildingHotspot({
@@ -258,13 +313,73 @@ export default function AdventureMap() {
 
   useChallengeDetection();
 
+  // Burst particles on click
+  const [burstParticles, setBurstParticles] = useState<{ id: number; x: number; y: number; particles: { bx: string; by: string; color: string }[] }[]>([]);
+  const burstIdRef = useRef(0);
+
+  const handleMagicBurst = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
+    const x = clientX;
+    const y = clientY;
+    const id = burstIdRef.current++;
+    const colors = ["rgba(255,222,146,0.9)", "rgba(255,180,80,0.85)", "rgba(200,170,255,0.8)", "rgba(120,200,255,0.8)", "rgba(255,255,255,0.9)"];
+    const particles = Array.from({ length: 12 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 50;
+      return {
+        bx: `${Math.cos(angle) * dist}px`,
+        by: `${Math.sin(angle) * dist}px`,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      };
+    });
+    setBurstParticles(prev => [...prev, { id, x, y, particles }]);
+    setTimeout(() => setBurstParticles(prev => prev.filter(b => b.id !== id)), 700);
+  }, []);
+
+  // Parallax — mouse (desktop) / gyroscope (mobile)
+  const [parallax, setParallax] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (window.innerWidth >= 768) {
+      // Desktop: mousemove
+      const handleMouseMove = (e: MouseEvent) => {
+        const cx = (e.clientX / window.innerWidth - 0.5) * 2;  // -1 to 1
+        const cy = (e.clientY / window.innerHeight - 0.5) * 2;
+        setParallax({ x: cx * 18, y: cy * 12 });
+      };
+      window.addEventListener("mousemove", handleMouseMove);
+      return () => window.removeEventListener("mousemove", handleMouseMove);
+    } else {
+      // Mobile: gyroscope
+      let initialBeta: number | null = null;
+      let initialGamma: number | null = null;
+      const handleOrientation = (e: DeviceOrientationEvent) => {
+        if (e.beta === null || e.gamma === null) return;
+        if (initialBeta === null) { initialBeta = e.beta; initialGamma = e.gamma; }
+        const dx = Math.max(-1, Math.min(1, ((e.gamma! - initialGamma!) / 20)));
+        const dy = Math.max(-1, Math.min(1, ((e.beta - initialBeta) / 15)));
+        setParallax({ x: dx * 15, y: dy * 10 });
+      };
+      window.addEventListener("deviceorientation", handleOrientation);
+      return () => window.removeEventListener("deviceorientation", handleOrientation);
+    }
+  }, []);
+
   useEffect(() => {
     const timeout = setTimeout(() => setWorldReady(true), 250);
     return () => clearTimeout(timeout);
   }, []);
 
+  const [isLandscapeMobile, setIsLandscapeMobile] = useState(
+    () => window.innerWidth >= 768 && window.innerHeight < 500
+  );
+
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      setIsLandscapeMobile(window.innerWidth >= 768 && window.innerHeight < 500);
+    };
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -418,28 +533,50 @@ export default function AdventureMap() {
           100% { opacity: 1; }
         }
         @keyframes sparkle {
-          0%, 100% { opacity: 0.2; transform: scale(0.7); }
-          50% { opacity: 1; transform: scale(1.1); }
+          0%, 100% { opacity: 0.3; transform: scale(0.6); filter: blur(0px); }
+          50% { opacity: 1; transform: scale(1.3); filter: blur(0.5px); }
         }
         @keyframes hotspot-pulse {
           0%, 100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.6; }
           50% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
         }
         @keyframes firefly-wander {
-          0% { transform: translate(0, 0) scale(1); opacity: 0.35; }
-          25% { transform: translate(12px, -18px) scale(1.18); opacity: 0.75; }
-          50% { transform: translate(-8px, -10px) scale(0.9); opacity: 0.5; }
-          75% { transform: translate(16px, 10px) scale(1.08); opacity: 0.8; }
-          100% { transform: translate(0, 0) scale(1); opacity: 0.35; }
+          0% { transform: translate(0, 0) scale(1); opacity: 0.5; }
+          25% { transform: translate(25px, -35px) scale(1.4); opacity: 1; }
+          50% { transform: translate(-18px, -20px) scale(0.8); opacity: 0.6; }
+          75% { transform: translate(30px, 20px) scale(1.3); opacity: 0.9; }
+          100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
         }
         @keyframes lantern-flicker {
-          0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(1); }
-          35% { opacity: 0.92; transform: translate(-50%, -50%) scale(1.12); }
-          70% { opacity: 0.65; transform: translate(-50%, -50%) scale(0.97); }
+          0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+          35% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
+          70% { opacity: 0.7; transform: translate(-50%, -50%) scale(0.95); }
         }
         @keyframes title-shimmer {
           0%, 100% { text-shadow: 0 2px 10px rgba(79, 50, 135, 0.45), 0 0 18px rgba(255, 222, 146, 0.28); }
           50% { text-shadow: 0 2px 14px rgba(79, 50, 135, 0.62), 0 0 26px rgba(255, 222, 146, 0.4); }
+        }
+        @keyframes fairy-dust-rise {
+          0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+          10% { opacity: 1; }
+          50% { transform: translateY(-80px) translateX(20px) scale(0.7); opacity: 0.8; }
+          80% { opacity: 0.4; }
+          100% { transform: translateY(-150px) translateX(-15px) scale(0.3); opacity: 0; }
+        }
+        @keyframes aurora-wave {
+          0% { transform: translateX(-30%) skewX(-5deg); opacity: 0.18; }
+          33% { transform: translateX(0%) skewX(3deg); opacity: 0.3; }
+          66% { transform: translateX(20%) skewX(-2deg); opacity: 0.22; }
+          100% { transform: translateX(-30%) skewX(-5deg); opacity: 0.18; }
+        }
+        @keyframes light-ray-pulse {
+          0%, 100% { opacity: 0.05; }
+          30% { opacity: 0.3; }
+          60% { opacity: 0.15; }
+        }
+        @keyframes burst-particle {
+          0% { transform: translate(0, 0) scale(1); opacity: 1; }
+          100% { transform: translate(var(--bx), var(--by)) scale(0); opacity: 0; }
         }
       `}</style>
 
@@ -476,13 +613,13 @@ export default function AdventureMap() {
               }}
             />
 
-            <div className="absolute inset-0 overflow-hidden">
+            <div className="absolute inset-0 overflow-hidden" onClick={handleMagicBurst}>
                 <div
                   className="absolute left-1/2 top-1/2 overflow-hidden"
                   style={{
                     width: `max(100vw, calc(100dvh * ${DESKTOP_ART_ASPECT_RATIO}))`,
                     height: `max(100dvh, calc(100vw * ${DESKTOP_ART_HEIGHT_RATIO}))`,
-                    top: `calc(50% + ${DESKTOP_WORLD_VERTICAL_SHIFT}px)`,
+                    top: `calc(50% + ${isLandscapeMobile ? 0 : DESKTOP_WORLD_VERTICAL_SHIFT}px)`,
                     transform: `translate(-50%, -50%) scale(${zoomState.active ? 1.24 : 1})`,
                     transformOrigin: `${zoomState.targetX}% ${zoomState.targetY}%`,
                     transition: "transform 0.4s ease-out, transform-origin 0.1s",
@@ -492,21 +629,26 @@ export default function AdventureMap() {
                 <div
                   className="absolute inset-0"
                   style={{
+                    zIndex: 1,
                     backgroundImage: `url(${BG_DESKTOP})`,
                     backgroundSize: "cover",
                     backgroundPosition: "center",
                     backgroundRepeat: "no-repeat",
+                    transform: `translate(${parallax.x}px, ${parallax.y}px) scale(1.05)`,
+                    transition: "transform 0.3s ease-out",
                   }}
                 />
 
                 <div
                   className="absolute inset-0 pointer-events-none"
                   style={{
+                    zIndex: 2,
                     background:
                       "linear-gradient(180deg, rgba(16, 10, 45, 0.08) 0%, rgba(16, 10, 45, 0.02) 16%, transparent 30%, transparent 78%, rgba(16, 10, 45, 0.16) 100%)",
                   }}
                 />
 
+                {!isLandscapeMobile && (
                 <div
                   className="pointer-events-none absolute z-30 px-6 py-5"
                   style={{
@@ -555,6 +697,7 @@ export default function AdventureMap() {
                     </p>
                   </div>
                 </div>
+                )}
 
                 {DESKTOP_SCENE_BUILDINGS.map((building, index) => {
                   const zone = building.desktop;
@@ -597,7 +740,7 @@ export default function AdventureMap() {
                 })}
 
                 {worldReady && (
-                  <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20, transform: `translate(${-parallax.x * 0.5}px, ${-parallax.y * 0.5}px)`, transition: "transform 0.3s ease-out" }}>
                     {DESKTOP_SPARKLES.map((sparklePoint, index) => (
                       <div
                         key={`desktop-sparkle-${index}`}
@@ -647,8 +790,63 @@ export default function AdventureMap() {
                         }}
                       />
                     ))}
+
+                    {/* Fairy dust — tiny golden particles rising */}
+                    {DESKTOP_FAIRY_DUST.map((dust, index) => (
+                      <div
+                        key={`desktop-dust-${index}`}
+                        className="absolute rounded-full"
+                        style={{
+                          width: dust.size,
+                          height: dust.size,
+                          left: `${dust.left}%`,
+                          top: `${dust.top}%`,
+                          background: "radial-gradient(circle, rgba(255,230,160,0.9) 0%, rgba(255,200,100,0.4) 60%, transparent 100%)",
+                          boxShadow: "0 0 4px rgba(255,220,130,0.5)",
+                          willChange: "transform, opacity",
+                          animation: `fairy-dust-rise ${dust.duration} ease-in-out ${dust.delay} infinite`,
+                        }}
+                      />
+                    ))}
+
+                    {/* Light rays — diagonal beams from sunset */}
+                    {DESKTOP_LIGHT_RAYS.map((ray, index) => (
+                      <div
+                        key={`desktop-ray-${index}`}
+                        className="absolute"
+                        style={{
+                          left: `${ray.left}%`,
+                          top: `${ray.top}%`,
+                          width: ray.width,
+                          height: ray.height,
+                          transform: `rotate(${ray.angle}deg)`,
+                          background: "linear-gradient(180deg, rgba(255,220,140,0.35) 0%, rgba(255,200,100,0.15) 50%, transparent 100%)",
+                          willChange: "opacity",
+                          animation: `light-ray-pulse ${ray.duration} ease-in-out ${ray.delay} infinite`,
+                        }}
+                      />
+                    ))}
                   </div>
                 )}
+
+                {/* Aurora — color band at top */}
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    zIndex: 21,
+                    top: 0,
+                    left: "-20%",
+                    width: "140%",
+                    height: "35%",
+                    background: "linear-gradient(90deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.20) 35%, rgba(255,200,100,0.15) 65%, rgba(124,58,237,0.20) 100%)",
+                    filter: "blur(40px)",
+                    willChange: "transform, opacity",
+                    transform: `translate(${-parallax.x * 0.8}px, ${-parallax.y * 0.8}px)`,
+                    transition: "transform 0.3s ease-out",
+                    animation: "aurora-wave 12s ease-in-out infinite",
+                  }}
+                />
+
 
                 <button
                   type="button"
@@ -761,7 +959,7 @@ export default function AdventureMap() {
               </div>
             </div>
 
-            <div className="absolute inset-x-0 top-0 bottom-0 z-20 flex items-start justify-center px-0">
+            <div className="absolute inset-x-0 top-0 bottom-0 z-20 flex items-start justify-center px-0" onClick={handleMagicBurst}>
               <div
                 className="relative h-full shrink-0"
                 style={{
@@ -773,13 +971,17 @@ export default function AdventureMap() {
                   alt="Storyling mobile world"
                   className="block h-full w-full object-cover"
                   style={{
+                    position: "relative",
+                    zIndex: 1,
                     animation: "world-fade-in 0.8s ease-out",
                     filter: "drop-shadow(0 20px 44px rgba(22, 13, 51, 0.22))",
+                    transform: `translate(${parallax.x}px, ${parallax.y}px) scale(1.04)`,
+                    transition: "transform 0.3s ease-out",
                   }}
                 />
 
                 {worldReady && (
-                  <div className="absolute inset-0 pointer-events-none">
+                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20, transform: `translate(${-parallax.x * 0.5}px, ${-parallax.y * 0.5}px)`, transition: "transform 0.3s ease-out" }}>
                     {MOBILE_SPARKLES.map((sparklePoint, index) => (
                       <div
                         key={`mobile-sparkle-${index}`}
@@ -790,14 +992,86 @@ export default function AdventureMap() {
                           left: `${sparklePoint.left}%`,
                           top: `${sparklePoint.top}%`,
                           background:
-                            "radial-gradient(circle, rgba(255,242,199,0.95) 0%, rgba(255,212,112,0.82) 35%, rgba(255,212,112,0.18) 65%, transparent 100%)",
-                          boxShadow: "0 0 10px rgba(255,217,128,0.42)",
-                          animation: `sparkle 2.8s ease-in-out ${sparklePoint.delay} infinite`,
+                            "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,242,199,0.9) 25%, rgba(255,212,112,0.6) 50%, transparent 100%)",
+                          boxShadow: "0 0 16px 4px rgba(255,217,128,0.7), 0 0 30px rgba(255,200,80,0.3)",
+                          animation: `sparkle 2.4s ease-in-out ${sparklePoint.delay} infinite`,
+                        }}
+                      />
+                    ))}
+
+                    {/* Mobile fireflies */}
+                    {MOBILE_FIREFLIES.map((firefly, index) => (
+                      <div
+                        key={`mobile-firefly-${index}`}
+                        className="absolute rounded-full"
+                        style={{
+                          width: firefly.size,
+                          height: firefly.size,
+                          left: `${firefly.left}%`,
+                          top: `${firefly.top}%`,
+                          background: "radial-gradient(circle, rgba(255,240,170,0.9) 0%, rgba(255,226,146,0.5) 40%, transparent 75%)",
+                          boxShadow: "0 0 12px 3px rgba(255,226,146,0.5)",
+                          filter: "blur(1px)",
+                          animation: `firefly-wander ${firefly.duration} ease-in-out ${firefly.delay} infinite`,
+                        }}
+                      />
+                    ))}
+
+                    {/* Mobile lanterns */}
+                    {MOBILE_LANTERNS.map((lantern, index) => (
+                      <div
+                        key={`mobile-lantern-${index}`}
+                        className="absolute rounded-full"
+                        style={{
+                          width: lantern.size,
+                          height: lantern.size,
+                          left: `${lantern.left}%`,
+                          top: `${lantern.top}%`,
+                          transform: "translate(-50%, -50%)",
+                          background: `radial-gradient(circle, rgba(${lantern.color},0.7) 0%, rgba(${lantern.color},0.3) 42%, transparent 74%)`,
+                          boxShadow: `0 0 20px 5px rgba(${lantern.color},0.25)`,
+                          animation: `lantern-flicker ${2.6 + index * 0.25}s ease-in-out ${index * 0.2}s infinite`,
+                        }}
+                      />
+                    ))}
+
+                    {/* Mobile fairy dust */}
+                    {MOBILE_FAIRY_DUST.map((dust, index) => (
+                      <div
+                        key={`mobile-dust-${index}`}
+                        className="absolute rounded-full"
+                        style={{
+                          width: dust.size,
+                          height: dust.size,
+                          left: `${dust.left}%`,
+                          top: `${dust.top}%`,
+                          background: "radial-gradient(circle, rgba(255,255,220,1) 0%, rgba(255,230,160,0.7) 40%, transparent 100%)",
+                          boxShadow: "0 0 10px 2px rgba(255,220,130,0.6)",
+                          willChange: "transform, opacity",
+                          animation: `fairy-dust-rise ${dust.duration} ease-in-out ${dust.delay} infinite`,
                         }}
                       />
                     ))}
                   </div>
                 )}
+
+                {/* Mobile aurora */}
+                <div
+                  className="absolute pointer-events-none"
+                  style={{
+                    zIndex: 21,
+                    top: 0,
+                    left: "-30%",
+                    width: "160%",
+                    height: "35%",
+                    background: "linear-gradient(90deg, rgba(124,58,237,0.35) 0%, rgba(6,182,212,0.28) 35%, rgba(255,200,100,0.20) 65%, rgba(124,58,237,0.30) 100%)",
+                    filter: "blur(35px)",
+                    willChange: "transform, opacity",
+                    transform: `translate(${-parallax.x * 0.8}px, ${-parallax.y * 0.8}px)`,
+                    transition: "transform 0.3s ease-out",
+                    animation: "aurora-wave 14s ease-in-out infinite",
+                  }}
+                />
 
                 {MOBILE_SCENE_BUILDINGS.map((building, index) => {
                   const zone = building.mobile;
@@ -833,6 +1107,31 @@ export default function AdventureMap() {
           </div>
         )}
       </div>
+
+      {/* Burst particles — fixed position overlay */}
+      {burstParticles.map(burst => (
+        <div
+          key={burst.id}
+          className="pointer-events-none"
+          style={{ position: "fixed", left: burst.x, top: burst.y, zIndex: 9999 }}
+        >
+          {burst.particles.map((p, i) => (
+            <div
+              key={i}
+              className="absolute rounded-full"
+              style={{
+                width: 6,
+                height: 6,
+                background: p.color,
+                boxShadow: `0 0 8px ${p.color}`,
+                "--bx": p.bx,
+                "--by": p.by,
+                animation: "burst-particle 0.6s ease-out forwards",
+              } as React.CSSProperties}
+            />
+          ))}
+        </div>
+      ))}
     </>
   );
 }

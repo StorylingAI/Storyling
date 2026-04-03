@@ -837,16 +837,20 @@ export default function Library() {
         {!library || library.length === 0 ? (
           <Card className="rounded-card shadow-playful-lg border-2 animate-bounce-in">
             <CardContent className="py-16 text-center space-y-6">
-              <img src="/flip-mascot.png" alt="Flip" className="w-32 h-32 mx-auto animate-float" />
+              <img src="/storyling-logo.png" alt="Storyling" className="w-32 h-32 mx-auto animate-float" />
               <div>
                 <h3 className="text-2xl font-bold mb-2">No content yet</h3>
                 <p className="text-muted-foreground text-lg max-w-md mx-auto">
                   Start creating your first story to begin your learning journey! Flip is excited to help you learn.
                 </p>
               </div>
-              <Button 
+              <Button
                 onClick={() => setLocation("/create")}
-                className="rounded-button gradient-warm text-white hover-lift hover-glow active-scale border-0 h-12 text-lg px-8 transition-all"
+                className="rounded-button text-white hover-lift hover-glow active-scale border-0 h-12 text-lg px-8 transition-all"
+                style={{
+                  background: 'linear-gradient(135deg, #7C3AED 0%, #06B6D4 100%)',
+                  boxShadow: '0 6px 20px -4px rgba(124, 58, 237, 0.5)',
+                }}
               >
                 <Sparkles className="mr-2 h-5 w-5" />
                 Create Your First Story
