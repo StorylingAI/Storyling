@@ -1,4 +1,16 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, boolean, date, json, float, decimal } from "drizzle-orm/mysql-core";
+import {
+  int,
+  mysqlEnum,
+  mysqlTable,
+  text,
+  timestamp,
+  varchar,
+  boolean,
+  date,
+  json,
+  float,
+  decimal,
+} from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
@@ -8,28 +20,47 @@ export const users = mysqlTable("users", {
   openId: varchar("openId", { length: 64 }).unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
+  avatarUrl: text("avatar_url"),
   passwordHash: varchar("password_hash", { length: 255 }),
   emailVerified: boolean("email_verified").default(false).notNull(),
   verificationToken: varchar("verification_token", { length: 255 }),
   verificationTokenExpiry: timestamp("verification_token_expiry"),
   loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin", "teacher", "org_admin"]).default("user").notNull(),
-  preferredLanguage: varchar("preferred_language", { length: 10 }).default("en"),
-  preferredTranslationLanguage: varchar("preferred_translation_language", { length: 10 }).default("en"),
+  role: mysqlEnum("role", ["user", "admin", "teacher", "org_admin"])
+    .default("user")
+    .notNull(),
+  preferredLanguage: varchar("preferred_language", { length: 10 }).default(
+    "en"
+  ),
+  preferredTranslationLanguage: varchar("preferred_translation_language", {
+    length: 10,
+  }).default("en"),
   // Individual subscription fields
-  subscriptionTier: mysqlEnum("subscription_tier", ["free", "premium", "premium_plus"]).default("free").notNull(), // premium_plus kept for backward compat, treated as premium
+  subscriptionTier: mysqlEnum("subscription_tier", [
+    "free",
+    "premium",
+    "premium_plus",
+  ])
+    .default("free")
+    .notNull(), // premium_plus kept for backward compat, treated as premium
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }),
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }),
   subscriptionStatus: varchar("subscription_status", { length: 50 }),
   subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
-  premiumOnboardingCompleted: boolean("premium_onboarding_completed").default(false).notNull(),
+  premiumOnboardingCompleted: boolean("premium_onboarding_completed")
+    .default(false)
+    .notNull(),
   // Weekly goal tracking
   weeklyGoal: int("weekly_goal").default(5).notNull(), // Number of stories to create per week
   weeklyProgress: int("weekly_progress").default(0).notNull(), // Current week's story count
   weekStartDate: timestamp("week_start_date").defaultNow().notNull(), // When current week started
-  weeklyGoalEmailSent: boolean("weekly_goal_email_sent").default(false).notNull(), // Track if congratulations email was sent this week
+  weeklyGoalEmailSent: boolean("weekly_goal_email_sent")
+    .default(false)
+    .notNull(), // Track if congratulations email was sent this week
   weeklyGoalStreak: int("weekly_goal_streak").default(0).notNull(), // Number of consecutive weeks goal was reached
-  lastWeekGoalReached: boolean("last_week_goal_reached").default(false).notNull(), // Whether last week's goal was reached
+  lastWeekGoalReached: boolean("last_week_goal_reached")
+    .default(false)
+    .notNull(), // Whether last week's goal was reached
   bonusStoryCredits: int("bonus_story_credits").default(3).notNull(), // Starter pack: 3 free stories on signup
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -67,6 +98,7 @@ export const userStats = mysqlTable("user_stats", {
   longestStreak: int("longest_streak").default(0).notNull(),
   lastActivityDate: date("last_activity_date"),
   totalXp: int("total_xp").default(0).notNull(),
+  coins: int("coins").default(0).notNull(),
   level: int("level").default(1).notNull(),
   storiesCompleted: int("stories_completed").default(0).notNull(),
   quizzesCompleted: int("quizzes_completed").default(0).notNull(),
@@ -80,6 +112,24 @@ export type UserStats = typeof userStats.$inferSelect;
 export type InsertUserStats = typeof userStats.$inferInsert;
 
 /**
+ * Reward claims for dashboard challenges.
+ * `periodKey` scopes idempotency per day/week depending on the challenge.
+ */
+export const challengeRewardClaims = mysqlTable("challenge_reward_claims", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("user_id").notNull(),
+  challengeKey: varchar("challenge_key", { length: 64 }).notNull(),
+  periodKey: varchar("period_key", { length: 32 }).notNull(),
+  xpAwarded: int("xp_awarded").default(0).notNull(),
+  coinsAwarded: int("coins_awarded").default(0).notNull(),
+  claimedAt: timestamp("claimed_at").defaultNow().notNull(),
+});
+
+export type ChallengeRewardClaim = typeof challengeRewardClaims.$inferSelect;
+export type InsertChallengeRewardClaim =
+  typeof challengeRewardClaims.$inferInsert;
+
+/**
  * Achievement definitions
  */
 export const achievements = mysqlTable("achievements", {
@@ -88,7 +138,14 @@ export const achievements = mysqlTable("achievements", {
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description").notNull(),
   icon: varchar("icon", { length: 50 }).notNull(), // Emoji or icon name
-  category: mysqlEnum("category", ["streak", "stories", "quizzes", "vocabulary", "collections", "special"]).notNull(),
+  category: mysqlEnum("category", [
+    "streak",
+    "stories",
+    "quizzes",
+    "vocabulary",
+    "collections",
+    "special",
+  ]).notNull(),
   requirement: int("requirement").notNull(), // e.g., 7 for "7-day streak"
   xpReward: int("xp_reward").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -183,20 +240,26 @@ export const vocabularyCollections = mysqlTable("vocabulary_collections", {
 });
 
 export type VocabularyCollection = typeof vocabularyCollections.$inferSelect;
-export type InsertVocabularyCollection = typeof vocabularyCollections.$inferInsert;
+export type InsertVocabularyCollection =
+  typeof vocabularyCollections.$inferInsert;
 
 /**
  * User likes on vocabulary collections
  */
-export const vocabularyCollectionLikes = mysqlTable("vocabulary_collection_likes", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("user_id").notNull(),
-  collectionId: int("collection_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const vocabularyCollectionLikes = mysqlTable(
+  "vocabulary_collection_likes",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    userId: int("user_id").notNull(),
+    collectionId: int("collection_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }
+);
 
-export type VocabularyCollectionLike = typeof vocabularyCollectionLikes.$inferSelect;
-export type InsertVocabularyCollectionLike = typeof vocabularyCollectionLikes.$inferInsert;
+export type VocabularyCollectionLike =
+  typeof vocabularyCollectionLikes.$inferSelect;
+export type InsertVocabularyCollectionLike =
+  typeof vocabularyCollectionLikes.$inferInsert;
 
 export type VocabularyList = typeof vocabularyLists.$inferSelect;
 export type InsertVocabularyList = typeof vocabularyLists.$inferInsert;
@@ -214,7 +277,12 @@ export const generatedContent = mysqlTable("generated_content", {
   titleTranslation: varchar("title_translation", { length: 200 }), // Story title translated to user's preferred language
   difficultyLevel: varchar("difficulty_level", { length: 10 }), // HSK 1-6 for Chinese, CEFR A1-C2 for others
   thumbnailUrl: text("thumbnail_url"), // S3 URL for story thumbnail image
-  thumbnailStyle: mysqlEnum("thumbnail_style", ["realistic", "illustrated", "minimalist", "pixar"]).default("pixar"), // Thumbnail visual style
+  thumbnailStyle: mysqlEnum("thumbnail_style", [
+    "realistic",
+    "illustrated",
+    "minimalist",
+    "pixar",
+  ]).default("pixar"), // Thumbnail visual style
   voiceType: varchar("voice_type", { length: 100 }), // For podcast mode
   narratorGender: mysqlEnum("narrator_gender", ["male", "female"]), // For podcast mode
   cinematicStyle: varchar("cinematic_style", { length: 100 }), // For film mode
@@ -227,7 +295,9 @@ export const generatedContent = mysqlTable("generated_content", {
   audioAlignment: json("audio_alignment"), // ElevenLabs character-level timing data {characters, character_start_times_seconds, character_end_times_seconds}
   videoUrl: text("video_url"), // S3 URL for film video
   transcript: text("transcript"), // Full transcript with timestamps
-  status: mysqlEnum("status", ["pending", "generating", "completed", "failed"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "generating", "completed", "failed"])
+    .default("pending")
+    .notNull(),
   progress: int("progress").default(0).notNull(), // 0-100 percentage
   progressStage: varchar("progress_stage", { length: 100 }), // Current generation stage
   retryCount: int("retry_count").default(0).notNull(),
@@ -287,7 +357,9 @@ export const wordbank = mysqlTable("wordbank", {
   targetLanguage: varchar("target_language", { length: 100 }).notNull(),
   exampleSentences: json("example_sentences").$type<string[]>(), // Array of example sentences
   audioUrl: text("audio_url"), // URL to pronunciation audio
-  masteryLevel: varchar("mastery_level", { length: 20 }).default("learning").notNull(), // learning, familiar, mastered
+  masteryLevel: varchar("mastery_level", { length: 20 })
+    .default("learning")
+    .notNull(), // learning, familiar, mastered
   timesCorrect: int("times_correct").default(0).notNull(),
   timesIncorrect: int("times_incorrect").default(0).notNull(),
   lastPracticedAt: timestamp("last_practiced_at"),
@@ -313,7 +385,8 @@ export const dismissedSuggestions = mysqlTable("dismissed_suggestions", {
 });
 
 export type DismissedSuggestion = typeof dismissedSuggestions.$inferSelect;
-export type InsertDismissedSuggestion = typeof dismissedSuggestions.$inferInsert;
+export type InsertDismissedSuggestion =
+  typeof dismissedSuggestions.$inferInsert;
 
 /**
  * Practice history - tracks wordbank practice sessions
@@ -415,7 +488,9 @@ export const batchJobs = mysqlTable("batch_jobs", {
   totalItems: int("total_items").notNull(),
   completedItems: int("completed_items").default(0).notNull(),
   failedItems: int("failed_items").default(0).notNull(),
-  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"])
+    .default("pending")
+    .notNull(),
   csvData: text("csv_data").notNull(), // JSON array of parsed CSV rows
   results: text("results"), // JSON array of generated content IDs and errors
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -431,13 +506,22 @@ export type InsertBatchJob = typeof batchJobs.$inferInsert;
 export const organizations = mysqlTable("organizations", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
-  type: mysqlEnum("type", ["school", "university", "corporate", "other"]).default("school").notNull(),
+  type: mysqlEnum("type", ["school", "university", "corporate", "other"])
+    .default("school")
+    .notNull(),
   contactEmail: varchar("contact_email", { length: 320 }),
   contactName: varchar("contact_name", { length: 255 }),
   maxStudents: int("max_students").default(100).notNull(), // License limit
   maxTeachers: int("max_teachers").default(10).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
-  subscriptionTier: mysqlEnum("subscription_tier", ["trial", "basic", "premium", "enterprise"]).default("trial").notNull(),
+  subscriptionTier: mysqlEnum("subscription_tier", [
+    "trial",
+    "basic",
+    "premium",
+    "enterprise",
+  ])
+    .default("trial")
+    .notNull(),
   subscriptionExpiresAt: timestamp("subscription_expires_at"),
   stripeCustomerId: varchar("stripe_customer_id", { length: 255 }), // Stripe Customer ID
   stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }), // Stripe Subscription ID
@@ -488,7 +572,9 @@ export const classMembers = mysqlTable("class_members", {
   classId: int("class_id").notNull(),
   userId: int("user_id").notNull(), // Student user ID
   enrolledAt: timestamp("enrolled_at").defaultNow().notNull(),
-  status: mysqlEnum("status", ["active", "inactive", "removed"]).default("active").notNull(),
+  status: mysqlEnum("status", ["active", "inactive", "removed"])
+    .default("active")
+    .notNull(),
 });
 
 export type ClassMember = typeof classMembers.$inferSelect;
@@ -521,14 +607,22 @@ export const assignmentSubmissions = mysqlTable("assignment_submissions", {
   assignmentId: int("assignment_id").notNull(),
   userId: int("user_id").notNull(), // Student user ID
   contentId: int("content_id"), // Generated content for this submission
-  status: mysqlEnum("status", ["not_started", "in_progress", "completed", "overdue"]).default("not_started").notNull(),
+  status: mysqlEnum("status", [
+    "not_started",
+    "in_progress",
+    "completed",
+    "overdue",
+  ])
+    .default("not_started")
+    .notNull(),
   completedAt: timestamp("completed_at"),
   submittedAt: timestamp("submitted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type AssignmentSubmission = typeof assignmentSubmissions.$inferSelect;
-export type InsertAssignmentSubmission = typeof assignmentSubmissions.$inferInsert;
+export type InsertAssignmentSubmission =
+  typeof assignmentSubmissions.$inferInsert;
 
 /**
  * Enrollment invitations for students to join classes
@@ -540,14 +634,17 @@ export const enrollmentInvitations = mysqlTable("enrollment_invitations", {
   email: varchar("email", { length: 320 }).notNull(),
   name: varchar("name", { length: 255 }),
   token: varchar("token", { length: 64 }).notNull().unique(),
-  status: mysqlEnum("status", ["pending", "accepted", "expired"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "accepted", "expired"])
+    .default("pending")
+    .notNull(),
   invitedAt: timestamp("invited_at").defaultNow().notNull(),
   acceptedAt: timestamp("accepted_at"),
   expiresAt: timestamp("expires_at").notNull(),
 });
 
 export type EnrollmentInvitation = typeof enrollmentInvitations.$inferSelect;
-export type InsertEnrollmentInvitation = typeof enrollmentInvitations.$inferInsert;
+export type InsertEnrollmentInvitation =
+  typeof enrollmentInvitations.$inferInsert;
 
 /**
  * User-created collections for organizing stories
@@ -599,22 +696,29 @@ export const collectionViewAnalytics = mysqlTable("collection_view_analytics", {
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
-export type CollectionViewAnalytics = typeof collectionViewAnalytics.$inferSelect;
-export type InsertCollectionViewAnalytics = typeof collectionViewAnalytics.$inferInsert;
+export type CollectionViewAnalytics =
+  typeof collectionViewAnalytics.$inferSelect;
+export type InsertCollectionViewAnalytics =
+  typeof collectionViewAnalytics.$inferInsert;
 
 /**
  * Collection clone analytics - tracks daily clone trends
  */
-export const collectionCloneAnalytics = mysqlTable("collection_clone_analytics", {
-  id: int("id").autoincrement().primaryKey(),
-  collectionId: int("collection_id").notNull(),
-  cloneDate: date("clone_date").notNull(), // Date of clones (YYYY-MM-DD)
-  cloneCount: int("clone_count").default(0).notNull(), // Number of clones on this date
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const collectionCloneAnalytics = mysqlTable(
+  "collection_clone_analytics",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    collectionId: int("collection_id").notNull(),
+    cloneDate: date("clone_date").notNull(), // Date of clones (YYYY-MM-DD)
+    cloneCount: int("clone_count").default(0).notNull(), // Number of clones on this date
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }
+);
 
-export type CollectionCloneAnalytics = typeof collectionCloneAnalytics.$inferSelect;
-export type InsertCollectionCloneAnalytics = typeof collectionCloneAnalytics.$inferInsert;
+export type CollectionCloneAnalytics =
+  typeof collectionCloneAnalytics.$inferSelect;
+export type InsertCollectionCloneAnalytics =
+  typeof collectionCloneAnalytics.$inferInsert;
 
 /**
  * Collection share events - tracks social sharing activity
@@ -623,12 +727,18 @@ export const collectionShareEvents = mysqlTable("collection_share_events", {
   id: int("id").autoincrement().primaryKey(),
   collectionId: int("collection_id").notNull(),
   userId: int("user_id"), // Optional - may be null for anonymous shares
-  platform: mysqlEnum("platform", ["twitter", "linkedin", "facebook", "copy_link"]).notNull(),
+  platform: mysqlEnum("platform", [
+    "twitter",
+    "linkedin",
+    "facebook",
+    "copy_link",
+  ]).notNull(),
   sharedAt: timestamp("shared_at").defaultNow().notNull(),
 });
 
 export type CollectionShareEvent = typeof collectionShareEvents.$inferSelect;
-export type InsertCollectionShareEvent = typeof collectionShareEvents.$inferInsert;
+export type InsertCollectionShareEvent =
+  typeof collectionShareEvents.$inferInsert;
 
 /**
  * Tracks which milestones have been reached and notified for collections
@@ -643,8 +753,8 @@ export const collectionMilestones = mysqlTable("collection_milestones", {
 });
 
 export type CollectionMilestone = typeof collectionMilestones.$inferSelect;
-export type InsertCollectionMilestone = typeof collectionMilestones.$inferInsert;
-
+export type InsertCollectionMilestone =
+  typeof collectionMilestones.$inferInsert;
 
 /**
  * User follows (social connections between users)
@@ -665,7 +775,13 @@ export type InsertUserFollow = typeof userFollows.$inferInsert;
 export const notifications = mysqlTable("notifications", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(), // User receiving the notification
-  type: mysqlEnum("type", ["new_follower", "new_collection", "collection_featured", "badge_earned", "story_ready"]).notNull(),
+  type: mysqlEnum("type", [
+    "new_follower",
+    "new_collection",
+    "collection_featured",
+    "badge_earned",
+    "story_ready",
+  ]).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   content: text("content").notNull(),
   relatedUserId: int("related_user_id"), // For follower notifications
@@ -684,7 +800,11 @@ export type InsertNotification = typeof notifications.$inferInsert;
 export const recentlyViewed = mysqlTable("recently_viewed", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
-  itemType: mysqlEnum("item_type", ["story", "collection", "wordbank"]).notNull(),
+  itemType: mysqlEnum("item_type", [
+    "story",
+    "collection",
+    "wordbank",
+  ]).notNull(),
   itemId: int("item_id").notNull(), // ID of the story, collection, or other item
   itemTitle: varchar("item_title", { length: 500 }), // Cached title for display
   itemThumbnail: text("item_thumbnail"), // Cached thumbnail URL
@@ -701,7 +821,14 @@ export const levelTestResults = mysqlTable("level_test_results", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
   targetLanguage: varchar("target_language", { length: 50 }).notNull(),
-  proficiencyLevel: mysqlEnum("proficiency_level", ["A1", "A2", "B1", "B2", "C1", "C2"]).notNull(),
+  proficiencyLevel: mysqlEnum("proficiency_level", [
+    "A1",
+    "A2",
+    "B1",
+    "B2",
+    "C1",
+    "C2",
+  ]).notNull(),
   score: int("score").notNull(), // Percentage score (0-100)
   totalQuestions: int("total_questions").notNull(),
   correctAnswers: int("correct_answers").notNull(),
@@ -777,7 +904,8 @@ export const breadcrumbPreferences = mysqlTable("breadcrumb_preferences", {
 });
 
 export type BreadcrumbPreferences = typeof breadcrumbPreferences.$inferSelect;
-export type InsertBreadcrumbPreferences = typeof breadcrumbPreferences.$inferInsert;
+export type InsertBreadcrumbPreferences =
+  typeof breadcrumbPreferences.$inferInsert;
 
 /**
  * Collection badges - gamification badges for collections
@@ -786,12 +914,12 @@ export const collectionBadges = mysqlTable("collection_badges", {
   id: int("id").autoincrement().primaryKey(),
   collectionId: int("collection_id").notNull(),
   badgeType: mysqlEnum("badge_type", [
-    "trending",           // High recent view growth
-    "top_100",            // In top 100 by total views
+    "trending", // High recent view growth
+    "top_100", // In top 100 by total views
     "community_favorite", // High clone rate
-    "rising_star",        // New collection with rapid growth
-    "viral",              // Exceptional share rate
-    "evergreen"           // Consistent views over time
+    "rising_star", // New collection with rapid growth
+    "viral", // Exceptional share rate
+    "evergreen", // Consistent views over time
   ]).notNull(),
   awardedAt: timestamp("awarded_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at"), // Some badges expire (e.g., trending)
@@ -808,14 +936,17 @@ export const emailDigestPreferences = mysqlTable("email_digest_preferences", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull().unique(),
   isEnabled: boolean("is_enabled").default(true).notNull(),
-  frequency: mysqlEnum("frequency", ["weekly", "biweekly", "monthly"]).default("weekly").notNull(),
+  frequency: mysqlEnum("frequency", ["weekly", "biweekly", "monthly"])
+    .default("weekly")
+    .notNull(),
   lastSentAt: timestamp("last_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
 export type EmailDigestPreference = typeof emailDigestPreferences.$inferSelect;
-export type InsertEmailDigestPreference = typeof emailDigestPreferences.$inferInsert;
+export type InsertEmailDigestPreference =
+  typeof emailDigestPreferences.$inferInsert;
 
 /**
  * Weekly digest history - tracks sent digest emails
@@ -859,15 +990,20 @@ export type InsertCollectionCategory = typeof collectionCategories.$inferInsert;
 /**
  * Collection category assignments - many-to-many relationship
  */
-export const collectionCategoryAssignments = mysqlTable("collection_category_assignments", {
-  id: int("id").autoincrement().primaryKey(),
-  collectionId: int("collection_id").notNull(),
-  categoryId: int("category_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const collectionCategoryAssignments = mysqlTable(
+  "collection_category_assignments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    collectionId: int("collection_id").notNull(),
+    categoryId: int("category_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }
+);
 
-export type CollectionCategoryAssignment = typeof collectionCategoryAssignments.$inferSelect;
-export type InsertCollectionCategoryAssignment = typeof collectionCategoryAssignments.$inferInsert;
+export type CollectionCategoryAssignment =
+  typeof collectionCategoryAssignments.$inferSelect;
+export type InsertCollectionCategoryAssignment =
+  typeof collectionCategoryAssignments.$inferInsert;
 
 /**
  * Collection tags - flexible tagging system
@@ -886,23 +1022,33 @@ export type InsertCollectionTag = typeof collectionTags.$inferInsert;
 /**
  * Collection tag assignments - many-to-many relationship
  */
-export const collectionTagAssignments = mysqlTable("collection_tag_assignments", {
-  id: int("id").autoincrement().primaryKey(),
-  collectionId: int("collection_id").notNull(),
-  tagId: int("tag_id").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const collectionTagAssignments = mysqlTable(
+  "collection_tag_assignments",
+  {
+    id: int("id").autoincrement().primaryKey(),
+    collectionId: int("collection_id").notNull(),
+    tagId: int("tag_id").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  }
+);
 
-export type CollectionTagAssignment = typeof collectionTagAssignments.$inferSelect;
-export type InsertCollectionTagAssignment = typeof collectionTagAssignments.$inferInsert;
+export type CollectionTagAssignment =
+  typeof collectionTagAssignments.$inferSelect;
+export type InsertCollectionTagAssignment =
+  typeof collectionTagAssignments.$inferInsert;
 
 /**
  * Digest jobs - tracks scheduled digest email jobs
  */
 export const digestJobs = mysqlTable("digest_jobs", {
   id: int("id").autoincrement().primaryKey(),
-  jobType: mysqlEnum("job_type", ["weekly_digest", "story_highlights"]).notNull(),
-  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
+  jobType: mysqlEnum("job_type", [
+    "weekly_digest",
+    "story_highlights",
+  ]).notNull(),
+  status: mysqlEnum("status", ["pending", "processing", "completed", "failed"])
+    .default("pending")
+    .notNull(),
   scheduledFor: timestamp("scheduled_for").notNull(),
   startedAt: timestamp("started_at"),
   completedAt: timestamp("completed_at"),
@@ -923,7 +1069,10 @@ export type InsertDigestJob = typeof digestJobs.$inferInsert;
 export const userDigests = mysqlTable("user_digests", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
-  digestType: mysqlEnum("digest_type", ["weekly_creator", "story_highlights"]).notNull(),
+  digestType: mysqlEnum("digest_type", [
+    "weekly_creator",
+    "story_highlights",
+  ]).notNull(),
   title: varchar("title", { length: 255 }).notNull(),
   content: json("content").notNull(), // Structured digest data
   weekStartDate: date("week_start_date"),
@@ -956,13 +1105,17 @@ export const notificationPreferences = mysqlTable("notification_preferences", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull().unique(),
   weeklyGoalReminders: boolean("weekly_goal_reminders").default(true).notNull(),
-  achievementNotifications: boolean("achievement_notifications").default(true).notNull(),
+  achievementNotifications: boolean("achievement_notifications")
+    .default(true)
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
 
-export type NotificationPreference = typeof notificationPreferences.$inferSelect;
-export type InsertNotificationPreference = typeof notificationPreferences.$inferInsert;
+export type NotificationPreference =
+  typeof notificationPreferences.$inferSelect;
+export type InsertNotificationPreference =
+  typeof notificationPreferences.$inferInsert;
 
 /**
  * Leaderboard entries - tracks user rankings for weekly achievements
@@ -991,7 +1144,11 @@ export const achievementShares = mysqlTable("achievement_shares", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull(),
   achievementType: varchar("achievement_type", { length: 50 }).notNull(), // e.g., "7_day_streak", "30_day_streak"
-  platform: mysqlEnum("platform", ["twitter", "facebook", "linkedin"]).notNull(),
+  platform: mysqlEnum("platform", [
+    "twitter",
+    "facebook",
+    "linkedin",
+  ]).notNull(),
   sharedAt: timestamp("shared_at").defaultNow().notNull(),
 });
 
@@ -1028,7 +1185,9 @@ export const referralConversions = mysqlTable("referral_conversions", {
   referredUserEmail: varchar("referred_user_email", { length: 320 }), // Email of referred user
   discountApplied: int("discount_applied").notNull(), // Discount percentage applied
   rewardMonths: int("reward_months").default(1).notNull(), // Free months earned by referrer (default: 1)
-  rewardStatus: mysqlEnum("reward_status", ["pending", "applied", "expired"]).default("pending").notNull(),
+  rewardStatus: mysqlEnum("reward_status", ["pending", "applied", "expired"])
+    .default("pending")
+    .notNull(),
   rewardAppliedAt: timestamp("reward_applied_at"), // When reward was credited
   subscriptionStartedAt: timestamp("subscription_started_at"), // When referred user subscribed
   createdAt: timestamp("created_at").defaultNow().notNull(), // When referral link was used
@@ -1081,11 +1240,28 @@ export const affiliateEarnings = mysqlTable("affiliate_earnings", {
   affiliateUserId: int("affiliate_user_id").notNull(), // Affiliate earning the commission
   referralCodeId: int("referral_code_id").notNull(), // Which code generated this earning
   referredUserId: int("referred_user_id").notNull(), // User who was referred
-  conversionType: mysqlEnum("conversion_type", ["signup", "premium_monthly", "premium_annual"]).notNull(),
-  commissionAmount: decimal("commission_amount", { precision: 10, scale: 2 }).notNull(), // Amount earned in USD
+  conversionType: mysqlEnum("conversion_type", [
+    "signup",
+    "premium_monthly",
+    "premium_annual",
+  ]).notNull(),
+  commissionAmount: decimal("commission_amount", {
+    precision: 10,
+    scale: 2,
+  }).notNull(), // Amount earned in USD
   commissionPercent: int("commission_percent").notNull(), // Commission rate applied (e.g., 20 for 20%)
-  subscriptionAmount: decimal("subscription_amount", { precision: 10, scale: 2 }), // Original subscription amount
-  payoutStatus: mysqlEnum("payout_status", ["pending", "processing", "paid", "failed"]).default("pending").notNull(),
+  subscriptionAmount: decimal("subscription_amount", {
+    precision: 10,
+    scale: 2,
+  }), // Original subscription amount
+  payoutStatus: mysqlEnum("payout_status", [
+    "pending",
+    "processing",
+    "paid",
+    "failed",
+  ])
+    .default("pending")
+    .notNull(),
   paidAt: timestamp("paid_at"), // When commission was paid out
   paymentMethod: varchar("payment_method", { length: 50 }), // stripe, paypal, etc.
   paymentReference: varchar("payment_reference", { length: 255 }), // Transaction ID
@@ -1102,8 +1278,19 @@ export type InsertAffiliateEarning = typeof affiliateEarnings.$inferInsert;
 export const affiliatePayouts = mysqlTable("affiliate_payouts", {
   id: int("id").autoincrement().primaryKey(),
   affiliateUserId: int("affiliate_user_id").notNull(),
-  requestedAmount: decimal("requested_amount", { precision: 10, scale: 2 }).notNull(),
-  status: mysqlEnum("status", ["pending", "approved", "processing", "completed", "rejected"]).default("pending").notNull(),
+  requestedAmount: decimal("requested_amount", {
+    precision: 10,
+    scale: 2,
+  }).notNull(),
+  status: mysqlEnum("status", [
+    "pending",
+    "approved",
+    "processing",
+    "completed",
+    "rejected",
+  ])
+    .default("pending")
+    .notNull(),
   paymentMethod: varchar("payment_method", { length: 50 }).notNull(), // stripe, paypal, bank_transfer
   paymentDetails: text("payment_details"), // Encrypted payment info (email, account number, etc.)
   processedAt: timestamp("processed_at"),
@@ -1184,14 +1371,15 @@ export const reviewReminders = mysqlTable("review_reminders", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("user_id").notNull().unique(),
   enabled: boolean("enabled").notNull().default(true),
-  dailyReminderTime: varchar("daily_reminder_time", { length: 5 }).default("09:00"),
+  dailyReminderTime: varchar("daily_reminder_time", { length: 5 }).default(
+    "09:00"
+  ),
   emailReminders: boolean("email_reminders").notNull().default(true),
   pushReminders: boolean("push_reminders").notNull().default(true),
   lastReminderSentAt: timestamp("last_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
 });
-
 
 /**
  * A/B Testing: Experiments

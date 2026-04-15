@@ -470,6 +470,20 @@
       "when": 1772901341325,
       "tag": "0066_add_daily_usage_tracking",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1775842094652,
+      "tag": "0067_woozy_sersi",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1775845962934,
+      "tag": "0068_stormy_rocket_racer",
+      "breakpoints": true
     }
   ]
 }
