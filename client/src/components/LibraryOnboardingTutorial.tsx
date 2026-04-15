@@ -11,7 +11,7 @@ interface LibraryOnboardingTutorialProps {
 const tutorialSteps = [
   {
     id: "welcome",
-    title: "Welcome to Your Library! ðŸ“š",
+    title: "Welcome to Your Library! 📚",
     description: "Your personal collection of AI-powered stories. Let's explore how to make the most of it!",
     icon: Library,
     position: "center" as const,
