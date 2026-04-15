@@ -51,7 +51,7 @@ export const authRouter = router({
 
       // Check if email already exists
       const existingUser = await db
-        .select()
+        .select({ id: users.id })
         .from(users)
         .where(eq(users.email, input.email))
         .limit(1);
@@ -129,7 +129,13 @@ export const authRouter = router({
 
       // Find user by email
       const [user] = await db
-        .select()
+        .select({
+          id: users.id,
+          openId: users.openId,
+          name: users.name,
+          passwordHash: users.passwordHash,
+          emailVerified: users.emailVerified,
+        })
         .from(users)
         .where(eq(users.email, input.email))
         .limit(1);
@@ -173,7 +179,10 @@ export const authRouter = router({
 
       // Find user with this token
       const [user] = await db
-        .select()
+        .select({
+          id: users.id,
+          verificationTokenExpiry: users.verificationTokenExpiry,
+        })
         .from(users)
         .where(
           and(
@@ -211,7 +220,11 @@ export const authRouter = router({
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
       const [user] = await db
-        .select()
+        .select({
+          id: users.id,
+          name: users.name,
+          emailVerified: users.emailVerified,
+        })
         .from(users)
         .where(eq(users.email, input.email))
         .limit(1);
