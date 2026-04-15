@@ -132,6 +132,7 @@ export default function Content() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const qualityMenuRef = useRef<HTMLDivElement>(null);
+  const autoThumbnailRequestedRef = useRef<number | null>(null);
   
   // Close quality menu on outside click
   useEffect(() => {
@@ -201,6 +202,39 @@ export default function Content() {
   });
   
   const utils = trpc.useUtils();
+
+  const regenerateMissingThumbnailMutation = trpc.content.regenerateThumbnail.useMutation({
+    onSuccess: () => {
+      setThumbnailFailed(false);
+      utils.content.getById.invalidate({ id: contentId });
+    },
+    onError: (error) => {
+      console.error("[Content] Failed to auto-generate thumbnail:", error);
+    },
+  });
+
+  useEffect(() => {
+    setThumbnailFailed(false);
+  }, [content?.id, content?.thumbnailUrl]);
+
+  useEffect(() => {
+    if (!content || content.id !== contentId || content.status !== "completed") return;
+
+    const needsThumbnail = !content.thumbnailUrl || thumbnailFailed;
+    if (!needsThumbnail) return;
+    if (autoThumbnailRequestedRef.current === content.id) return;
+    if (regenerateMissingThumbnailMutation.isPending) return;
+
+    autoThumbnailRequestedRef.current = content.id;
+    regenerateMissingThumbnailMutation.mutate({ contentId: content.id, style: "pixar" });
+  }, [
+    content?.id,
+    content?.status,
+    content?.thumbnailUrl,
+    contentId,
+    thumbnailFailed,
+    regenerateMissingThumbnailMutation.isPending,
+  ]);
   
   const updateTitleMutation = trpc.content.updateTitle.useMutation({
     onSuccess: () => {

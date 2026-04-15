@@ -1,4 +1,5 @@
 import "dotenv/config";
+import axios from "axios";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
@@ -8,6 +9,7 @@ import { registerSecurityMiddleware, globalErrorHandler } from "./security";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { initWebPush } from "../pushNotifications";
+import { getTrackById } from "../musicLibrary";
 
 
 function isPortAvailable(port: number): Promise<boolean> {
@@ -59,6 +61,44 @@ async function startServer() {
   // Health check endpoint
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
+  app.get("/api/music/preview/:trackId", async (req, res, next) => {
+    const track = getTrackById(req.params.trackId);
+    if (!track) {
+      res.status(404).json({ error: "Track not found" });
+      return;
+    }
+
+    try {
+      const upstream = await axios.get(track.previewUrl, {
+        responseType: "stream",
+        timeout: 120000,
+        headers: req.headers.range ? { Range: req.headers.range } : undefined,
+        validateStatus: (status) => status >= 200 && status < 300,
+      });
+
+      res.status(upstream.status);
+      res.setHeader("Content-Type", "audio/mpeg");
+      res.setHeader("Accept-Ranges", upstream.headers["accept-ranges"] || "bytes");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Content-Disposition", `inline; filename="${track.id}.mp3"`);
+
+      const contentLength = upstream.headers["content-length"];
+      if (contentLength) {
+        res.setHeader("Content-Length", contentLength);
+      }
+
+      const contentRange = upstream.headers["content-range"];
+      if (contentRange) {
+        res.setHeader("Content-Range", contentRange);
+      }
+
+      upstream.data.on("error", next);
+      upstream.data.pipe(res);
+    } catch (error) {
+      next(error);
+    }
   });
 
   // Serve uploaded files (local storage backend)

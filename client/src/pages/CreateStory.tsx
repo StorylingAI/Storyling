@@ -423,6 +423,16 @@ export default function CreateStory() {
       <div className="min-h-screen relative overflow-hidden flex flex-col items-center justify-center"
         style={{ background: "linear-gradient(160deg, #4a1a7a 0%, #6b3fa0 20%, #4a5eb0 40%, #3a8dc0 60%, #5a7ec0 80%, #7a5ab0 100%)" }}
       >
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={() => setLocation("/dashboard")}
+          className="fixed left-4 top-4 z-20 h-10 rounded-lg border border-white/15 bg-white/10 px-3 text-white backdrop-blur-md hover:bg-white/20 hover:text-white"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to dashboard
+        </Button>
+
         {/* Animated stars / particles */}
         {Array.from({ length: 30 }).map((_, i) => (
           <div
@@ -488,10 +498,14 @@ export default function CreateStory() {
               </svg>
             </div>
             {/* Mascot */}
-            <div className="relative text-7xl sm:text-8xl" style={{
+            <div className="relative" style={{
               filter: "drop-shadow(0 0 20px rgba(180,140,255,0.5)) drop-shadow(0 0 40px rgba(100,180,255,0.3))",
             }}>
-              📖
+              <img
+                src="/storyling-logo.png"
+                alt="Storyling"
+                className="h-20 w-20 rounded-lg object-contain sm:h-24 sm:w-24"
+              />
             </div>
           </div>
 

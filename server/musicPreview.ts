@@ -7,11 +7,10 @@ import { getTrackById } from './musicLibrary';
 
 /**
  * Get preview URL for a music track
- * Returns the direct URL to the full track from Incompetech (Kevin MacLeod)
- * All tracks are royalty-free and licensed under Creative Commons
+ * Returns a local proxy URL so browsers receive audio-friendly headers.
  * 
  * @param trackId - ID of the music track
- * @returns URL of the music track
+ * @returns Local preview URL of the music track
  */
 export async function generateMusicPreview(trackId: string): Promise<string> {
   console.log(`[MusicPreview] Getting preview URL for track: ${trackId}`);
@@ -21,10 +20,8 @@ export async function generateMusicPreview(trackId: string): Promise<string> {
     throw new Error(`Track not found: ${trackId}`);
   }
 
-  // Return the direct URL to the full track from Incompetech
-  // These are real, royalty-free music tracks, not placeholder tones
-  console.log('[MusicPreview] Returning track URL:', track.previewUrl);
-  return track.previewUrl;
+  const previewUrl = `/api/music/preview/${encodeURIComponent(track.id)}`;
+  console.log('[MusicPreview] Returning proxied track URL:', previewUrl);
+  return previewUrl;
 }
-
 

@@ -112,7 +112,7 @@ function Router() {
       <Route path={"/payout-management"}>{() => <ProtectedRoute component={PayoutManagement} />}</Route>
       <Route path={"/affiliate-dashboard"}>{() => <ProtectedRoute component={AffiliateDashboard} />}</Route>
       <Route path={"/help-tutorials"}>{() => <ProtectedRoute component={HelpTutorials} />}</Route>
-      <Route path="/story/:id">{() => <ProtectedRoute component={StoryPreview} />}</Route>
+      <Route path="/story/:id" component={StoryPreview} />
       <Route path={"/reading-assistant"}>{() => <ProtectedRoute component={ReadingAssistant} />}</Route>
       <Route path={"/collections"}>{() => <ProtectedRoute component={Collections} />}</Route>
       <Route path={"/collection/:id"}>{() => <ProtectedRoute component={CollectionView} />}</Route>

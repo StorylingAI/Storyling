@@ -1,9 +1,9 @@
-import { useParams, useLocation } from "wouter";
+import { Link, useParams, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, BookOpen, ArrowLeft, Globe, Copy, Share2 } from "lucide-react";
+import { Loader2, BookOpen, ArrowLeft, Globe, Copy } from "lucide-react";
 import { APP_TITLE } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
@@ -26,7 +26,7 @@ export default function PublicCollectionView() {
   const params = useParams<{ token: string }>();
   const [, setLocation] = useLocation();
   const shareToken = params.token || "";
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const backPath = isAuthenticated ? "/app" : "/";
   const backLabel = isAuthenticated ? "Back to Dashboard" : "Go to Homepage";
 
@@ -207,55 +207,62 @@ export default function PublicCollectionView() {
               {collection.items.map((item) => {
                 const content = item.content;
                 if (!content) return null;
+                const storyTitle = content.title || `${content.theme} Story`;
+                const storyHref =
+                  collection.userId === user?.id ? `/content/${content.id}` : `/story/${content.id}`;
 
                 return (
-                  <Card
+                  <Link
                     key={item.id}
-                    className="overflow-hidden rounded-card shadow-playful hover-lift hover-glow active-scale transition-all border-2 animate-slide-up"
+                    href={storyHref}
+                    aria-label={`Open ${storyTitle}`}
+                    className="block rounded-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                   >
-                    {/* Thumbnail */}
-                    <div className="relative w-full h-48 bg-gradient-to-br from-purple-100 via-teal-100 to-pink-100 overflow-hidden">
-                      {content.thumbnailUrl ? (
-                        <img
-                          src={content.thumbnailUrl}
-                          alt={content.title || content.theme}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <BookOpen className="h-16 w-16 text-purple-300" />
+                    <Card className="h-full overflow-hidden rounded-card shadow-playful hover-lift hover-glow active-scale transition-all border-2 animate-slide-up cursor-pointer">
+                      {/* Thumbnail */}
+                      <div className="relative w-full h-48 bg-gradient-to-br from-purple-100 via-teal-100 to-pink-100 overflow-hidden">
+                        {content.thumbnailUrl ? (
+                          <img
+                            src={content.thumbnailUrl}
+                            alt={storyTitle}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <BookOpen className="h-16 w-16 text-purple-300" />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Content */}
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h3 className="font-semibold text-lg line-clamp-2">
+                            {storyTitle}
+                          </h3>
                         </div>
-                      )}
-                    </div>
 
-                    {/* Content */}
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <h3 className="font-semibold text-lg line-clamp-2">
-                          {content.title || `${content.theme} Story`}
-                        </h3>
-                      </div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <Badge variant="secondary" className="text-xs">
+                            {content.theme}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {content.mode}
+                          </Badge>
+                        </div>
 
-                      <div className="flex items-center gap-2 mb-3">
-                        <Badge variant="secondary" className="text-xs">
-                          {content.theme}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {content.mode}
-                        </Badge>
-                      </div>
+                        {content.storyText && (
+                          <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
+                            {content.storyText.slice(0, 150)}...
+                          </p>
+                        )}
 
-                      {content.storyText && (
-                        <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
-                          {content.storyText.slice(0, 150)}...
-                        </p>
-                      )}
-
-                      <div className="text-xs text-muted-foreground">
-                        Added {new Date(item.addedAt).toLocaleDateString()}
-                      </div>
-                    </CardContent>
-                  </Card>
+                        <div className="text-xs text-muted-foreground">
+                          Added {new Date(item.addedAt).toLocaleDateString()}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
                 );
               })}
             </div>

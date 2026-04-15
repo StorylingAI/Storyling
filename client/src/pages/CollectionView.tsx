@@ -19,6 +19,7 @@ export default function CollectionView() {
 
   const [isAddStoryOpen, setIsAddStoryOpen] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
+  const dragJustEndedRef = React.useRef(false);
 
   const { data: collection, isLoading } = trpc.collections.getCollectionById.useQuery(
     { id: collectionId },
@@ -68,6 +69,7 @@ export default function CollectionView() {
   ) || [];
 
   const handleDragStart = (itemId: number) => {
+    dragJustEndedRef.current = true;
     setDraggedItemId(itemId);
   };
 
@@ -96,6 +98,30 @@ export default function CollectionView() {
     });
     
     setDraggedItemId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItemId(null);
+    window.setTimeout(() => {
+      dragJustEndedRef.current = false;
+    }, 0);
+  };
+
+  const openStory = (contentId: number) => {
+    setLocation(`/content/${contentId}`);
+  };
+
+  const handleStoryClick = (contentId: number) => {
+    if (dragJustEndedRef.current) return;
+    openStory(contentId);
+  };
+
+  const handleStoryKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, contentId: number) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openStory(contentId);
+    }
   };
 
   if (!isAuthenticated) {
@@ -185,7 +211,13 @@ export default function CollectionView() {
                 onDragStart={() => handleDragStart(item.id)}
                 onDragOver={handleDragOver}
                 onDrop={() => handleDrop(item.id)}
-                className={`rounded-card shadow-playful hover-lift transition-all border-2 cursor-move ${
+                onDragEnd={handleDragEnd}
+                onClick={() => handleStoryClick(item.contentId)}
+                onKeyDown={(event) => handleStoryKeyDown(event, item.contentId)}
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${item.content?.title || `${item.content?.theme} Story`}`}
+                className={`rounded-card shadow-playful hover-lift transition-all border-2 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
                   draggedItemId === item.id ? "opacity-50" : ""
                 }`}
               >
@@ -218,7 +250,10 @@ export default function CollectionView() {
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
                     <Button
-                      onClick={() => setLocation(`/content/${item.contentId}`)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openStory(item.contentId);
+                      }}
                       className="rounded-button gradient-primary text-white hover-lift border-0"
                     >
                       <Play className="mr-2 h-4 w-4" />
@@ -228,7 +263,8 @@ export default function CollectionView() {
                       variant="ghost"
                       size="icon"
                       className="rounded-full text-destructive hover:bg-destructive/10"
-                      onClick={() => {
+                      onClick={(event) => {
+                        event.stopPropagation();
                         if (confirm("Remove this story from the collection?")) {
                           removeFromCollectionMutation.mutate({
                             collectionId,

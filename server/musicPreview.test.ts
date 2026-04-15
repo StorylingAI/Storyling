@@ -9,15 +9,15 @@ describe('Music Preview', () => {
     
     expect(previewUrl).toBeDefined();
     expect(typeof previewUrl).toBe('string');
-    expect(previewUrl).toContain('http');
+    expect(previewUrl).toBe('/api/music/preview/calm-1');
   });
 
-  it('should return Incompetech URL for real music tracks', async () => {
+  it('should return proxied URL instead of direct provider URL', async () => {
     const trackId = 'calm-1';
     const previewUrl = await generateMusicPreview(trackId);
     
-    // Should be a real Incompetech URL, not a placeholder tone
-    expect(previewUrl).toContain('incompetech.com');
+    expect(previewUrl).toContain('/api/music/preview/');
+    expect(previewUrl).not.toContain('incompetech.com');
   });
 
   it('should throw error for invalid track ID', async () => {
@@ -32,7 +32,7 @@ describe('Music Preview', () => {
     const previewUrl = await generateMusicPreview(trackId);
     
     expect(track).toBeDefined();
-    expect(previewUrl).toBe(track!.previewUrl);
+    expect(previewUrl).toBe(`/api/music/preview/${track!.id}`);
   });
 
   it('should work for all mood categories', async () => {
@@ -46,7 +46,7 @@ describe('Music Preview', () => {
     for (const trackId of testTracks) {
       const previewUrl = await generateMusicPreview(trackId);
       expect(previewUrl).toBeDefined();
-      expect(previewUrl).toContain('incompetech.com');
+      expect(previewUrl).toContain('/api/music/preview/');
     }
   });
 });
