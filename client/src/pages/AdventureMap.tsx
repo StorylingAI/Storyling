@@ -19,7 +19,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { BottomTabBar } from "@/components/BottomTabBar";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion, type Variants, useReducedMotion } from "framer-motion";
 
 type ContinueItem = {
   id: number;
@@ -38,98 +38,193 @@ type ExploreAvatar = {
   avatarUrl?: string | null;
   targetPath: string;
   collectionName: string;
+  totalXp: number;
+  level: number;
+  xpProgressPercent: number;
+  xpToNextLevel: number;
 };
 
 function CreateStoryTileIcon() {
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute bottom-2 left-1 h-7 w-8 -rotate-6 rounded-[5px] border-2 border-[#4A3A58] bg-[#FFF7DA] shadow-[0_4px_8px_rgba(60,42,75,0.18)] sm:h-8 sm:w-9">
-        <span className="absolute left-1 top-2 h-[2px] w-4 rounded-full bg-[#C9B58D]" />
-        <span className="absolute left-1 top-4 h-[2px] w-5 rounded-full bg-[#C9B58D]" />
-      </div>
-      <div className="absolute bottom-2 left-6 h-7 w-8 rotate-6 rounded-[5px] border-2 border-[#4A3A58] bg-[#FFF1CB] shadow-[0_4px_8px_rgba(60,42,75,0.16)] sm:h-8 sm:w-9">
-        <span className="absolute left-2 top-2 h-[2px] w-4 rounded-full bg-[#C9B58D]" />
-        <span className="absolute left-2 top-4 h-[2px] w-5 rounded-full bg-[#C9B58D]" />
-      </div>
-      <div className="absolute bottom-1 left-[30px] h-8 w-[3px] rotate-[34deg] rounded-full bg-[#C77B48] shadow-[0_1px_2px_rgba(70,42,40,0.2)] sm:h-10">
-        <span className="absolute -top-2 left-[-2px] h-3 w-2 rounded-t-full bg-[#F5D46B]" />
-        <span className="absolute -bottom-1 left-[-2px] h-2 w-2 rotate-45 bg-[#544153]" />
-      </div>
-    </div>
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      className="h-full w-full"
+      viewBox="0 0 72 72"
+      fill="none"
+    >
+      <path
+        d="M11 34c8.6-4.2 17.2-3.2 25 3.1v25.7c-7.8-6.2-16.4-7.3-25-3.1V34Z"
+        fill="#FFF8DE"
+        stroke="#4A3A58"
+        strokeWidth="2.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M61 34c-8.6-4.2-17.2-3.2-25 3.1v25.7c7.8-6.2 16.4-7.3 25-3.1V34Z"
+        fill="#FFF0C4"
+        stroke="#4A3A58"
+        strokeWidth="2.8"
+        strokeLinejoin="round"
+      />
+      <path d="M36 37v25.5" stroke="#4A3A58" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M17 41.5c4.7-1.2 9.1-.6 13.1 1.9" stroke="#C9B58D" strokeWidth="2" strokeLinecap="round" />
+      <path d="M17 48c4.9-1 9.2-.4 13.1 1.9" stroke="#C9B58D" strokeWidth="2" strokeLinecap="round" />
+      <path d="M42 43.4c3.7-2 8.1-2.5 13-1.3" stroke="#C9B58D" strokeWidth="2" strokeLinecap="round" />
+      <path d="M42 50c3.7-2 8-2.4 12.8-1.1" stroke="#C9B58D" strokeWidth="2" strokeLinecap="round" />
+      <g transform="rotate(35 55 26)">
+        <rect x="51" y="7" width="9" height="36" rx="3" fill="#D98558" stroke="#4A3A58" strokeWidth="2.3" />
+        <rect x="51" y="7" width="9" height="7.2" rx="2.6" fill="#F3D369" stroke="#4A3A58" strokeWidth="2.3" />
+        <path d="M51.1 42.2h8.8l-4.4 9.3-4.4-9.3Z" fill="#F7E4B6" stroke="#4A3A58" strokeWidth="2.3" strokeLinejoin="round" />
+        <path d="M54.2 49h2.6l-1.3 2.7-1.3-2.7Z" fill="#4A3A58" />
+      </g>
+      <path
+        d="M15 17l1.7 5 5 1.7-5 1.7-1.7 5-1.7-5-5-1.7 5-1.7 1.7-5Z"
+        fill="#FFD86F"
+        stroke="#4A3A58"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M28 8l1 3 3 1-3 1-1 3-1-3-3-1 3-1 1-3Z"
+        fill="#FFD86F"
+        stroke="#4A3A58"
+        strokeWidth="1.1"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
 function LibraryTileIcon() {
-  const books = [
-    ["left-[7px]", "top-2", "h-8", "#B66AA7"],
-    ["left-[17px]", "top-1", "h-9", "#6EC4D2"],
-    ["left-[28px]", "top-3", "h-7", "#FFD46C"],
-    ["left-[39px]", "top-2", "h-8", "#7E6AC7"],
-  ];
-
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute inset-x-1 bottom-1 h-10 rounded-[5px] border-2 border-[#4A3A58] bg-[#E7BD79] shadow-[0_4px_8px_rgba(60,42,75,0.16)] sm:h-11">
-        {books.map(([left, top, height, color]) => (
-          <span
-            key={`${left}-${color}`}
-            className={`absolute ${left} ${top} ${height} w-[7px] rounded-[3px] border border-[#4A3A58]/70`}
-            style={{ background: color }}
-          />
-        ))}
-        <span className="absolute bottom-2 left-1 right-1 h-[3px] rounded-full bg-[#4A3A58]/55" />
-      </div>
-    </div>
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      className="h-full w-full"
+      viewBox="0 0 72 72"
+      fill="none"
+    >
+      <rect x="6" y="12" width="60" height="50" rx="3.5" fill="#E7B874" stroke="#4A3A58" strokeWidth="3" />
+      <path d="M6 45.5h60" stroke="#4A3A58" strokeWidth="3" strokeLinecap="round" />
+      <path d="M15 14v46M58 14v46" stroke="#4A3A58" strokeWidth="2.2" strokeLinecap="round" opacity="0.85" />
+      <rect x="19" y="23" width="8" height="22" rx="1.5" fill="#D86A88" stroke="#4A3A58" strokeWidth="1.8" />
+      <rect x="30" y="17" width="8" height="28" rx="1.5" fill="#72C9D1" stroke="#4A3A58" strokeWidth="1.8" />
+      <rect x="42" y="26" width="8" height="19" rx="1.5" fill="#F4D16D" stroke="#4A3A58" strokeWidth="1.8" />
+      <rect x="52" y="20" width="8" height="25" rx="1.5" fill="#8A72C8" stroke="#4A3A58" strokeWidth="1.8" />
+      <path d="M19 54h39" stroke="#4A3A58" strokeWidth="3" strokeLinecap="round" opacity="0.62" />
+      <path d="M23 29v10M34 22v16M46 31v9M56 25v14" stroke="#FFFFFF" strokeWidth="1.3" strokeLinecap="round" opacity="0.56" />
+    </svg>
   );
 }
 
 function WordbankTileIcon() {
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute bottom-1 left-2 h-9 w-9 -rotate-12 rounded-[5px] border-2 border-[#4A3A58] bg-[#F6F1EE] shadow-[0_4px_8px_rgba(60,42,75,0.14)]">
-        <span className="absolute left-2 top-2 text-[10px] font-bold leading-none text-[#4A3A58]">
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      className="h-full w-full"
+      viewBox="0 0 72 72"
+      fill="none"
+    >
+      <g transform="rotate(-13 28 39)">
+        <rect
+          x="8"
+          y="18"
+          width="35"
+          height="42"
+          rx="4"
+          fill="#F7F0EE"
+          stroke="#4A3A58"
+          strokeWidth="3"
+        />
+        <text
+          x="17"
+          y="34"
+          fill="#4A3A58"
+          fontFamily="Fredoka, Arial, sans-serif"
+          fontSize="10.5"
+          fontWeight="700"
+        >
+          VO
+        </text>
+        <path
+          d="M16 46h19M16 52h14"
+          stroke="#C8BFC7"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+      </g>
+      <g transform="rotate(8 44 40)">
+        <rect
+          x="29"
+          y="17"
+          width="35"
+          height="42"
+          rx="4"
+          fill="#FDF8F2"
+          stroke="#4A3A58"
+          strokeWidth="3"
+        />
+        <text
+          x="38"
+          y="33"
+          fill="#4A3A58"
+          fontFamily="Fredoka, Arial, sans-serif"
+          fontSize="10.5"
+          fontWeight="700"
+        >
           VC
-        </span>
-        <span className="absolute bottom-2 left-2 h-[2px] w-5 rounded-full bg-[#C8BFC7]" />
-      </div>
-      <div className="absolute bottom-2 left-6 h-9 w-9 rotate-8 rounded-[5px] border-2 border-[#4A3A58] bg-[#FDF8F2] shadow-[0_4px_8px_rgba(60,42,75,0.16)]">
-        <span className="absolute left-2 top-2 text-[10px] font-bold leading-none text-[#4A3A58]">
-          VC
-        </span>
-        <span className="absolute bottom-2 left-2 h-[2px] w-5 rounded-full bg-[#C8BFC7]" />
-      </div>
-    </div>
+        </text>
+        <path
+          d="M37 45h19M37 51h14"
+          stroke="#C8BFC7"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+        />
+      </g>
+    </svg>
   );
 }
 
 function ChatTileIcon() {
   return (
-    <div className="relative h-full w-full">
-      <div className="absolute left-1 top-3 h-7 w-9 rounded-[9px] border-2 border-[#4A3A58] bg-[#F3EAFB] shadow-[0_4px_8px_rgba(60,42,75,0.14)]">
-        <span className="absolute -bottom-[6px] left-3 h-3 w-3 rotate-45 border-b-2 border-r-2 border-[#4A3A58] bg-[#F3EAFB]" />
-        <span className="absolute left-2 top-3 h-[3px] w-4 rounded-full bg-[#AFA0BC]" />
-      </div>
-      <div className="absolute bottom-1 right-1 h-7 w-9 rounded-[9px] border-2 border-[#4A3A58] bg-[#A8DDF7] shadow-[0_4px_8px_rgba(60,42,75,0.16)]">
-        <span className="absolute -bottom-[6px] right-3 h-3 w-3 rotate-45 border-b-2 border-r-2 border-[#4A3A58] bg-[#A8DDF7]" />
-        <span className="absolute left-2 top-3 h-[3px] w-4 rounded-full bg-[#5E7E9A]" />
-      </div>
-      <span className="absolute right-0 top-1 h-3 w-3 rounded-full border border-[#4A3A58] bg-[#F36D77]" />
-    </div>
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      className="h-full w-full"
+      viewBox="0 0 72 72"
+      fill="none"
+    >
+      <path d="M13 16h32a7 7 0 0 1 7 7v14a7 7 0 0 1-7 7H29l-10 9v-9h-6a7 7 0 0 1-7-7V23a7 7 0 0 1 7-7Z" fill="#F1E7F9" stroke="#4A3A58" strokeWidth="2.8" strokeLinejoin="round" />
+      <path d="M18 29h24M18 36h17" stroke="#B2A1BE" strokeWidth="2.3" strokeLinecap="round" />
+      <path d="M31 36h28a7 7 0 0 1 7 7v13a7 7 0 0 1-7 7H46l-10 8v-8h-5a7 7 0 0 1-7-7V43a7 7 0 0 1 7-7Z" fill="#A8DDF7" stroke="#4A3A58" strokeWidth="2.8" strokeLinejoin="round" />
+      <path d="M37 49h18M37 56h12" stroke="#5E7E9A" strokeWidth="2.3" strokeLinecap="round" />
+      <circle cx="61" cy="16" r="5.8" fill="#F36D77" stroke="#4A3A58" strokeWidth="2" />
+    </svg>
   );
 }
 
 /* ── Framer-motion animation variants ── */
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: {},
   show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
 };
-const fadeSlideUp = {
+const fadeSlideUp: Variants = {
   hidden: { opacity: 0, y: 24 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", damping: 20, stiffness: 200 } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring", damping: 20, stiffness: 200 },
+  },
 };
-const scaleIn = {
+const scaleIn: Variants = {
   hidden: { opacity: 0, scale: 0.85 },
-  show: { opacity: 1, scale: 1, transition: { type: "spring", damping: 18, stiffness: 180 } },
+  show: {
+    opacity: 1,
+    scale: 1,
+    transition: { type: "spring", damping: 18, stiffness: 180 },
+  },
 };
 
 /* ── Floating particles layer ── */
@@ -343,6 +438,39 @@ function getBadgeColor(seed: string) {
   return badgePalette[getSeedIndex(seed, badgePalette.length)];
 }
 
+function getLevelFromXp(totalXp: number) {
+  if (totalXp < 100) return 1;
+  if (totalXp < 300) return 2;
+  if (totalXp < 600) return 3;
+  if (totalXp < 1000) return 4;
+  return 5 + Math.floor((totalXp - 1000) / 500);
+}
+
+function getSafeNumber(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+}
+
+function getLevelStartXp(level: number) {
+  if (level <= 1) return 0;
+  if (level === 2) return 100;
+  if (level === 3) return 300;
+  if (level === 4) return 600;
+  return 1000 + (level - 5) * 500;
+}
+
+function getLevelProgress(totalXp: number, level: number) {
+  const startXp = getLevelStartXp(level);
+  const nextLevelXp = getLevelStartXp(level + 1);
+  const levelSpan = Math.max(1, nextLevelXp - startXp);
+  const progress = ((totalXp - startXp) / levelSpan) * 100;
+
+  return {
+    progressPercent: Math.max(0, Math.min(100, Math.round(progress))),
+    xpToNextLevel: Math.max(0, nextLevelXp - totalXp),
+  };
+}
+
 function getFlagEmoji(language?: string | null) {
   const normalized = language?.toLowerCase() ?? "";
   if (normalized.includes("spanish")) return "\u{1F1EA}\u{1F1F8}";
@@ -504,7 +632,7 @@ function ActionTile({
           {label}
         </span>
         <span
-          className={`flex h-[50px] w-[50px] items-center justify-center rounded-[16px] p-3 shadow-inner transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110 sm:h-[56px] sm:w-[56px] lg:h-[54px] lg:w-[54px] lg:rounded-[18px] xl:h-[64px] xl:w-[64px] xl:rounded-[20px] 2xl:h-[74px] 2xl:w-[74px] 2xl:rounded-[22px] ${tone === "light" ? "bg-white/24 text-white" : "bg-white/30 text-[#3D3158]"}`}
+          className="flex h-[58px] w-[66px] shrink-0 items-center justify-center transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110 sm:h-[64px] sm:w-[72px] lg:h-[62px] lg:w-[70px] xl:h-[70px] xl:w-[78px] 2xl:h-[78px] 2xl:w-[86px]"
         >
           {icon}
         </span>
@@ -574,6 +702,8 @@ function ContinueCard({
 }
 
 function ExploreAvatarCard({ avatar }: { avatar: ExploreAvatar }) {
+  const ringProgress = Math.max(0, Math.min(100, avatar.xpProgressPercent));
+
   return (
     <motion.div
       className="relative flex min-w-[68px] flex-col items-center gap-2 xl:min-w-[74px]"
@@ -581,8 +711,14 @@ function ExploreAvatarCard({ avatar }: { avatar: ExploreAvatar }) {
       whileTap={{ scale: 0.95 }}
       transition={{ type: "spring", stiffness: 300, damping: 15 }}
     >
-      <div className="relative h-[60px] w-[60px] rounded-full bg-white p-[3px] shadow-[0_8px_18px_rgba(170,143,215,0.18)] transition-shadow duration-300 hover:shadow-[0_12px_28px_rgba(170,143,215,0.32)] xl:h-[66px] xl:w-[66px]">
-        <div className="h-full w-full rounded-full border-[3px] border-[#B28EEA] bg-white p-[3px]">
+      <div
+        className="relative h-[60px] w-[60px] rounded-full p-[3px] shadow-[0_8px_18px_rgba(170,143,215,0.18)] transition-shadow duration-300 hover:shadow-[0_12px_28px_rgba(170,143,215,0.32)] xl:h-[66px] xl:w-[66px]"
+        style={{
+          background: `conic-gradient(#8D6EDB ${ringProgress}%, #E7DDF4 ${ringProgress}% 100%)`,
+        }}
+        aria-label={`${avatar.name} is level ${avatar.level} with ${ringProgress}% XP progress to the next level`}
+      >
+        <div className="h-full w-full rounded-full bg-white p-[4px]">
           {avatar.avatarUrl ? (
             <img
               src={avatar.avatarUrl}
@@ -753,6 +889,17 @@ export default function AdventureMap() {
       if (uniqueCreators.has(creatorKey)) continue;
 
       const creatorName = collection.userName?.trim() || "Creator";
+      const totalXp = Math.max(0, getSafeNumber(collection.totalXp, 0));
+      const level = Math.max(
+        1,
+        getSafeNumber(collection.level, 1),
+        getLevelFromXp(totalXp)
+      );
+      const { progressPercent, xpToNextLevel } = getLevelProgress(
+        totalXp,
+        level
+      );
+
       uniqueCreators.set(creatorKey, {
         id: creatorKey,
         name: creatorName,
@@ -763,6 +910,10 @@ export default function AdventureMap() {
           ? `/shared/${collection.shareToken}`
           : "/discover",
         collectionName: collection.name || "Untitled collection",
+        totalXp,
+        level,
+        xpProgressPercent: progressPercent,
+        xpToNextLevel,
       });
 
       if (uniqueCreators.size >= 10) break;
@@ -1236,8 +1387,8 @@ export default function AdventureMap() {
                           key={avatar.id}
                           onClick={() => setLocation(avatar.targetPath)}
                           className="relative shrink-0"
-                          aria-label={`Open ${avatar.collectionName} by ${avatar.name}`}
-                          title={`${avatar.name} · ${avatar.collectionName}`}
+                          aria-label={`Open ${avatar.collectionName} by ${avatar.name}. Level ${avatar.level}, ${avatar.xpProgressPercent}% XP progress to next level`}
+                          title={`${avatar.name} · ${avatar.collectionName} · Level ${avatar.level} · ${avatar.totalXp} XP · ${avatar.xpToNextLevel} XP to next level`}
                         >
                           <ExploreAvatarCard avatar={avatar} />
                           {/* Decorative mini books below avatars */}

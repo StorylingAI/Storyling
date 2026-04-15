@@ -1,7 +1,14 @@
 import { z } from "zod";
-import { router, publicProcedure, protectedProcedure } from "./_core/trpc";
+import { router, publicProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { collections, users, collectionItems, generatedContent, vocabularyLists } from "../drizzle/schema";
+import {
+  collections,
+  users,
+  collectionItems,
+  generatedContent,
+  vocabularyLists,
+  userStats,
+} from "../drizzle/schema";
 import { eq, sql, desc, and, gte, inArray, like, or } from "drizzle-orm";
 
 export const discoveryRouter = router({
@@ -50,15 +57,24 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           avatarUrl: users.avatarUrl,
+          totalXp: sql<number>`COALESCE(${userStats.totalXp}, 0)`,
+          level: sql<number>`COALESCE(${userStats.level}, 1)`,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
+        .leftJoin(userStats, eq(userStats.userId, users.id))
         .leftJoin(collectionItems, eq(collectionItems.collectionId, collections.id))
         .where(
           and(...baseConditions, gte(collections.createdAt, oneWeekAgo))
         )
-        .groupBy(collections.id, users.name, users.avatarUrl)
+        .groupBy(
+          collections.id,
+          users.name,
+          users.avatarUrl,
+          userStats.totalXp,
+          userStats.level
+        )
         .orderBy(desc(collections.cloneCount))
         .limit(10);
 
@@ -75,15 +91,24 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           avatarUrl: users.avatarUrl,
+          totalXp: sql<number>`COALESCE(${userStats.totalXp}, 0)`,
+          level: sql<number>`COALESCE(${userStats.level}, 1)`,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
+        .leftJoin(userStats, eq(userStats.userId, users.id))
         .leftJoin(collectionItems, eq(collectionItems.collectionId, collections.id))
         .where(
           and(...baseConditions, gte(collections.createdAt, oneMonthAgo))
         )
-        .groupBy(collections.id, users.name, users.avatarUrl)
+        .groupBy(
+          collections.id,
+          users.name,
+          users.avatarUrl,
+          userStats.totalXp,
+          userStats.level
+        )
         .orderBy(desc(collections.createdAt))
         .limit(10);
 
@@ -100,13 +125,22 @@ export const discoveryRouter = router({
           userId: collections.userId,
           userName: users.name,
           avatarUrl: users.avatarUrl,
+          totalXp: sql<number>`COALESCE(${userStats.totalXp}, 0)`,
+          level: sql<number>`COALESCE(${userStats.level}, 1)`,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
+        .leftJoin(userStats, eq(userStats.userId, users.id))
         .leftJoin(collectionItems, eq(collectionItems.collectionId, collections.id))
         .where(and(...baseConditions))
-        .groupBy(collections.id, users.name, users.avatarUrl)
+        .groupBy(
+          collections.id,
+          users.name,
+          users.avatarUrl,
+          userStats.totalXp,
+          userStats.level
+        )
         .orderBy(desc(collections.cloneCount))
         .limit(10);
 
@@ -159,10 +193,13 @@ export const discoveryRouter = router({
                   userId: collections.userId,
                   userName: users.name,
                   avatarUrl: users.avatarUrl,
+                  totalXp: sql<number>`COALESCE(${userStats.totalXp}, 0)`,
+                  level: sql<number>`COALESCE(${userStats.level}, 1)`,
                   itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
                 })
                 .from(collections)
                 .innerJoin(users, eq(collections.userId, users.id))
+                .leftJoin(userStats, eq(userStats.userId, users.id))
                 .leftJoin(collectionItems, eq(collectionItems.collectionId, collections.id))
                 .where(
                   and(
@@ -170,7 +207,13 @@ export const discoveryRouter = router({
                     inArray(collections.id, collectionIds)
                   )
                 )
-                .groupBy(collections.id, users.name, users.avatarUrl)
+                .groupBy(
+                  collections.id,
+                  users.name,
+                  users.avatarUrl,
+                  userStats.totalXp,
+                  userStats.level
+                )
                 .orderBy(desc(collections.cloneCount))
                 .limit(10);
             }
