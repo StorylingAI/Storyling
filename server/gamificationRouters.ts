@@ -2,13 +2,23 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "./_core/trpc";
 import { getDb } from "./db";
-import { userStats, achievements, userAchievements, quizAttempts, generatedContent, users } from "../drizzle/schema";
+import {
+  userStats,
+  achievements,
+  userAchievements,
+  quizAttempts,
+  generatedContent,
+  users,
+} from "../drizzle/schema";
 import { eq, and, sql, desc, gte } from "drizzle-orm";
 
 /**
  * Calculate current streak based on last activity date
  */
-function calculateStreak(lastActivityDate: Date | null, currentStreakCount: number): number {
+function calculateStreak(
+  lastActivityDate: Date | null,
+  currentStreakCount: number
+): number {
   if (!lastActivityDate) return 0;
 
   const now = new Date();
@@ -19,7 +29,9 @@ function calculateStreak(lastActivityDate: Date | null, currentStreakCount: numb
     lastActivityDate.getDate()
   );
 
-  const daysDiff = Math.floor((today.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24));
+  const daysDiff = Math.floor(
+    (today.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24)
+  );
 
   // If last activity was today, maintain current streak
   if (daysDiff === 0) return currentStreakCount;
@@ -63,8 +75,16 @@ function calculateLevel(totalXP: number): number {
  */
 async function ensureUserStats(userId: number) {
   const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
-  const existing = await db.select().from(userStats).where(eq(userStats.userId, userId)).limit(1);
+  if (!db)
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database not available",
+    });
+  const existing = await db
+    .select()
+    .from(userStats)
+    .where(eq(userStats.userId, userId))
+    .limit(1);
 
   if (existing.length === 0) {
     await db.insert(userStats).values({
@@ -73,6 +93,7 @@ async function ensureUserStats(userId: number) {
       longestStreak: 0,
       lastActivityDate: null,
       totalXp: 0,
+      coins: 0,
       level: 1,
 
       quizzesCompleted: 0,
@@ -91,7 +112,11 @@ export const gamificationRouter = router({
    */
   getMyStats: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database not available",
+      });
     await ensureUserStats(ctx.user.id);
 
     const stats = await db
@@ -108,7 +133,11 @@ export const gamificationRouter = router({
    */
   updateStreak: protectedProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database not available",
+      });
     await ensureUserStats(ctx.user.id);
 
     const stats = await db
@@ -119,7 +148,10 @@ export const gamificationRouter = router({
 
     const current = stats[0];
     const now = new Date();
-    const newStreak = calculateStreak(current.lastActivityDate, current.currentStreak);
+    const newStreak = calculateStreak(
+      current.lastActivityDate,
+      current.currentStreak
+    );
     const longestStreak = Math.max(newStreak, current.longestStreak);
 
     await db
@@ -146,7 +178,11 @@ export const gamificationRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database not available",
+        });
       await ensureUserStats(ctx.user.id);
 
       const stats = await db
@@ -157,7 +193,7 @@ export const gamificationRouter = router({
 
       const current = stats[0];
       const newTotalXP = current.totalXp + input.amount;
-    const newLevel = calculateLevel(newTotalXP);
+      const newLevel = calculateLevel(newTotalXP);
 
       // Update counters based on source
       const updates: any = {
@@ -171,7 +207,10 @@ export const gamificationRouter = router({
         updates.storiesCompleted = current.storiesCompleted + 1;
       }
 
-      await db.update(userStats).set(updates).where(eq(userStats.userId, ctx.user.id));
+      await db
+        .update(userStats)
+        .set(updates)
+        .where(eq(userStats.userId, ctx.user.id));
 
       return { totalXP: newTotalXP, level: newLevel };
     }),
@@ -188,7 +227,11 @@ export const gamificationRouter = router({
     )
     .query(async ({ input }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database not available",
+        });
 
       const orderByField = userStats.totalXp;
 
@@ -220,7 +263,11 @@ export const gamificationRouter = router({
    */
   getAchievements: protectedProcedure.query(async () => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database not available",
+      });
     return await db.select().from(achievements).orderBy(achievements.category);
   }),
 
@@ -229,7 +276,11 @@ export const gamificationRouter = router({
    */
   getMyAchievements: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database not available",
+      });
 
     const unlocked = await db
       .select({
@@ -242,7 +293,10 @@ export const gamificationRouter = router({
         category: achievements.category,
       })
       .from(userAchievements)
-      .leftJoin(achievements, eq(userAchievements.achievementId, achievements.id))
+      .leftJoin(
+        achievements,
+        eq(userAchievements.achievementId, achievements.id)
+      )
       .where(eq(userAchievements.userId, ctx.user.id))
       .orderBy(desc(userAchievements.unlockedAt));
 
@@ -254,7 +308,11 @@ export const gamificationRouter = router({
    */
   checkAchievements: protectedProcedure.mutation(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database not available" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database not available",
+      });
     await ensureUserStats(ctx.user.id);
 
     const stats = await db
@@ -275,7 +333,7 @@ export const gamificationRouter = router({
         .select({ achievementId: userAchievements.achievementId })
         .from(userAchievements)
         .where(eq(userAchievements.userId, ctx.user.id))
-    ).map((u) => u.achievementId);
+    ).map(u => u.achievementId);
 
     // Check each achievement
     for (const achievement of allAchievements) {
@@ -325,5 +383,3 @@ export const gamificationRouter = router({
     return { newlyUnlocked };
   }),
 });
-
-

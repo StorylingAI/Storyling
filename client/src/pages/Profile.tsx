@@ -7,7 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ArrowLeft,
   Trophy,
   FolderOpen,
   Users,
@@ -19,10 +18,10 @@ import {
   UserMinus,
   Loader2,
 } from "lucide-react";
-import { APP_LOGO } from "@/const";
 import { MobileNav } from "@/components/MobileNav";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
+import { UserAvatar } from "@/components/UserAvatar";
 
 export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
@@ -149,9 +148,12 @@ export default function Profile() {
           <CardContent className="py-8">
             <div className="flex flex-col md:flex-row items-center md:items-start gap-6">
               {/* Avatar */}
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 via-pink-400 to-orange-400 flex items-center justify-center text-white text-4xl font-bold shadow-playful">
-                {profile.user.name.charAt(0).toUpperCase()}
-              </div>
+              <UserAvatar
+                name={profile.user.name}
+                avatarUrl={profile.user.avatarUrl}
+                className="h-24 w-24 border-0 shadow-playful"
+                fallbackClassName="text-4xl font-bold"
+              />
 
               {/* User Details */}
               <div className="flex-1 text-center md:text-left">
@@ -418,9 +420,12 @@ export default function Profile() {
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center text-white font-bold">
-                      {(follower.name || 'U').charAt(0).toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      name={follower.name}
+                      avatarUrl={follower.avatarUrl}
+                      className="h-10 w-10 border-0"
+                      fallbackClassName="text-sm font-bold"
+                    />
                     <div>
                       <div className="font-semibold">{follower.name}</div>
                       <div className="text-xs text-muted-foreground">
@@ -458,9 +463,12 @@ export default function Profile() {
                   }}
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-blue-400 flex items-center justify-center text-white font-bold">
-                      {(user.name || 'U').charAt(0).toUpperCase()}
-                    </div>
+                    <UserAvatar
+                      name={user.name}
+                      avatarUrl={user.avatarUrl}
+                      className="h-10 w-10 border-0"
+                      fallbackClassName="text-sm font-bold"
+                    />
                     <div>
                       <div className="font-semibold">{user.name}</div>
                       <div className="text-xs text-muted-foreground">

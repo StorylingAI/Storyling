@@ -181,6 +181,7 @@ export const followRouter = router({
           id: users.id,
           name: users.name,
           email: users.email,
+          avatarUrl: users.avatarUrl,
           followedAt: userFollows.createdAt,
         })
         .from(userFollows)
@@ -209,6 +210,7 @@ export const followRouter = router({
           id: users.id,
           name: users.name,
           email: users.email,
+          avatarUrl: users.avatarUrl,
           followedAt: userFollows.createdAt,
         })
         .from(userFollows)

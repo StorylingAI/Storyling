@@ -1,467 +1,664 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { APP_LOGO, APP_TITLE, getLoginUrl } from "@/const";
-import { useLocation } from "wouter";
-import { Settings, Sparkles } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { QuickStartTutorial } from "@/components/QuickStartTutorial";
-import { useChallengeDetection } from "@/hooks/useChallengeDetection";
 import { PremiumWelcomeModal } from "@/components/PremiumWelcomeModal";
 import { WeeklyGoalOnboarding } from "@/components/WeeklyGoalOnboarding";
+import { PullToRefresh } from "@/components/PullToRefresh";
+import { useChallengeDetection } from "@/hooks/useChallengeDetection";
+import {
+  BookOpen,
+  ChevronRight,
+  Coins,
+  Flame,
+  Gem,
+  Sparkles,
+} from "lucide-react";
+import { BottomTabBar } from "@/components/BottomTabBar";
+import { motion, useReducedMotion } from "framer-motion";
 
-const BG_DESKTOP = "/images/dashboardBg2.webp";
-const BG_MOBILE = "/images/storyling_mobileLargeBg.webp";
-const DESKTOP_ART_ASPECT_RATIO = 1920 / 1389;
-const DESKTOP_ART_HEIGHT_RATIO = 1 / DESKTOP_ART_ASPECT_RATIO;
-const MOBILE_ART_ASPECT_RATIO = 800 / 890;
-const DESKTOP_WORLD_VERTICAL_SHIFT = 72;
+type ContinueItem = {
+  id: number;
+  title: string;
+  subtitle?: string | null;
+  thumbnailUrl?: string | null;
+  targetLanguage?: string | null;
+  progressPercent: number;
+};
 
-interface Building {
+type ExploreAvatar = {
   id: string;
-  label: string;
-  fullLabel: string;
-  description: string;
-  path: string;
-  desktop: { left: number; top: number; width: number; height: number };
-  mobile: { left: number; top: number; width: number; height: number };
-  zoomTarget: { x: number; y: number };
+  name: string;
+  gradient: string;
+  badge: string;
+  avatarUrl?: string | null;
+  targetPath: string;
+  collectionName: string;
+};
+
+function CreateStoryTileIcon() {
+  return (
+    <div className="relative h-full w-full">
+      <div className="absolute bottom-2 left-1 h-7 w-8 -rotate-6 rounded-[5px] border-2 border-[#4A3A58] bg-[#FFF7DA] shadow-[0_4px_8px_rgba(60,42,75,0.18)] sm:h-8 sm:w-9">
+        <span className="absolute left-1 top-2 h-[2px] w-4 rounded-full bg-[#C9B58D]" />
+        <span className="absolute left-1 top-4 h-[2px] w-5 rounded-full bg-[#C9B58D]" />
+      </div>
+      <div className="absolute bottom-2 left-6 h-7 w-8 rotate-6 rounded-[5px] border-2 border-[#4A3A58] bg-[#FFF1CB] shadow-[0_4px_8px_rgba(60,42,75,0.16)] sm:h-8 sm:w-9">
+        <span className="absolute left-2 top-2 h-[2px] w-4 rounded-full bg-[#C9B58D]" />
+        <span className="absolute left-2 top-4 h-[2px] w-5 rounded-full bg-[#C9B58D]" />
+      </div>
+      <div className="absolute bottom-1 left-[30px] h-8 w-[3px] rotate-[34deg] rounded-full bg-[#C77B48] shadow-[0_1px_2px_rgba(70,42,40,0.2)] sm:h-10">
+        <span className="absolute -top-2 left-[-2px] h-3 w-2 rounded-t-full bg-[#F5D46B]" />
+        <span className="absolute -bottom-1 left-[-2px] h-2 w-2 rotate-45 bg-[#544153]" />
+      </div>
+    </div>
+  );
 }
 
-const BUILDINGS: Building[] = [
+function LibraryTileIcon() {
+  const books = [
+    ["left-[7px]", "top-2", "h-8", "#B66AA7"],
+    ["left-[17px]", "top-1", "h-9", "#6EC4D2"],
+    ["left-[28px]", "top-3", "h-7", "#FFD46C"],
+    ["left-[39px]", "top-2", "h-8", "#7E6AC7"],
+  ];
+
+  return (
+    <div className="relative h-full w-full">
+      <div className="absolute inset-x-1 bottom-1 h-10 rounded-[5px] border-2 border-[#4A3A58] bg-[#E7BD79] shadow-[0_4px_8px_rgba(60,42,75,0.16)] sm:h-11">
+        {books.map(([left, top, height, color]) => (
+          <span
+            key={`${left}-${color}`}
+            className={`absolute ${left} ${top} ${height} w-[7px] rounded-[3px] border border-[#4A3A58]/70`}
+            style={{ background: color }}
+          />
+        ))}
+        <span className="absolute bottom-2 left-1 right-1 h-[3px] rounded-full bg-[#4A3A58]/55" />
+      </div>
+    </div>
+  );
+}
+
+function WordbankTileIcon() {
+  return (
+    <div className="relative h-full w-full">
+      <div className="absolute bottom-1 left-2 h-9 w-9 -rotate-12 rounded-[5px] border-2 border-[#4A3A58] bg-[#F6F1EE] shadow-[0_4px_8px_rgba(60,42,75,0.14)]">
+        <span className="absolute left-2 top-2 text-[10px] font-bold leading-none text-[#4A3A58]">
+          VC
+        </span>
+        <span className="absolute bottom-2 left-2 h-[2px] w-5 rounded-full bg-[#C8BFC7]" />
+      </div>
+      <div className="absolute bottom-2 left-6 h-9 w-9 rotate-8 rounded-[5px] border-2 border-[#4A3A58] bg-[#FDF8F2] shadow-[0_4px_8px_rgba(60,42,75,0.16)]">
+        <span className="absolute left-2 top-2 text-[10px] font-bold leading-none text-[#4A3A58]">
+          VC
+        </span>
+        <span className="absolute bottom-2 left-2 h-[2px] w-5 rounded-full bg-[#C8BFC7]" />
+      </div>
+    </div>
+  );
+}
+
+function ChatTileIcon() {
+  return (
+    <div className="relative h-full w-full">
+      <div className="absolute left-1 top-3 h-7 w-9 rounded-[9px] border-2 border-[#4A3A58] bg-[#F3EAFB] shadow-[0_4px_8px_rgba(60,42,75,0.14)]">
+        <span className="absolute -bottom-[6px] left-3 h-3 w-3 rotate-45 border-b-2 border-r-2 border-[#4A3A58] bg-[#F3EAFB]" />
+        <span className="absolute left-2 top-3 h-[3px] w-4 rounded-full bg-[#AFA0BC]" />
+      </div>
+      <div className="absolute bottom-1 right-1 h-7 w-9 rounded-[9px] border-2 border-[#4A3A58] bg-[#A8DDF7] shadow-[0_4px_8px_rgba(60,42,75,0.16)]">
+        <span className="absolute -bottom-[6px] right-3 h-3 w-3 rotate-45 border-b-2 border-r-2 border-[#4A3A58] bg-[#A8DDF7]" />
+        <span className="absolute left-2 top-3 h-[3px] w-4 rounded-full bg-[#5E7E9A]" />
+      </div>
+      <span className="absolute right-0 top-1 h-3 w-3 rounded-full border border-[#4A3A58] bg-[#F36D77]" />
+    </div>
+  );
+}
+
+/* ── Framer-motion animation variants ── */
+const staggerContainer = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.08, delayChildren: 0.1 } },
+};
+const fadeSlideUp = {
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { type: "spring", damping: 20, stiffness: 200 } },
+};
+const scaleIn = {
+  hidden: { opacity: 0, scale: 0.85 },
+  show: { opacity: 1, scale: 1, transition: { type: "spring", damping: 18, stiffness: 180 } },
+};
+
+/* ── Floating particles layer ── */
+const PARTICLE_COLORS = [
+  "rgba(168,130,255,0.5)",
+  "rgba(255,182,193,0.45)",
+  "rgba(255,213,93,0.4)",
+  "rgba(130,220,255,0.4)",
+  "rgba(255,150,130,0.35)",
+];
+function DashboardParticles() {
+  const prefersReduced = useReducedMotion();
+  if (prefersReduced) return null;
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+      {/* Soft glow orbs */}
+      {[
+        { x: "8%", y: "12%", size: 180, color: "rgba(168,130,255,0.22)", delay: 0 },
+        { x: "78%", y: "6%", size: 140, color: "rgba(255,182,193,0.18)", delay: 2 },
+        { x: "55%", y: "55%", size: 200, color: "rgba(130,220,255,0.12)", delay: 4 },
+        { x: "20%", y: "70%", size: 160, color: "rgba(255,213,93,0.14)", delay: 1 },
+      ].map((orb, i) => (
+        <div
+          key={`orb-${i}`}
+          className="absolute rounded-full"
+          style={{
+            left: orb.x,
+            top: orb.y,
+            width: orb.size,
+            height: orb.size,
+            background: `radial-gradient(circle, ${orb.color} 0%, transparent 70%)`,
+            animation: `dash-glow-breathe ${7 + i * 1.5}s ease-in-out ${orb.delay}s infinite`,
+          }}
+        />
+      ))}
+      {/* Rising particles */}
+      {Array.from({ length: 18 }).map((_, i) => {
+        const size = 3 + Math.random() * 5;
+        const left = `${5 + Math.random() * 90}%`;
+        const duration = 12 + Math.random() * 18;
+        const delay = Math.random() * 15;
+        const driftX = -30 + Math.random() * 60;
+        const color = PARTICLE_COLORS[i % PARTICLE_COLORS.length];
+        return (
+          <div
+            key={`p-${i}`}
+            className="absolute bottom-0 rounded-full"
+            style={{
+              left,
+              width: size,
+              height: size,
+              background: color,
+              boxShadow: size > 5 ? `0 0 ${size * 2}px ${color}` : undefined,
+              "--drift-x": `${driftX}px`,
+              animation: `dash-particle-rise ${duration}s linear ${delay}s infinite`,
+            } as React.CSSProperties}
+          />
+        );
+      })}
+      {/* Sparkle stars */}
+      {Array.from({ length: 12 }).map((_, i) => {
+        const size = 6 + Math.random() * 8;
+        return (
+          <svg
+            key={`s-${i}`}
+            className="absolute"
+            style={{
+              left: `${8 + Math.random() * 84}%`,
+              top: `${5 + Math.random() * 60}%`,
+              width: size,
+              height: size,
+              animation: `dash-sparkle-pulse ${3 + Math.random() * 4}s ease-in-out ${Math.random() * 5}s infinite`,
+            }}
+            viewBox="0 0 24 24"
+            fill="rgba(255,215,0,0.6)"
+          >
+            <path d="M12 0L14.5 9.5L24 12L14.5 14.5L12 24L9.5 14.5L0 12L9.5 9.5Z" />
+          </svg>
+        );
+      })}
+      {/* Shooting streaks */}
+      {[0, 1].map(i => (
+        <div
+          key={`streak-${i}`}
+          className="absolute h-[1px] w-[60px]"
+          style={{
+            top: `${15 + i * 25}%`,
+            left: "10%",
+            background: `linear-gradient(90deg, transparent, rgba(255,255,255,0.7), transparent)`,
+            animation: `dash-streak ${6 + i * 3}s ease-in-out ${i * 8}s infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const ACTION_TILES = [
   {
     id: "create",
-    label: "Create Story",
-    fullLabel: "Create Story",
-    description:
-      "Write your own adventure story in any language and let AI guide the journey.",
-    path: "/create",
-    desktop: { left: 1, top: 18, width: 42, height: 29 },
-    mobile: { left: 7, top: 6, width: 64, height: 22 },
-    zoomTarget: { x: 22, y: 27 },
+    label: "Create\nStory",
+    colors: "linear-gradient(135deg, #7C3AED 0%, #8B5CF6 42%, #C084FC 100%)",
+    accent: "rgba(255,255,255,0.14)",
+    tone: "light" as const,
+    icon: <CreateStoryTileIcon />,
+    action: "create" as const,
   },
   {
     id: "library",
-    label: "Your Stories",
-    fullLabel: "Your Stories",
-    description:
-      "Open your saved stories, continue reading, and revisit your latest adventures.",
-    path: "/library",
-    desktop: { left: 71, top: 17, width: 27, height: 34 },
-    mobile: { left: 14, top: 70, width: 42, height: 26 },
-    zoomTarget: { x: 84, y: 29 },
+    label: "Library",
+    colors: "linear-gradient(135deg, #FF6C7A 0%, #FF8D74 46%, #FFB454 100%)",
+    accent: "rgba(255,255,255,0.16)",
+    tone: "light" as const,
+    icon: <LibraryTileIcon />,
+    action: "library" as const,
   },
   {
     id: "wordbank",
-    label: "Word Bank",
-    fullLabel: "Word Bank",
-    description:
-      "Review and practice the vocabulary you collected across your stories.",
-    path: "/wordbank",
-    desktop: { left: 0, top: 48, width: 34, height: 32 },
-    mobile: { left: 12, top: 28, width: 35, height: 18 },
-    zoomTarget: { x: 16, y: 61 },
+    label: "Wordbank",
+    colors: "linear-gradient(135deg, #9DE2C8 0%, #A8EDD4 46%, #7CD7D9 100%)",
+    accent: "rgba(255,255,255,0.18)",
+    tone: "dark" as const,
+    icon: <WordbankTileIcon />,
+    action: "wordbank" as const,
   },
   {
     id: "chat",
-    label: "Chat with Booki",
-    fullLabel: "Chat with Booki",
-    description:
-      "Practice conversation with Booki whenever you want a language buddy.",
-    path: "__chat__",
-    desktop: { left: 64, top: 51, width: 32, height: 31 },
-    mobile: { left: 40, top: 52, width: 39, height: 18 },
-    zoomTarget: { x: 80, y: 62 },
-  },
-  {
-    id: "profile",
-    label: "Profile",
-    fullLabel: "Profile",
-    description:
-      "Manage your account, track progress, and customize your learning setup.",
-    path: "/profile",
-    desktop: { left: 38, top: 42, width: 20, height: 30 },
-    mobile: { left: 35, top: 55, width: 25, height: 25 },
-    zoomTarget: { x: 48, y: 75 },
+    label: "Chat",
+    colors: "linear-gradient(135deg, #79C8FF 0%, #88D4FF 48%, #A8DDF7 100%)",
+    accent: "rgba(255,255,255,0.18)",
+    tone: "dark" as const,
+    icon: <ChatTileIcon />,
+    action: "chat" as const,
   },
 ];
 
-const MOBILE_SCENE_BUILDINGS = BUILDINGS.filter(
-  building => building.id !== "profile"
-);
-const DESKTOP_SCENE_BUILDINGS = BUILDINGS.filter(
-  building => building.id !== "profile"
-);
+const DAILY_CHALLENGE_XP_REWARD = 50;
+const DAILY_CHALLENGE_COIN_REWARD = 200;
 
-const DESKTOP_SPARKLES = [
-  { left: 12, top: 18, size: 5, delay: "0.1s" },
-  { left: 24, top: 12, size: 6, delay: "0.8s" },
-  { left: 40, top: 22, size: 4, delay: "1.2s" },
-  { left: 62, top: 16, size: 5, delay: "0.5s" },
-  { left: 78, top: 24, size: 4, delay: "1.6s" },
-  { left: 88, top: 10, size: 6, delay: "0.4s" },
-  { left: 17, top: 62, size: 4, delay: "1.8s" },
-  { left: 32, top: 76, size: 5, delay: "0.7s" },
-  { left: 58, top: 70, size: 6, delay: "1.4s" },
-  { left: 74, top: 62, size: 4, delay: "0.2s" },
-];
+function getDisplayName(name: string | null | undefined) {
+  const safeName = name?.trim();
+  if (!safeName) return "there";
+  return safeName.split("@")[0].split(/\s+/)[0];
+}
 
-const DESKTOP_FIREFLIES = [
-  { left: 10, top: 44, size: 10, duration: "12s", delay: "0s" },
-  { left: 24, top: 68, size: 8, duration: "14s", delay: "1.2s" },
-  { left: 39, top: 54, size: 9, duration: "16s", delay: "0.8s" },
-  { left: 56, top: 30, size: 11, duration: "15s", delay: "1.6s" },
-  { left: 76, top: 58, size: 10, duration: "18s", delay: "0.6s" },
-  { left: 89, top: 42, size: 8, duration: "13s", delay: "1.4s" },
-];
+function getInitials(name: string | null | undefined) {
+  const safeName = name?.trim();
+  if (!safeName) return "?";
+  return safeName
+    .split("@")[0]
+    .split(/\s+/)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
 
-const DESKTOP_LANTERNS = [
-  { left: 7, top: 52, size: 30, color: "255,180,80" },
-  { left: 18, top: 40, size: 24, color: "255,190,90" },
-  { left: 42, top: 68, size: 20, color: "255,200,100" },
-  { left: 58, top: 48, size: 18, color: "180,200,255" },
-  { left: 73, top: 55, size: 28, color: "255,170,70" },
-  { left: 88, top: 50, size: 22, color: "255,185,85" },
-];
+function getSeedIndex(seed: string, size: number) {
+  const source = seed || "storyling";
+  let hash = 0;
 
-const DESKTOP_FAIRY_DUST = [
-  { left: 15, top: 30, size: 6, duration: "8s", delay: "0s" },
-  { left: 28, top: 55, size: 5, duration: "10s", delay: "1.2s" },
-  { left: 45, top: 40, size: 7, duration: "9s", delay: "0.6s" },
-  { left: 60, top: 65, size: 5, duration: "11s", delay: "1.8s" },
-  { left: 72, top: 35, size: 6, duration: "8.5s", delay: "0.4s" },
-  { left: 85, top: 50, size: 5, duration: "10.5s", delay: "1.4s" },
-  { left: 20, top: 72, size: 5, duration: "9.5s", delay: "2.0s" },
-  { left: 50, top: 20, size: 7, duration: "12s", delay: "0.8s" },
-  { left: 35, top: 80, size: 5, duration: "7.5s", delay: "1.6s" },
-  { left: 68, top: 25, size: 6, duration: "11s", delay: "0.2s" },
-];
+  for (let index = 0; index < source.length; index += 1) {
+    hash = (hash * 31 + source.charCodeAt(index)) % 2147483647;
+  }
 
-const DESKTOP_LIGHT_RAYS = [
-  { left: 72, top: -5, angle: -25, width: 180, height: 600, delay: "0s", duration: "6s" },
-  { left: 82, top: -5, angle: -18, width: 140, height: 550, delay: "2s", duration: "7s" },
-  { left: 62, top: -5, angle: -32, width: 160, height: 580, delay: "4s", duration: "5.5s" },
-];
+  return Math.abs(hash) % size;
+}
 
-const MOBILE_SPARKLES = [
-  { left: 12, top: 8, size: 14, delay: "0s" },
-  { left: 82, top: 10, size: 12, delay: "0.6s" },
-  { left: 25, top: 28, size: 16, delay: "1.2s" },
-  { left: 70, top: 35, size: 14, delay: "0.3s" },
-  { left: 45, top: 18, size: 12, delay: "1.6s" },
-  { left: 55, top: 52, size: 16, delay: "0.9s" },
-  { left: 18, top: 65, size: 14, delay: "1.8s" },
-  { left: 78, top: 72, size: 12, delay: "0.5s" },
-  { left: 35, top: 85, size: 14, delay: "1.4s" },
-  { left: 62, top: 90, size: 12, delay: "2.0s" },
-];
+function getAvatarGradient(baseColor: string | null | undefined, seed: string) {
+  const accentPalette = [
+    "#F6CF9D",
+    "#C4A9FF",
+    "#8EDFD1",
+    "#8FC7FF",
+    "#FFB7C6",
+    "#FFE186",
+  ];
+  const fallbackPalette = [
+    ["#F7B0C0", "#F6D7E6"],
+    ["#7B63E8", "#BCA8FF"],
+    ["#71D8C1", "#B8F0DE"],
+    ["#79B8FF", "#B7E0FF"],
+    ["#FFB57A", "#FFD6A8"],
+    ["#9BDFB1", "#D1F3DD"],
+  ];
 
-const MOBILE_FIREFLIES = [
-  { left: 10, top: 30, size: 18, duration: "10s", delay: "0s" },
-  { left: 40, top: 50, size: 16, duration: "12s", delay: "0.8s" },
-  { left: 70, top: 35, size: 20, duration: "11s", delay: "0.4s" },
-  { left: 25, top: 70, size: 18, duration: "13s", delay: "1.2s" },
-  { left: 80, top: 65, size: 16, duration: "9s", delay: "1.6s" },
-  { left: 55, top: 20, size: 18, duration: "14s", delay: "0.6s" },
-  { left: 15, top: 88, size: 16, duration: "11.5s", delay: "1.0s" },
-  { left: 65, top: 80, size: 20, duration: "10.5s", delay: "1.8s" },
-];
+  const paletteIndex = getSeedIndex(seed, fallbackPalette.length);
+  const palette = fallbackPalette[paletteIndex];
+  const accent = accentPalette[paletteIndex];
+  const normalizedColor =
+    typeof baseColor === "string" &&
+    /^#(?:[0-9a-fA-F]{3}){1,2}$/.test(baseColor)
+      ? baseColor
+      : null;
 
-const MOBILE_LANTERNS = [
-  { left: 15, top: 32, size: 50, color: "255,180,80" },
-  { left: 50, top: 55, size: 44, color: "255,200,100" },
-  { left: 80, top: 42, size: 48, color: "255,170,70" },
-  { left: 30, top: 75, size: 40, color: "255,190,90" },
-  { left: 70, top: 20, size: 44, color: "180,200,255" },
-];
+  if (normalizedColor) {
+    return `linear-gradient(135deg, ${normalizedColor} 0%, ${accent} 100%)`;
+  }
 
-const MOBILE_FAIRY_DUST = [
-  { left: 15, top: 30, size: 10, duration: "7s", delay: "0s" },
-  { left: 45, top: 45, size: 12, duration: "8s", delay: "0.6s" },
-  { left: 75, top: 25, size: 10, duration: "6.5s", delay: "1.0s" },
-  { left: 30, top: 65, size: 12, duration: "9s", delay: "0.4s" },
-  { left: 60, top: 15, size: 10, duration: "7.5s", delay: "1.4s" },
-  { left: 20, top: 80, size: 12, duration: "8.5s", delay: "0.8s" },
-  { left: 85, top: 55, size: 10, duration: "7s", delay: "1.6s" },
-  { left: 50, top: 75, size: 12, duration: "6s", delay: "1.2s" },
-  { left: 10, top: 50, size: 10, duration: "9.5s", delay: "2.0s" },
-  { left: 68, top: 42, size: 12, duration: "8s", delay: "0.2s" },
-];
+  return `linear-gradient(135deg, ${palette[0]} 0%, ${palette[1]} 100%)`;
+}
 
-function BuildingHotspot({
-  building,
-  onClick,
-  onHover,
-  onLeave,
-  isHovered,
-  entranceDelay,
-  worldReady,
-}: {
-  building: Building;
-  onClick: () => void;
-  onHover: () => void;
-  onLeave: () => void;
-  isHovered: boolean;
-  entranceDelay: number;
-  worldReady: boolean;
+function getBadgeColor(seed: string) {
+  const badgePalette = [
+    "#F57C7C",
+    "#9A7ADF",
+    "#78D3B4",
+    "#71B9EB",
+    "#F5BF54",
+    "#F87B69",
+  ];
+  return badgePalette[getSeedIndex(seed, badgePalette.length)];
+}
+
+function getFlagEmoji(language?: string | null) {
+  const normalized = language?.toLowerCase() ?? "";
+  if (normalized.includes("spanish")) return "\u{1F1EA}\u{1F1F8}";
+  if (normalized.includes("french")) return "\u{1F1EB}\u{1F1F7}";
+  if (normalized.includes("german")) return "\u{1F1E9}\u{1F1EA}";
+  if (normalized.includes("italian")) return "\u{1F1EE}\u{1F1F9}";
+  if (normalized.includes("japanese")) return "\u{1F1EF}\u{1F1F5}";
+  if (normalized.includes("korean")) return "\u{1F1F0}\u{1F1F7}";
+  if (normalized.includes("chinese")) return "\u{1F1E8}\u{1F1F3}";
+  if (normalized.includes("portuguese")) return "\u{1F1F5}\u{1F1F9}";
+  if (normalized.includes("english")) return "\u{1F1EC}\u{1F1E7}";
+  return "LG";
+}
+
+function getStoryTitle(story: {
+  title?: string | null;
+  titleTranslation?: string | null;
+  theme?: string | null;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onTouchStart={onHover}
-      className="absolute inset-0 focus:outline-none"
-      style={{ minWidth: 48, minHeight: 48, cursor: "pointer" }}
-      aria-label={building.fullLabel}
-      title={building.fullLabel}
-    >
-      <div
-        className="absolute inset-0 rounded-[40px] pointer-events-none"
-        style={{
-          opacity: worldReady ? 1 : 0,
-          transition: `opacity 0.45s ease ${entranceDelay}s, transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease`,
-          background: isHovered
-            ? "radial-gradient(circle at center, rgba(255,236,181,0.3) 0%, rgba(255,214,128,0.16) 38%, rgba(255,214,128,0.05) 68%, transparent 100%)"
-            : "transparent",
-          boxShadow: isHovered
-            ? "0 0 0 1px rgba(255,236,187,0.26), 0 0 44px rgba(255,212,123,0.22), inset 0 0 32px rgba(255,236,187,0.14)"
-            : "none",
-          transform: isHovered ? "scale(1.015)" : "scale(1)",
-        }}
-      />
-    </button>
+    story.title ||
+    story.titleTranslation ||
+    `${story.theme || "Story"} Adventure`
   );
 }
 
-function MobileBuildingHotspot({
-  building,
-  onClick,
-  onHover,
-  onLeave,
-  isHovered,
-  entranceDelay,
-  worldReady,
+function MiniBookBadge({ color }: { color: string }) {
+  return (
+    <span
+      className="absolute -bottom-0.5 -right-0.5 h-6 w-5 rounded-[6px] border border-white/90"
+      style={{
+        background: `linear-gradient(180deg, ${color} 0%, color-mix(in srgb, ${color} 78%, white) 100%)`,
+        boxShadow: "0 6px 12px rgba(121, 89, 150, 0.16)",
+      }}
+    >
+      <span className="absolute inset-y-[2px] left-[6px] w-[1.5px] rounded-full bg-white/90" />
+      <span className="absolute right-[3px] top-[2px] h-[2px] w-[6px] rounded-full bg-white/80" />
+      <span className="absolute right-[3px] top-[6px] h-[2px] w-[6px] rounded-full bg-white/80" />
+    </span>
+  );
+}
+
+function TopBadge({
+  icon,
+  value,
+  variant,
 }: {
-  building: Building;
-  onClick: () => void;
-  onHover: () => void;
-  onLeave: () => void;
-  isHovered: boolean;
-  entranceDelay: number;
-  worldReady: boolean;
+  icon: ReactNode;
+  value: number;
+  variant: "purple" | "gold";
 }) {
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent<HTMLButtonElement>) => {
-      const touch = e.touches[0];
-      if (!touch) return;
-      touchStartRef.current = { x: touch.clientX, y: touch.clientY };
-      onHover();
-    },
-    [onHover]
-  );
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent<HTMLButtonElement>) => {
-      if (!touchStartRef.current) return;
-
-      const touch = e.changedTouches[0];
-      if (!touch) {
-        touchStartRef.current = null;
-        onLeave();
-        return;
-      }
-
-      const dx = Math.abs(touch.clientX - touchStartRef.current.x);
-      const dy = Math.abs(touch.clientY - touchStartRef.current.y);
-      touchStartRef.current = null;
-
-      // Ignore scroll gestures and only treat short movements as taps.
-      if (dx < 15 && dy < 15) {
-        e.preventDefault();
-        onClick();
-      }
-
-      onLeave();
-    },
-    [onClick, onLeave]
-  );
+  const background =
+    variant === "purple"
+      ? "linear-gradient(135deg, rgba(182,142,255,0.85) 0%, rgba(197,168,255,0.72) 100%)"
+      : "linear-gradient(135deg, rgba(255,206,112,0.92) 0%, rgba(255,175,86,0.92) 100%)";
 
   return (
-    <button
+    <div
+      className="flex min-w-[76px] items-center justify-center gap-1 rounded-full px-2 py-1 text-[0.78rem] font-semibold text-[#3A2456] sm:min-w-[88px] sm:gap-1.5 sm:px-2.5 sm:py-1.5 sm:text-[0.88rem] xl:min-w-[104px] xl:px-3 xl:text-[1rem]"
+      style={{
+        background,
+        boxShadow:
+          "0 14px 24px rgba(157, 133, 206, 0.16), inset 0 1px 0 rgba(255,255,255,0.52)",
+      }}
+    >
+      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/38 text-[0.8rem] sm:h-[22px] sm:w-[22px] sm:text-[0.86rem] xl:h-7 xl:w-7 xl:text-[1rem]">
+        {icon}
+      </span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function StorylingMascot({
+  className = "",
+  imageClassName = "",
+}: {
+  className?: string;
+  imageClassName?: string;
+}) {
+  return (
+    <div className={`relative ${className}`}>
+      <Sparkles
+        className="absolute left-1 top-3 h-6 w-6 text-[#F2C261]"
+        strokeWidth={1.9}
+      />
+      <Sparkles
+        className="absolute left-9 top-0 h-4 w-4 text-[#5B466D]"
+        strokeWidth={1.8}
+        style={{ opacity: 0.75 }}
+      />
+      <span className="absolute left-3 top-11 h-2 w-2 rounded-full bg-[#5C476C]" />
+      <Sparkles
+        className="absolute right-3 top-5 h-5 w-5 text-[#E8DEC0]"
+        strokeWidth={1.8}
+        style={{ opacity: 0.92 }}
+      />
+      <span className="absolute right-7 top-2 h-2.5 w-2.5 rounded-full bg-[#E8DEC0]" />
+      <img
+        src={APP_LOGO}
+        alt="Storyling mascot"
+        className={`h-full w-full object-contain drop-shadow-[0_18px_26px_rgba(151,122,196,0.22)] ${imageClassName}`}
+      />
+    </div>
+  );
+}
+
+function ActionTile({
+  label,
+  colors,
+  accent,
+  tone,
+  icon,
+  onClick,
+  tutorial,
+}: {
+  label: string;
+  colors: string;
+  accent: string;
+  tone: "light" | "dark";
+  icon: ReactNode;
+  onClick: () => void;
+  tutorial?: string;
+}) {
+  return (
+    <motion.button
       type="button"
       onClick={onClick}
-      onMouseEnter={onHover}
-      onMouseLeave={onLeave}
-      onTouchStart={handleTouchStart}
-      onTouchEnd={handleTouchEnd}
-      onTouchCancel={onLeave}
-      className="absolute inset-0 rounded-[32px] focus:outline-none"
-      style={{
-        minWidth: 48,
-        minHeight: 48,
-        cursor: "pointer",
-        touchAction: "manipulation",
-        WebkitTapHighlightColor: "transparent",
-        zIndex: 30,
-      }}
-      aria-label={building.fullLabel}
-      title={building.fullLabel}
+      data-tutorial={tutorial}
+      variants={scaleIn}
+      whileHover={{ scale: 1.04, y: -4 }}
+      whileTap={{ scale: 0.97 }}
+      className="group relative flex h-[74px] overflow-hidden rounded-[18px] px-4 py-3 text-left text-[#24173A] shadow-[0_14px_26px_rgba(170,140,216,0.28)] sm:h-[84px] sm:rounded-[22px] lg:h-[96px] lg:px-4 lg:py-4 xl:h-[106px] xl:px-5 xl:py-5 2xl:h-[116px]"
+      style={{ background: colors }}
     >
+      {/* Shimmer sweep on hover */}
+      <div className="absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+        <div
+          className="absolute inset-0"
+          style={{
+            background: "linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.25) 50%, transparent 60%)",
+            animation: "dash-card-shimmer 1.8s ease-in-out infinite",
+          }}
+        />
+      </div>
       <div
-        className="absolute inset-0 rounded-[32px] pointer-events-none transition-all duration-300"
-        style={{
-          opacity: worldReady ? 1 : 0,
-          transitionDelay: `${entranceDelay}s`,
-          background: isHovered
-            ? "radial-gradient(circle at center, rgba(255,238,192,0.22) 0%, rgba(255,204,108,0.14) 45%, rgba(255,191,106,0.04) 72%, transparent 100%)"
-            : "transparent",
-          boxShadow: isHovered
-            ? "0 0 0 1px rgba(255,237,188,0.35), 0 0 28px rgba(255,209,120,0.32), inset 0 0 36px rgba(255,232,176,0.18)"
-            : "none",
-          transform: isHovered ? "scale(1.02)" : "scale(1)",
-        }}
+        className="absolute -right-5 top-1/2 h-20 w-20 -translate-y-1/2 rounded-full transition-transform duration-500 group-hover:scale-125 sm:h-24 sm:w-24 xl:h-28 xl:w-28"
+        style={{ background: accent }}
       />
-      <div
-        className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full pointer-events-none"
-        style={{
-          opacity: worldReady ? 0.9 : 0,
-          background:
-            "radial-gradient(circle, rgba(255,246,214,0.98) 0%, rgba(255,214,120,0.9) 35%, rgba(255,214,120,0.24) 60%, transparent 100%)",
-          boxShadow:
-            "0 0 10px rgba(255,220,128,0.55), 0 0 18px rgba(255,211,120,0.28)",
-          animation: `hotspot-pulse 2.8s ease-in-out ${entranceDelay}s infinite`,
-        }}
-      />
-    </button>
+      <div className="relative flex h-full w-full items-center justify-between gap-3">
+        <span
+          className={`whitespace-pre-line text-[1rem] font-semibold leading-[1.05] sm:text-[1.12rem] lg:text-[1.05rem] xl:text-[1.22rem] 2xl:text-[1.42rem] ${tone === "light" ? "text-white" : "text-[#2A2438]"}`}
+          style={
+            tone === "light"
+              ? { textShadow: "0 2px 10px rgba(75, 44, 107, 0.18)" }
+              : undefined
+          }
+        >
+          {label}
+        </span>
+        <span
+          className={`flex h-[50px] w-[50px] items-center justify-center rounded-[16px] p-3 shadow-inner transition-transform duration-300 group-hover:rotate-6 group-hover:scale-110 sm:h-[56px] sm:w-[56px] lg:h-[54px] lg:w-[54px] lg:rounded-[18px] xl:h-[64px] xl:w-[64px] xl:rounded-[20px] 2xl:h-[74px] 2xl:w-[74px] 2xl:rounded-[22px] ${tone === "light" ? "bg-white/24 text-white" : "bg-white/30 text-[#3D3158]"}`}
+        >
+          {icon}
+        </span>
+      </div>
+    </motion.button>
+  );
+}
+
+function ContinueCard({
+  item,
+  onClick,
+}: {
+  item: ContinueItem;
+  onClick: () => void;
+}) {
+  return (
+    <motion.button
+      type="button"
+      onClick={onClick}
+      variants={fadeSlideUp}
+      whileHover={{ scale: 1.03, y: -3 }}
+      whileTap={{ scale: 0.98 }}
+      className="group relative flex min-h-[96px] overflow-hidden rounded-[18px] bg-[linear-gradient(135deg,#CAA3FF_0%,#F6D2E3_100%)] p-2.5 text-left shadow-[0_14px_28px_rgba(177,145,213,0.24)] sm:min-h-[116px] sm:rounded-[22px] sm:p-3 lg:min-h-[138px] lg:rounded-[24px] lg:p-3.5 xl:min-h-[148px] xl:p-4 2xl:min-h-[166px] 2xl:p-5"
+    >
+      {/* Bookmark ribbon */}
+      <div className="absolute right-3 top-0 z-10 h-5 w-3 rounded-b-[3px] bg-[linear-gradient(180deg,#FF7A79_0%,#FF8E86_100%)] shadow-[0_4px_8px_rgba(236,108,123,0.24)] sm:right-4 sm:h-6 sm:w-3.5" />
+
+      <div className="flex w-full items-start gap-2.5 sm:gap-3 xl:gap-4">
+        {/* Thumbnail — square, left side */}
+        <div className="h-[76px] w-[66px] shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(135deg,#7A56B7_0%,#A69BFF_100%)] shadow-[0_10px_18px_rgba(89,70,149,0.26)] sm:h-[92px] sm:w-[80px] sm:rounded-[18px] lg:h-[84px] lg:w-[72px] xl:h-[94px] xl:w-[82px] xl:rounded-[20px] 2xl:h-[108px] 2xl:w-[94px]">
+          {item.thumbnailUrl ? (
+            <img
+              src={item.thumbnailUrl}
+              alt={item.title}
+              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-white">
+              <BookOpen className="h-7 w-7 sm:h-10 sm:w-10" />
+            </div>
+          )}
+        </div>
+
+        {/* Content — right side */}
+        <div className="flex min-w-0 flex-1 flex-col justify-between self-stretch">
+          <h3 className="line-clamp-3 text-[0.78rem] font-semibold leading-tight text-[#2E2147] sm:text-[0.95rem] lg:text-[0.94rem] xl:text-[1.04rem] 2xl:text-[1.2rem]">
+            {item.title}
+          </h3>
+
+          <div className="mt-auto flex items-center justify-between gap-1.5 text-[0.66rem] font-medium text-[#4E356B] sm:gap-3 sm:text-[0.78rem] lg:text-[0.8rem] xl:text-[0.9rem] 2xl:text-sm">
+            <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-white/78 px-2 py-0.5 sm:gap-2 sm:px-3 sm:py-1 lg:px-2.5 xl:px-3 xl:py-1.5">
+              <span className="text-[0.62rem] sm:text-[0.72rem]">
+                {getFlagEmoji(item.targetLanguage)}
+              </span>
+              <span className="truncate text-[0.62rem] sm:text-[0.72rem]">
+                {item.targetLanguage || "Language"}
+              </span>
+            </span>
+            <span className="text-[0.66rem] sm:text-[0.78rem]">
+              {item.progressPercent}%
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
+function ExploreAvatarCard({ avatar }: { avatar: ExploreAvatar }) {
+  return (
+    <motion.div
+      className="relative flex min-w-[68px] flex-col items-center gap-2 xl:min-w-[74px]"
+      whileHover={{ scale: 1.12, y: -4 }}
+      whileTap={{ scale: 0.95 }}
+      transition={{ type: "spring", stiffness: 300, damping: 15 }}
+    >
+      <div className="relative h-[60px] w-[60px] rounded-full bg-white p-[3px] shadow-[0_8px_18px_rgba(170,143,215,0.18)] transition-shadow duration-300 hover:shadow-[0_12px_28px_rgba(170,143,215,0.32)] xl:h-[66px] xl:w-[66px]">
+        <div className="h-full w-full rounded-full border-[3px] border-[#B28EEA] bg-white p-[3px]">
+          {avatar.avatarUrl ? (
+            <img
+              src={avatar.avatarUrl}
+              alt={avatar.name}
+              className="h-full w-full rounded-full object-cover"
+            />
+          ) : (
+            <div
+              className="flex h-full w-full items-center justify-center rounded-full text-sm font-semibold text-white xl:text-base"
+              style={{ background: avatar.gradient }}
+            >
+              {getInitials(avatar.name)}
+            </div>
+          )}
+        </div>
+        <MiniBookBadge color={avatar.badge} />
+      </div>
+    </motion.div>
   );
 }
 
 export default function AdventureMap() {
   const { user, isAuthenticated, loading } = useAuth();
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
-  const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null);
-  const [worldReady, setWorldReady] = useState(false);
-  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
-  const [zoomState, setZoomState] = useState<{
-    active: boolean;
-    targetX: number;
-    targetY: number;
-  }>({
-    active: false,
-    targetX: 50,
-    targetY: 50,
-  });
 
   useChallengeDetection();
 
-  // Burst particles on click
-  const [burstParticles, setBurstParticles] = useState<{ id: number; x: number; y: number; particles: { bx: string; by: string; color: string }[] }[]>([]);
-  const burstIdRef = useRef(0);
+  const pullRefresh = async () => {
+    await Promise.all([
+      utils.auth.me.invalidate(),
+      utils.gamification.getMyStats.invalidate(),
+      utils.content.getLibrary.invalidate(),
+      utils.storyProgress.getRecentlyWatched.invalidate(),
+      utils.wordbank.getDueCount.invalidate(),
+      utils.wordbank.getReviewStreak.invalidate(),
+      utils.weeklyGoal.getWeeklyGoalStatus.invalidate(),
+      utils.practice.getStats.invalidate(),
+    ]);
+  };
 
-  const handleMagicBurst = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
-    const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
-    const x = clientX;
-    const y = clientY;
-    const id = burstIdRef.current++;
-    const colors = ["rgba(255,222,146,0.9)", "rgba(255,180,80,0.85)", "rgba(200,170,255,0.8)", "rgba(120,200,255,0.8)", "rgba(255,255,255,0.9)"];
-    const particles = Array.from({ length: 12 }, () => {
-      const angle = Math.random() * Math.PI * 2;
-      const dist = 30 + Math.random() * 50;
-      return {
-        bx: `${Math.cos(angle) * dist}px`,
-        by: `${Math.sin(angle) * dist}px`,
-        color: colors[Math.floor(Math.random() * colors.length)],
-      };
-    });
-    setBurstParticles(prev => [...prev, { id, x, y, particles }]);
-    setTimeout(() => setBurstParticles(prev => prev.filter(b => b.id !== id)), 700);
-  }, []);
-
-  // Parallax — mouse (desktop) / gyroscope (mobile)
-  const [parallax, setParallax] = useState({ x: 0, y: 0 });
-
-  useEffect(() => {
-    if (window.innerWidth >= 768) {
-      // Desktop: mousemove
-      const handleMouseMove = (e: MouseEvent) => {
-        const cx = (e.clientX / window.innerWidth - 0.5) * 2;  // -1 to 1
-        const cy = (e.clientY / window.innerHeight - 0.5) * 2;
-        setParallax({ x: cx * 18, y: cy * 12 });
-      };
-      window.addEventListener("mousemove", handleMouseMove);
-      return () => window.removeEventListener("mousemove", handleMouseMove);
-    } else {
-      // Mobile: gyroscope
-      let initialBeta: number | null = null;
-      let initialGamma: number | null = null;
-      const handleOrientation = (e: DeviceOrientationEvent) => {
-        if (e.beta === null || e.gamma === null) return;
-        if (initialBeta === null) { initialBeta = e.beta; initialGamma = e.gamma; }
-        const dx = Math.max(-1, Math.min(1, ((e.gamma! - initialGamma!) / 20)));
-        const dy = Math.max(-1, Math.min(1, ((e.beta - initialBeta) / 15)));
-        setParallax({ x: dx * 15, y: dy * 10 });
-      };
-      window.addEventListener("deviceorientation", handleOrientation);
-      return () => window.removeEventListener("deviceorientation", handleOrientation);
+  const { data: stats } = trpc.gamification.getMyStats.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: dueCount } = trpc.wordbank.getDueCount.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: reviewStreak } = trpc.wordbank.getReviewStreak.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
     }
-  }, []);
-
-  useEffect(() => {
-    const timeout = setTimeout(() => setWorldReady(true), 250);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  const [isLandscapeMobile, setIsLandscapeMobile] = useState(
-    () => window.innerWidth >= 768 && window.innerHeight < 500
   );
-
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
-      setIsLandscapeMobile(window.innerWidth >= 768 && window.innerHeight < 500);
-    };
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
-
-  useEffect(() => {
-    const previousHtmlOverflow = document.documentElement.style.overflow;
-    const previousBodyOverflow = document.body.style.overflow;
-    const previousHtmlOverscroll =
-      document.documentElement.style.overscrollBehavior;
-    const previousBodyOverscroll = document.body.style.overscrollBehavior;
-
-    const keepViewportAtTop = () => {
-      if (window.scrollX !== 0 || window.scrollY !== 0) {
-        window.scrollTo({ top: 0, left: 0, behavior: "instant" });
-      }
-    };
-
-    document.documentElement.style.overflow = "hidden";
-    document.body.style.overflow = "hidden";
-    document.documentElement.style.overscrollBehavior = "none";
-    document.body.style.overscrollBehavior = "none";
-    keepViewportAtTop();
-    window.addEventListener("scroll", keepViewportAtTop, true);
-
-    return () => {
-      window.removeEventListener("scroll", keepViewportAtTop, true);
-      document.documentElement.style.overflow = previousHtmlOverflow;
-      document.body.style.overflow = previousBodyOverflow;
-      document.documentElement.style.overscrollBehavior =
-        previousHtmlOverscroll;
-      document.body.style.overscrollBehavior = previousBodyOverscroll;
-    };
-  }, []);
-
-  const utils = trpc.useUtils();
+  const { data: weeklyGoal } = trpc.weeklyGoal.getWeeklyGoalStatus.useQuery(
+    undefined,
+    {
+      enabled: isAuthenticated,
+    }
+  );
+  const { data: library } = trpc.content.getLibrary.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
+  const { data: recentlyWatched } =
+    trpc.storyProgress.getRecentlyWatched.useQuery(undefined, {
+      enabled: isAuthenticated,
+    });
+  const { data: discoveryFeed } = trpc.discovery.getDiscoveryFeed.useQuery(
+    {
+      userId: user?.id,
+      limit: 12,
+    },
+    {
+      enabled: isAuthenticated,
+    }
+  );
 
   useEffect(() => {
     if (!user || !isAuthenticated) return;
@@ -479,8 +676,9 @@ export default function AdventureMap() {
 
       if (updatedUser?.subscriptionTier === "premium") {
         window.clearInterval(pollInterval);
-        if (!updatedUser.premiumOnboardingCompleted)
+        if (!updatedUser.premiumOnboardingCompleted) {
           setShowPremiumWelcome(true);
+        }
         return;
       }
 
@@ -491,42 +689,189 @@ export default function AdventureMap() {
     }, 1000);
 
     return () => window.clearInterval(pollInterval);
-  }, [user, isAuthenticated, utils]);
+  }, [isAuthenticated, user, utils]);
 
-  const handleBuildingClick = (building: Building) => {
-    setZoomState({
-      active: true,
-      targetX: building.zoomTarget.x,
-      targetY: building.zoomTarget.y,
-    });
-    const navigationDelay = isMobile ? 180 : 400;
+  const displayName = getDisplayName(user?.name || user?.email);
+  const initials = getInitials(user?.name || user?.email);
+  const headerAvatarGradient = getAvatarGradient(
+    null,
+    user?.name || user?.email || "storyling"
+  );
+  const displayStreak = Math.max(
+    stats?.currentStreak ?? 0,
+    reviewStreak?.currentStreak ?? 0,
+    0
+  );
+  const displayXp = stats?.totalXp ?? 0;
+  const displayWordsLearned = stats?.wordsLearned ?? 0;
+  const libraryLanguageById = useMemo(() => {
+    return new Map(
+      (library ?? []).map(story => [story.id, story.targetLanguage || null])
+    );
+  }, [library]);
 
-    window.setTimeout(() => {
-      if (building.path === "__chat__") {
-        window.dispatchEvent(new CustomEvent("open-booki-chat"));
-      } else if (building.path === "/profile") {
-        setLocation("/settings");
-      } else {
-        setLocation(building.path);
-      }
+  const continueWatching = useMemo<ContinueItem[]>(() => {
+    if (recentlyWatched && recentlyWatched.length > 0) {
+      return recentlyWatched.slice(0, 2).map((item, index) => ({
+        id: item?.id ?? index,
+        title: getStoryTitle(item || {}),
+        subtitle: item?.titleTranslation || null,
+        thumbnailUrl: item?.thumbnailUrl,
+        targetLanguage: libraryLanguageById.get(item?.id ?? -1) || null,
+        progressPercent: item?.progress?.progressPercent ?? 0,
+      }));
+    }
 
-      window.setTimeout(
-        () => setZoomState({ active: false, targetX: 50, targetY: 50 }),
-        120
-      );
-    }, navigationDelay);
+    if (library && library.length > 0) {
+      return library
+        .filter(item => item.status === "completed")
+        .slice(0, 2)
+        .map(item => ({
+          id: item.id,
+          title: getStoryTitle(item),
+          subtitle: item.titleTranslation,
+          thumbnailUrl: item.thumbnailUrl,
+          targetLanguage: item.targetLanguage || null,
+          progressPercent: 100,
+        }));
+    }
+
+    return [];
+  }, [library, libraryLanguageById, recentlyWatched]);
+
+  const exploreAvatars = useMemo<ExploreAvatar[]>(() => {
+    const collections = [
+      ...(discoveryFeed?.personalized ?? []),
+      ...(discoveryFeed?.new ?? []),
+      ...(discoveryFeed?.trending ?? []),
+      ...(discoveryFeed?.popular ?? []),
+    ];
+    const uniqueCreators = new Map<string, ExploreAvatar>();
+
+    for (const collection of collections) {
+      const creatorKey = String(collection.userId ?? collection.id);
+      if (uniqueCreators.has(creatorKey)) continue;
+
+      const creatorName = collection.userName?.trim() || "Creator";
+      uniqueCreators.set(creatorKey, {
+        id: creatorKey,
+        name: creatorName,
+        gradient: getAvatarGradient(collection.color, creatorName),
+        badge: getBadgeColor(`${creatorName}-${collection.id}`),
+        avatarUrl: collection.avatarUrl,
+        targetPath: collection.shareToken
+          ? `/shared/${collection.shareToken}`
+          : "/discover",
+        collectionName: collection.name || "Untitled collection",
+      });
+
+      if (uniqueCreators.size >= 10) break;
+    }
+
+    return Array.from(uniqueCreators.values());
+  }, [discoveryFeed]);
+
+  const challengeCopy = useMemo(() => {
+    const reviewsDue = dueCount?.count ?? 0;
+    const weeklyGoalTarget = weeklyGoal?.weeklyGoal ?? user?.weeklyGoal ?? 5;
+    const weeklyProgress =
+      weeklyGoal?.weeklyProgress ?? user?.weeklyProgress ?? 0;
+    const weeklyRemaining = Math.max(0, weeklyGoalTarget - weeklyProgress);
+
+    if (reviewsDue > 0) {
+      return {
+        title: "Daily Challenge",
+        subtitle: `Review ${reviewsDue} word${reviewsDue > 1 ? "s" : ""} in your wordbank today.`,
+        actionLabel: "Start Challenge",
+        action: () => setLocation("/wordbank"),
+      };
+    }
+
+    if (weeklyRemaining > 0) {
+      return {
+        title: "Daily Challenge",
+        subtitle: `Create ${weeklyRemaining} more stor${weeklyRemaining > 1 ? "ies" : "y"} to hit your weekly goal.`,
+        actionLabel: "Start Challenge",
+        action: () => setLocation("/create"),
+      };
+    }
+
+    return {
+      title: "Daily Challenge",
+      subtitle: "You reached your weekly goal. Explore and continue learning.",
+      actionLabel: "Explore Now",
+      action: () => setLocation("/discover"),
+    };
+  }, [
+    dueCount?.count,
+    setLocation,
+    user?.weeklyGoal,
+    user?.weeklyProgress,
+    weeklyGoal?.weeklyGoal,
+    weeklyGoal?.weeklyProgress,
+  ]);
+
+  const challengeBadges = [
+    {
+      icon: <Gem className="h-[14px] w-[14px]" />,
+      label: `+${DAILY_CHALLENGE_XP_REWARD} XP`,
+      className:
+        "bg-[linear-gradient(135deg,#C8AAFF_0%,#A87BFF_100%)] text-white shadow-[0_6px_14px_rgba(152,107,255,0.30)]",
+    },
+    {
+      icon: <Coins className="h-[14px] w-[14px]" />,
+      label: `+${DAILY_CHALLENGE_COIN_REWARD} coins`,
+      className:
+        "bg-[linear-gradient(135deg,#FFD055_0%,#FFB830_100%)] text-[#7A4800] shadow-[0_6px_14px_rgba(255,184,48,0.32)]",
+    },
+  ];
+
+  const handleTileAction = (
+    action: (typeof ACTION_TILES)[number]["action"]
+  ) => {
+    if (action === "create") {
+      setLocation("/create");
+      return;
+    }
+
+    if (action === "library") {
+      setLocation("/library");
+      return;
+    }
+
+    if (action === "wordbank") {
+      setLocation("/wordbank");
+      return;
+    }
+
+    window.dispatchEvent(new CustomEvent("open-booki-chat"));
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-magical flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <img
-            src={APP_LOGO}
-            alt="Loading"
-            className="h-24 w-24 mx-auto animate-float"
-          />
-          <div className="loading-fun mx-auto" />
+      <div
+        className="storyling-loader-screen"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="storyling-loader-stage">
+          <div className="storyling-loader-mascot" aria-hidden="true">
+            <img
+              src={APP_LOGO}
+              alt=""
+              className="storyling-loader-logo"
+            />
+          </div>
+          <div className="storyling-loader-copy">
+            <p className="storyling-loader-title">Opening your story world</p>
+            <div className="storyling-page-loader" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+          <span className="sr-only">Loading Storyling</span>
         </div>
       </div>
     );
@@ -534,36 +879,30 @@ export default function AdventureMap() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-magical flex items-center justify-center p-4">
-        <Card className="w-full max-w-md rounded-2xl shadow-magical border-0 overflow-hidden">
-          <div className="h-2 gradient-primary" />
-          <CardContent className="pt-10 pb-10 text-center space-y-6">
+      <div className="min-h-screen bg-[linear-gradient(180deg,#D9D1FF_0%,#FDFBFF_56%,#FFFDFE_100%)] flex items-center justify-center p-4">
+        <Card className="w-full max-w-md overflow-hidden rounded-[32px] border-0 shadow-[0_24px_60px_rgba(175,149,220,0.22)]">
+          <div className="h-2 bg-[linear-gradient(90deg,#8A5EFF_0%,#FF8A7E_50%,#FFB859_100%)]" />
+          <CardContent className="space-y-6 px-8 py-10 text-center">
             <img
               src={APP_LOGO}
               alt="Storyling.ai"
-              className="h-28 w-28 mx-auto animate-float"
+              className="mx-auto h-28 w-28 animate-float"
             />
-            <div>
-              <h2
-                className="text-3xl font-bold mb-2 text-gray-900"
-                style={{ fontFamily: "Fredoka, sans-serif" }}
-              >
+            <div className="space-y-2">
+              <h2 className="text-3xl font-bold text-gray-900">
                 Welcome to {APP_TITLE}
               </h2>
-              <p
-                className="text-gray-500 text-lg"
-                style={{ fontFamily: "Fredoka, sans-serif" }}
-              >
-                Sign in to start your language learning journey.
+              <p className="text-lg text-gray-500">
+                Sign in to open your dashboard.
               </p>
             </div>
             <Button
               size="lg"
-              onClick={() => (window.location.href = getLoginUrl())}
-              className="rounded-full gradient-primary text-white hover-lift active-scale border-0 h-14 px-8 text-lg shadow-magical transition-all"
-              style={{ fontFamily: "Fredoka, sans-serif" }}
+              onClick={() => {
+                window.location.href = getLoginUrl();
+              }}
+              className="h-14 rounded-full border-0 bg-[linear-gradient(135deg,#8A5EFF_0%,#5DAFFF_100%)] px-8 text-lg text-white shadow-[0_14px_28px_rgba(132,104,225,0.32)]"
             >
-              <Sparkles className="mr-2 h-5 w-5" />
               Sign In to Continue
             </Button>
           </CardContent>
@@ -575,55 +914,13 @@ export default function AdventureMap() {
   return (
     <>
       <style>{`
-        @keyframes world-fade-in {
-          0% { opacity: 0; }
-          100% { opacity: 1; }
+        @keyframes floaty {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-8px); }
         }
-        @keyframes sparkle {
-          0%, 100% { opacity: 0.3; transform: scale(0.6); filter: blur(0px); }
-          50% { opacity: 1; transform: scale(1.3); filter: blur(0.5px); }
-        }
-        @keyframes hotspot-pulse {
-          0%, 100% { transform: translate(-50%, -50%) scale(0.92); opacity: 0.6; }
-          50% { transform: translate(-50%, -50%) scale(1.18); opacity: 1; }
-        }
-        @keyframes firefly-wander {
-          0% { transform: translate(0, 0) scale(1); opacity: 0.5; }
-          25% { transform: translate(25px, -35px) scale(1.4); opacity: 1; }
-          50% { transform: translate(-18px, -20px) scale(0.8); opacity: 0.6; }
-          75% { transform: translate(30px, 20px) scale(1.3); opacity: 0.9; }
-          100% { transform: translate(0, 0) scale(1); opacity: 0.5; }
-        }
-        @keyframes lantern-flicker {
-          0%, 100% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
-          35% { opacity: 1; transform: translate(-50%, -50%) scale(1.25); }
-          70% { opacity: 0.7; transform: translate(-50%, -50%) scale(0.95); }
-        }
-        @keyframes title-shimmer {
-          0%, 100% { text-shadow: 0 2px 10px rgba(79, 50, 135, 0.45), 0 0 18px rgba(255, 222, 146, 0.28); }
-          50% { text-shadow: 0 2px 14px rgba(79, 50, 135, 0.62), 0 0 26px rgba(255, 222, 146, 0.4); }
-        }
-        @keyframes fairy-dust-rise {
-          0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
-          10% { opacity: 1; }
-          50% { transform: translateY(-80px) translateX(20px) scale(0.7); opacity: 0.8; }
-          80% { opacity: 0.4; }
-          100% { transform: translateY(-150px) translateX(-15px) scale(0.3); opacity: 0; }
-        }
-        @keyframes aurora-wave {
-          0% { transform: translateX(-30%) skewX(-5deg); opacity: 0.18; }
-          33% { transform: translateX(0%) skewX(3deg); opacity: 0.3; }
-          66% { transform: translateX(20%) skewX(-2deg); opacity: 0.22; }
-          100% { transform: translateX(-30%) skewX(-5deg); opacity: 0.18; }
-        }
-        @keyframes light-ray-pulse {
-          0%, 100% { opacity: 0.05; }
-          30% { opacity: 0.3; }
-          60% { opacity: 0.15; }
-        }
-        @keyframes burst-particle {
-          0% { transform: translate(0, 0) scale(1); opacity: 1; }
-          100% { transform: translate(var(--bx), var(--by)) scale(0); opacity: 0; }
+        @keyframes shimmer-drift {
+          0%, 100% { transform: translateX(0px) rotate(-1deg); opacity: 0.7; }
+          50% { transform: translateX(12px) rotate(2deg); opacity: 1; }
         }
       `}</style>
 
@@ -634,552 +931,344 @@ export default function AdventureMap() {
         onClose={() => setShowPremiumWelcome(false)}
       />
 
-      <div className="fixed inset-0 overflow-hidden">
-        {!isMobile ? (
+      <BottomTabBar />
+
+      <PullToRefresh
+        onRefresh={pullRefresh}
+        className="min-h-screen bg-[linear-gradient(180deg,#C9B8F2_0%,#DDD4FA_18%,#F4F0FF_35%,#FFFDFE_60%,#FFF9FD_100%)]"
+      >
+        <div className="relative overflow-hidden pb-24 lg:pb-36">
+          {/* Animated particles background */}
+          <DashboardParticles />
           <div
-            className="relative h-full w-full overflow-hidden"
-            style={{ background: "#130f32" }}
+            className="pointer-events-none absolute inset-x-0 top-0 h-[420px]"
+            style={{
+              background:
+                "radial-gradient(circle at 10% 20%, rgba(255,255,255,0.55) 0%, transparent 32%), radial-gradient(circle at 85% 14%, rgba(253,207,121,0.22) 0%, transparent 20%), radial-gradient(circle at 50% 60%, rgba(210,180,255,0.18) 0%, transparent 22%)",
+            }}
+          />
+
+          <motion.div
+            className="relative mx-auto w-full max-w-[1180px] px-4 pb-4 pt-3 sm:px-6 sm:pt-4 xl:px-7 2xl:max-w-[1220px] 2xl:pt-6"
+            initial="hidden"
+            animate="show"
+            variants={staggerContainer}
           >
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `url(${BG_DESKTOP})`,
-                backgroundSize: "cover",
-                backgroundPosition: "top",
-                backgroundRepeat: "no-repeat",
-                filter: "blur(30px) brightness(0.7)",
-                transform: "scale(1.08)",
-              }}
-            />
-
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(circle at 50% 12%, rgba(128,110,255,0.18) 0%, transparent 38%), linear-gradient(180deg, rgba(15,10,38,0.42) 0%, rgba(15,10,38,0.12) 22%, rgba(15,10,38,0.16) 100%)",
-              }}
-            />
-
-            <div className="absolute inset-0 overflow-hidden" onClick={handleMagicBurst}>
-                <div
-                  className="absolute left-1/2 top-1/2 overflow-hidden"
-                  style={{
-                    width: `max(100vw, calc(100dvh * ${DESKTOP_ART_ASPECT_RATIO}))`,
-                    height: `max(100dvh, calc(100vw * ${DESKTOP_ART_HEIGHT_RATIO}))`,
-                    top: `calc(50% + ${isLandscapeMobile ? 0 : DESKTOP_WORLD_VERTICAL_SHIFT}px)`,
-                    transform: `translate(-50%, -50%) scale(${zoomState.active ? 1.24 : 1})`,
-                    transformOrigin: `${zoomState.targetX}% ${zoomState.targetY}%`,
-                    transition: "transform 0.4s ease-out, transform-origin 0.1s",
-                    animation: "world-fade-in 0.3s ease-out both",
-                  }}
-              >
-                <div
-                  className="absolute inset-0"
-                  style={{
-                    zIndex: 1,
-                    backgroundImage: `url(${BG_DESKTOP})`,
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    backgroundRepeat: "no-repeat",
-                    transform: `translate(${parallax.x}px, ${parallax.y}px) scale(1.05)`,
-                    transition: "transform 0.3s ease-out",
-                  }}
-                />
-
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    zIndex: 2,
-                    background:
-                      "linear-gradient(180deg, rgba(16, 10, 45, 0.08) 0%, rgba(16, 10, 45, 0.02) 16%, transparent 30%, transparent 78%, rgba(16, 10, 45, 0.16) 100%)",
-                  }}
-                />
-
-                {!isLandscapeMobile && (
-                <div
-                  className="pointer-events-none absolute z-30 px-6 py-5"
-                  style={{
-                    left: "max(0px, calc((100% - 100vw) / 2 + 56px))",
-                    right: "max(0px, calc((100% - 100vw) / 2 + 56px))",
-                    top: `max(0px, calc((100% - 100dvh) / 2 + 6px - ${DESKTOP_WORLD_VERTICAL_SHIFT}px))`,
-                    opacity: worldReady ? 1 : 0,
-                    transition: "opacity 0.5s ease 0.15s",
-                  }}
-                >
-                  <div className="mx-auto max-w-4xl text-center">
-                    <h1
-                      className="text-[44px] font-semibold uppercase tracking-[0.06em] text-[#4C3524]"
-                      style={{
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textShadow: "0 2px 12px rgba(255,248,230,0.55)",
-                      }}
-                    >
-                      Story Village Navigation
-                    </h1>
-                    <div
-                      className="mx-auto mt-2 h-px w-full max-w-[720px]"
-                      style={{
-                        background:
-                          "linear-gradient(90deg, transparent 0%, rgba(121,88,55,0.28) 18%, rgba(121,88,55,0.55) 50%, rgba(121,88,55,0.28) 82%, transparent 100%)",
-                      }}
-                    />
-                    <p
-                      className="mt-2 text-[20px] font-medium uppercase tracking-[0.22em] text-[#6A4A33]"
-                      style={{
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textShadow: "0 1px 8px rgba(255,248,230,0.42)",
-                      }}
-                    >
-                      Explore the Realm of Tales
-                    </p>
-                    <p
-                      className="mx-auto mt-4 max-w-[760px] text-[20px] leading-relaxed text-[#5E4631]"
-                      style={{
-                        fontFamily: 'Georgia, "Times New Roman", serif',
-                        textShadow: "0 1px 8px rgba(255,248,230,0.32)",
-                      }}
-                    >
-                      Welcome to our enchanting world where every building tells a story and every path leads to adventure.
-                      Discover the creative heart of our narrative universe.
-                    </p>
-                  </div>
-                </div>
-                )}
-
-                {DESKTOP_SCENE_BUILDINGS.map((building, index) => {
-                  const zone = building.desktop;
-                  const tutorialTarget =
-                    building.id === "create"
-                      ? "create-story"
-                      : building.id === "library"
-                      ? "library"
-                      : building.id === "wordbank"
-                      ? "wordbank"
-                      : undefined;
-                  return (
-                    <div
-                      key={building.id}
-                      data-tutorial={tutorialTarget}
-                      style={{
-                        position: "absolute",
-                        left: `${zone.left}%`,
-                        top: `${zone.top}%`,
-                        width: `${zone.width}%`,
-                        height: `${zone.height}%`,
-                        zIndex: 10,
-                      }}
-                    >
-                      <BuildingHotspot
-                        building={building}
-                        onClick={() => handleBuildingClick(building)}
-                        onHover={() => setHoveredBuilding(building.id)}
-                        onLeave={() =>
-                          setHoveredBuilding(current =>
-                            current === building.id ? null : current
-                          )
-                        }
-                        isHovered={hoveredBuilding === building.id}
-                        entranceDelay={0.25 + index * 0.08}
-                        worldReady={worldReady}
-                      />
-                    </div>
-                  );
-                })}
-
-                {worldReady && (
-                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20, transform: `translate(${-parallax.x * 0.5}px, ${-parallax.y * 0.5}px)`, transition: "transform 0.3s ease-out" }}>
-                    {DESKTOP_SPARKLES.map((sparklePoint, index) => (
-                      <div
-                        key={`desktop-sparkle-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: sparklePoint.size,
-                          height: sparklePoint.size,
-                          left: `${sparklePoint.left}%`,
-                          top: `${sparklePoint.top}%`,
-                          background:
-                            "radial-gradient(circle, rgba(255,242,199,0.95) 0%, rgba(255,212,112,0.82) 35%, rgba(255,212,112,0.18) 65%, transparent 100%)",
-                          boxShadow: "0 0 10px rgba(255,217,128,0.42)",
-                          animation: `sparkle 2.8s ease-in-out ${sparklePoint.delay} infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {DESKTOP_FIREFLIES.map((firefly, index) => (
-                      <div
-                        key={`desktop-firefly-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: firefly.size,
-                          height: firefly.size,
-                          left: `${firefly.left}%`,
-                          top: `${firefly.top}%`,
-                          background:
-                            "radial-gradient(circle, rgba(255,226,146,0.45) 0%, rgba(255,226,146,0.18) 40%, transparent 75%)",
-                          filter: "blur(0.6px)",
-                          animation: `firefly-wander ${firefly.duration} ease-in-out ${firefly.delay} infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {DESKTOP_LANTERNS.map((lantern, index) => (
-                      <div
-                        key={`desktop-lantern-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: lantern.size,
-                          height: lantern.size,
-                          left: `${lantern.left}%`,
-                          top: `${lantern.top}%`,
-                          transform: "translate(-50%, -50%)",
-                          background: `radial-gradient(circle, rgba(${lantern.color},0.42) 0%, rgba(${lantern.color},0.16) 42%, transparent 74%)`,
-                          animation: `lantern-flicker ${2.6 + index * 0.25}s ease-in-out ${index * 0.2}s infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Fairy dust — tiny golden particles rising */}
-                    {DESKTOP_FAIRY_DUST.map((dust, index) => (
-                      <div
-                        key={`desktop-dust-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: dust.size,
-                          height: dust.size,
-                          left: `${dust.left}%`,
-                          top: `${dust.top}%`,
-                          background: "radial-gradient(circle, rgba(255,230,160,0.9) 0%, rgba(255,200,100,0.4) 60%, transparent 100%)",
-                          boxShadow: "0 0 4px rgba(255,220,130,0.5)",
-                          willChange: "transform, opacity",
-                          animation: `fairy-dust-rise ${dust.duration} ease-in-out ${dust.delay} infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Light rays — diagonal beams from sunset */}
-                    {DESKTOP_LIGHT_RAYS.map((ray, index) => (
-                      <div
-                        key={`desktop-ray-${index}`}
-                        className="absolute"
-                        style={{
-                          left: `${ray.left}%`,
-                          top: `${ray.top}%`,
-                          width: ray.width,
-                          height: ray.height,
-                          transform: `rotate(${ray.angle}deg)`,
-                          background: "linear-gradient(180deg, rgba(255,220,140,0.35) 0%, rgba(255,200,100,0.15) 50%, transparent 100%)",
-                          willChange: "opacity",
-                          animation: `light-ray-pulse ${ray.duration} ease-in-out ${ray.delay} infinite`,
-                        }}
-                      />
-                    ))}
-                  </div>
-                )}
-
-                {/* Aurora — color band at top */}
-                <div
-                  className="absolute pointer-events-none"
-                  style={{
-                    zIndex: 21,
-                    top: 0,
-                    left: "-20%",
-                    width: "140%",
-                    height: "35%",
-                    background: "linear-gradient(90deg, rgba(124,58,237,0.25) 0%, rgba(6,182,212,0.20) 35%, rgba(255,200,100,0.15) 65%, rgba(124,58,237,0.20) 100%)",
-                    filter: "blur(40px)",
-                    willChange: "transform, opacity",
-                    transform: `translate(${-parallax.x * 0.8}px, ${-parallax.y * 0.8}px)`,
-                    transition: "transform 0.3s ease-out",
-                    animation: "aurora-wave 12s ease-in-out infinite",
-                  }}
-                />
-
-
-                <button
-                  type="button"
-                  onClick={() => setLocation("/settings")}
-                  className="absolute z-30 flex h-12 w-12 items-center justify-center rounded-full transition-all hover:brightness-105 active:scale-[0.97]"
-                  style={{
-                    right: "max(20px, calc((100% - 100vw) / 2 + 24px))",
-                    bottom: `max(24px, calc((100% - 100dvh) / 2 + 24px + ${DESKTOP_WORLD_VERTICAL_SHIFT}px))`,
-                    color: "#5A3F29",
-                    background:
-                      "linear-gradient(180deg, rgba(255,250,241,0.95) 0%, rgba(248,232,204,0.9) 100%)",
-                    border: "1px solid rgba(138,106,68,0.28)",
-                    boxShadow:
-                      "0 12px 24px rgba(82,58,34,0.16), inset 0 1px 0 rgba(255,255,255,0.7)",
-                    backdropFilter: "blur(10px)",
-                  }}
-                  aria-label="Open settings"
-                >
-                  <Settings className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div
-            className="absolute inset-0 overflow-hidden"
-            style={{ background: "#6E5AB0" }}
-          >
-            <div
-              className="absolute inset-0"
-              style={{
-                backgroundImage: `url(${BG_MOBILE})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center center",
-                backgroundRepeat: "no-repeat",
-                filter: "blur(18px)",
-                transform: "scale(1.06)",
-                animation: "world-fade-in 0.8s ease-out",
-              }}
-            />
-
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  "linear-gradient(180deg, rgba(52,29,90,0.26) 0%, rgba(52,29,90,0.06) 18%, transparent 34%, transparent 72%, rgba(40,25,69,0.18) 100%)",
-              }}
-            />
-
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  "radial-gradient(circle at 50% 15%, rgba(255,240,196,0.12) 0%, rgba(255,240,196,0.04) 18%, transparent 36%), radial-gradient(circle at 50% 86%, rgba(255,240,196,0.12) 0%, rgba(255,240,196,0.04) 18%, transparent 34%)",
-              }}
-            />
-
-            <div
-              className="absolute inset-x-0 top-0 z-30 px-4"
-              style={{
-                paddingTop: "calc(env(safe-area-inset-top, 0px) + 16px)",
-              }}
-            >
-              <div
-                className="mx-auto flex max-w-md items-center gap-3 rounded-[26px] border px-3 py-3"
-                style={{
-                  borderColor: "rgba(255,246,224,0.7)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,248,233,0.9) 0%, rgba(250,236,213,0.78) 100%)",
-                  backdropFilter: "blur(18px)",
-                  boxShadow:
-                    "0 16px 36px rgba(31, 18, 69, 0.18), inset 0 1px 0 rgba(255,255,255,0.65)",
-                }}
-              >
-                <div
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-                  style={{
-                    background: "rgba(255,255,255,0.7)",
-                    boxShadow: "0 8px 18px rgba(74, 42, 18, 0.12)",
-                  }}
-                >
-                  <img src={APP_LOGO} alt="" className="h-8 w-8 object-contain" />
-                </div>
-                <div className="min-w-0 flex-1 text-center">
-                  <h1
-                    className="truncate text-[21px] font-semibold"
-                    style={{
-                      fontFamily: "Fredoka, sans-serif",
-                      color: "#7A5230",
-                      letterSpacing: "0.01em",
-                    }}
+            <motion.section variants={fadeSlideUp} className="relative z-20 mb-0 rounded-[34px] bg-transparent px-1 py-0.5 sm:mb-1 lg:mb-3">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2.5 lg:grid-cols-[minmax(0,1fr)_auto_auto] lg:items-center lg:gap-3.5 xl:gap-4">
+                {/* Avatar + Name */}
+                <div className="flex min-w-0 items-center gap-2.5 xl:gap-3.5">
+                  <div
+                    className="flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-full border-[3px] border-white text-[0.98rem] font-semibold text-white shadow-[0_10px_22px_rgba(164,132,211,0.18)] sm:h-[60px] sm:w-[60px] sm:text-[1.12rem] 2xl:h-[68px] 2xl:w-[68px] 2xl:text-[1.26rem]"
+                    style={{ background: headerAvatarGradient }}
                   >
-                    {APP_TITLE}
-                  </h1>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setLocation("/settings")}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-transform active:scale-95"
-                  style={{
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.95) 0%, rgba(249,231,200,0.96) 100%)",
-                    boxShadow:
-                      "0 10px 22px rgba(74, 42, 18, 0.16), inset 0 1px 0 rgba(255,255,255,0.75)",
-                  }}
-                  aria-label="Open settings"
-                >
-                  <Settings className="h-5 w-5" style={{ color: "#6B4A1E" }} />
-                </button>
-              </div>
-            </div>
-
-            <div className="absolute inset-x-0 top-0 bottom-0 z-20 flex items-start justify-center px-0" onClick={handleMagicBurst}>
-              <div
-                className="relative h-full shrink-0"
-                style={{
-                  aspectRatio: `${MOBILE_ART_ASPECT_RATIO}`,
-                }}
-              >
-                <img
-                  src={BG_MOBILE}
-                  alt="Storyling mobile world"
-                  className="block h-full w-full object-cover"
-                  style={{
-                    position: "relative",
-                    zIndex: 1,
-                    animation: "world-fade-in 0.8s ease-out",
-                    filter: "drop-shadow(0 20px 44px rgba(22, 13, 51, 0.22))",
-                    transform: `translate(${parallax.x}px, ${parallax.y}px) scale(1.04)`,
-                    transition: "transform 0.3s ease-out",
-                  }}
-                />
-
-                {worldReady && (
-                  <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 20, transform: `translate(${-parallax.x * 0.5}px, ${-parallax.y * 0.5}px)`, transition: "transform 0.3s ease-out" }}>
-                    {MOBILE_SPARKLES.map((sparklePoint, index) => (
-                      <div
-                        key={`mobile-sparkle-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: sparklePoint.size,
-                          height: sparklePoint.size,
-                          left: `${sparklePoint.left}%`,
-                          top: `${sparklePoint.top}%`,
-                          background:
-                            "radial-gradient(circle, rgba(255,255,255,1) 0%, rgba(255,242,199,0.9) 25%, rgba(255,212,112,0.6) 50%, transparent 100%)",
-                          boxShadow: "0 0 16px 4px rgba(255,217,128,0.7), 0 0 30px rgba(255,200,80,0.3)",
-                          animation: `sparkle 2.4s ease-in-out ${sparklePoint.delay} infinite`,
-                        }}
+                    {user?.avatarUrl ? (
+                      <img
+                        src={user.avatarUrl}
+                        alt={displayName}
+                        className="h-full w-full rounded-full object-cover"
                       />
-                    ))}
-
-                    {/* Mobile fireflies */}
-                    {MOBILE_FIREFLIES.map((firefly, index) => (
-                      <div
-                        key={`mobile-firefly-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: firefly.size,
-                          height: firefly.size,
-                          left: `${firefly.left}%`,
-                          top: `${firefly.top}%`,
-                          background: "radial-gradient(circle, rgba(255,240,170,0.9) 0%, rgba(255,226,146,0.5) 40%, transparent 75%)",
-                          boxShadow: "0 0 12px 3px rgba(255,226,146,0.5)",
-                          filter: "blur(1px)",
-                          animation: `firefly-wander ${firefly.duration} ease-in-out ${firefly.delay} infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Mobile lanterns */}
-                    {MOBILE_LANTERNS.map((lantern, index) => (
-                      <div
-                        key={`mobile-lantern-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: lantern.size,
-                          height: lantern.size,
-                          left: `${lantern.left}%`,
-                          top: `${lantern.top}%`,
-                          transform: "translate(-50%, -50%)",
-                          background: `radial-gradient(circle, rgba(${lantern.color},0.7) 0%, rgba(${lantern.color},0.3) 42%, transparent 74%)`,
-                          boxShadow: `0 0 20px 5px rgba(${lantern.color},0.25)`,
-                          animation: `lantern-flicker ${2.6 + index * 0.25}s ease-in-out ${index * 0.2}s infinite`,
-                        }}
-                      />
-                    ))}
-
-                    {/* Mobile fairy dust */}
-                    {MOBILE_FAIRY_DUST.map((dust, index) => (
-                      <div
-                        key={`mobile-dust-${index}`}
-                        className="absolute rounded-full"
-                        style={{
-                          width: dust.size,
-                          height: dust.size,
-                          left: `${dust.left}%`,
-                          top: `${dust.top}%`,
-                          background: "radial-gradient(circle, rgba(255,255,220,1) 0%, rgba(255,230,160,0.7) 40%, transparent 100%)",
-                          boxShadow: "0 0 10px 2px rgba(255,220,130,0.6)",
-                          willChange: "transform, opacity",
-                          animation: `fairy-dust-rise ${dust.duration} ease-in-out ${dust.delay} infinite`,
-                        }}
-                      />
-                    ))}
+                    ) : (
+                      initials
+                    )}
                   </div>
-                )}
+                  <div className="min-w-0">
+                    <p className="truncate whitespace-nowrap text-[1.48rem] font-semibold leading-none text-[#241436] sm:text-[1.8rem] xl:text-[2.25rem] 2xl:text-[2.65rem]">
+                      Hey {displayName}!
+                    </p>
+                  </div>
+                </div>
 
-                {/* Mobile aurora */}
-                <div
-                  className="absolute pointer-events-none"
-                  style={{
-                    zIndex: 21,
-                    top: 0,
-                    left: "-30%",
-                    width: "160%",
-                    height: "35%",
-                    background: "linear-gradient(90deg, rgba(124,58,237,0.35) 0%, rgba(6,182,212,0.28) 35%, rgba(255,200,100,0.20) 65%, rgba(124,58,237,0.30) 100%)",
-                    filter: "blur(35px)",
-                    willChange: "transform, opacity",
-                    transform: `translate(${-parallax.x * 0.8}px, ${-parallax.y * 0.8}px)`,
-                    transition: "transform 0.3s ease-out",
-                    animation: "aurora-wave 14s ease-in-out infinite",
-                  }}
-                />
+                {/* Streak badge — same row as name on mobile (col 2, right-aligned) */}
+                <div className="flex items-center justify-end lg:justify-center">
+                  <motion.div
+                    className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-[0.95rem] font-semibold text-[#3A2208] sm:gap-2 sm:px-4 sm:text-[1.02rem] xl:px-5 xl:text-[1.18rem] 2xl:gap-2.5 2xl:py-2.5 dash-animate-gradient"
+                    style={{
+                      background:
+                        "linear-gradient(135deg, #FFD56D 0%, #FFCA4D 33%, #FFB95A 66%, #FFD56D 100%)",
+                      backgroundSize: "200% 200%",
+                      boxShadow:
+                        "0 16px 28px rgba(243, 162, 81, 0.28), inset 0 1px 0 rgba(255,255,255,0.55)",
+                    }}
+                    animate={{ scale: [1, 1.04, 1] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  >
+                    <Flame className="h-5 w-5 text-[#FF7A00] sm:h-[22px] sm:w-[22px] xl:h-[26px] xl:w-[26px]" />
+                    <span>
+                      {displayStreak} {displayStreak === 1 ? "Day" : "Days"}{" "}
+                      Streak
+                    </span>
+                  </motion.div>
+                </div>
 
-                {MOBILE_SCENE_BUILDINGS.map((building, index) => {
-                  const zone = building.mobile;
-                  return (
-                    <div
-                      key={building.id}
-                      style={{
-                        position: "absolute",
-                        left: `${zone.left}%`,
-                        top: `${zone.top}%`,
-                        width: `${zone.width}%`,
-                        height: `${zone.height}%`,
-                        zIndex: 30,
-                      }}
-                    >
-                      <MobileBuildingHotspot
-                        building={building}
-                        onClick={() => handleBuildingClick(building)}
-                        onHover={() => setHoveredBuilding(building.id)}
-                        onLeave={() =>
-                          setHoveredBuilding(current =>
-                            current === building.id ? null : current
-                          )
-                        }
-                        isHovered={hoveredBuilding === building.id}
-                        entranceDelay={0.22 + index * 0.08}
-                        worldReady={worldReady}
-                      />
-                    </div>
-                  );
-                })}
+                {/* Gems + Coins — spans both cols on mobile, own col on desktop */}
+                <div className="col-span-2 hidden flex-wrap items-center gap-2.5 lg:col-span-1 lg:flex lg:justify-self-end">
+                  <TopBadge
+                    icon={<Gem className="h-5 w-5" />}
+                    value={displayXp}
+                    variant="purple"
+                  />
+                  <TopBadge
+                    icon={<Coins className="h-5 w-5" />}
+                    value={displayWordsLearned}
+                    variant="gold"
+                  />
+                </div>
               </div>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Burst particles — fixed position overlay */}
-      {burstParticles.map(burst => (
-        <div
-          key={burst.id}
-          className="pointer-events-none"
-          style={{ position: "fixed", left: burst.x, top: burst.y, zIndex: 9999 }}
-        >
-          {burst.particles.map((p, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full"
-              style={{
-                width: 6,
-                height: 6,
-                background: p.color,
-                boxShadow: `0 0 8px ${p.color}`,
-                "--bx": p.bx,
-                "--by": p.by,
-                animation: "burst-particle 0.6s ease-out forwards",
-              } as React.CSSProperties}
-            />
-          ))}
+              <div className="relative mt-1 h-[56px] sm:h-[64px] lg:hidden">
+                <div className="absolute inset-x-0 top-0 z-20 h-[108px]">
+                  <StorylingMascot
+                    className="absolute left-[18px] -top-3 z-30 h-[96px] w-[96px] animate-[floaty_4s_ease-in-out_infinite]"
+                    imageClassName="-rotate-[6deg]"
+                  />
+                  <div className="absolute left-[96px] -top-1 z-40">
+                    <div className="absolute -left-2 top-1/2 h-0 w-0 -translate-y-1/2 border-y-[8px] border-r-[10px] border-y-transparent border-r-white/95 drop-shadow-[0_10px_14px_rgba(178,157,223,0.18)]" />
+                    <div className="whitespace-nowrap rounded-[18px] bg-white/95 px-4 py-2.5 text-[1rem] font-medium text-[#3B2A50] shadow-[0_14px_22px_rgba(178,157,223,0.2)]">
+                      Keep it up!
+                    </div>
+                  </div>
+                  <div className="absolute right-0 top-[38px] z-40 flex items-center gap-2">
+                    <TopBadge
+                      icon={<Gem className="h-4 w-4" />}
+                      value={displayXp}
+                      variant="purple"
+                    />
+                    <TopBadge
+                      icon={<Coins className="h-4 w-4" />}
+                      value={displayWordsLearned}
+                      variant="gold"
+                    />
+                  </div>
+                </div>
+              </div>
+            </motion.section>
+
+            <motion.section variants={fadeSlideUp} className="relative z-10 overflow-visible rounded-[30px] bg-white/90 p-4 shadow-[0_18px_42px_rgba(174,150,220,0.16),0_4px_12px_rgba(174,150,220,0.06)] backdrop-blur-[12px] sm:rounded-[34px] sm:p-5 lg:p-5 xl:p-6 2xl:rounded-[40px] 2xl:p-8">
+              {/* TOP GRID: action tiles | mascot (desktop) | continue watching */}
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_318px] lg:grid-rows-[auto_auto] lg:items-start lg:gap-6 xl:grid-cols-[minmax(0,1fr)_336px] 2xl:grid-cols-[minmax(0,1fr)_360px] 2xl:gap-8">
+                {/* LEFT: Action tiles — 2×2 always */}
+                <div className="lg:col-start-1 lg:row-start-1">
+                  <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_188px] lg:items-center lg:gap-5 xl:grid-cols-[minmax(0,1fr)_204px] 2xl:grid-cols-[minmax(0,1fr)_280px] 2xl:gap-8">
+                    <motion.div variants={staggerContainer} initial="hidden" animate="show" className="grid grid-cols-2 gap-4 lg:gap-3.5 xl:gap-4">
+                      {ACTION_TILES.map(tile => (
+                        <ActionTile
+                          key={tile.id}
+                          label={tile.label}
+                          colors={tile.colors}
+                          accent={tile.accent}
+                          tone={tile.tone}
+                          icon={tile.icon}
+                          onClick={() => handleTileAction(tile.action)}
+                          tutorial={
+                            tile.id === "create"
+                              ? "create-story"
+                              : tile.id === "library"
+                                ? "library"
+                                : tile.id === "wordbank"
+                                  ? "wordbank"
+                                  : undefined
+                          }
+                        />
+                      ))}
+                    </motion.div>
+
+                    {/* CENTER: Mascot + speech bubble (desktop only) */}
+                    <div className="hidden lg:flex lg:items-center lg:justify-center">
+                      <div className="relative w-[188px] xl:w-[210px] 2xl:w-[282px]">
+                        <StorylingMascot
+                          className="h-[162px] w-[162px] animate-[floaty_4s_ease-in-out_infinite] xl:h-[178px] xl:w-[178px] 2xl:h-[200px] 2xl:w-[200px]"
+                          imageClassName="-rotate-[6deg]"
+                        />
+                        <div className="absolute left-1/2 top-[130px] z-10 flex -translate-x-1/2 flex-col items-center xl:top-[144px] 2xl:top-[164px]">
+                          <div className="h-3.5 w-3.5 -mb-2 rotate-45 rounded-[3px] bg-white/95 shadow-[0_8px_16px_rgba(178,157,223,0.12)] 2xl:h-4 2xl:w-4" />
+                          <div className="whitespace-nowrap rounded-[20px] bg-white/95 px-4 py-2.5 text-[0.95rem] font-medium text-[#3B2A50] shadow-[0_10px_20px_rgba(178,157,223,0.18)] xl:text-[1.02rem] 2xl:rounded-[22px] 2xl:px-5 2xl:py-3 2xl:text-[1.14rem]">
+                            Keep it up!
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RIGHT: Continue Watching */}
+                <div
+                  className="relative lg:col-start-2 lg:row-span-2"
+                  data-tutorial="recently-watched"
+                >
+                  <Sparkles
+                    className="pointer-events-none absolute right-14 -top-1 h-4 w-4 text-[#DDD2F0] opacity-80"
+                    strokeWidth={1.6}
+                  />
+                  <Sparkles
+                    className="pointer-events-none absolute right-0 top-5 h-6 w-6 text-[#DDD2F0]"
+                    strokeWidth={1.6}
+                  />
+                  <span className="pointer-events-none absolute right-2 -top-0.5 h-2 w-2 rounded-full bg-[#DDD2F0] opacity-70" />
+                  <span className="pointer-events-none absolute right-8 top-8 h-1.5 w-1.5 rounded-full bg-[#DDD2F0] opacity-50" />
+                  <motion.div variants={fadeSlideUp} className="mb-3 flex items-center justify-between xl:mb-4">
+                    <h2 className="text-[1.55rem] font-semibold leading-none text-[#231532] xl:text-[1.7rem] 2xl:text-[1.9rem]">
+                      Continue Watching
+                    </h2>
+                  </motion.div>
+                  {continueWatching.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-1 lg:gap-3.5 xl:gap-4">
+                      {continueWatching.map(item => (
+                        <ContinueCard
+                          key={item.id}
+                          item={item}
+                          onClick={() => setLocation(`/content/${item.id}`)}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[24px] bg-[linear-gradient(135deg,#F5EEFF_0%,#FCE8F3_100%)] px-5 py-4 text-[#4E356B] shadow-[0_12px_24px_rgba(177,145,213,0.18)] lg:rounded-[28px] lg:p-5">
+                      <p className="text-[1rem] font-semibold text-[#2E2147] lg:text-[1.08rem]">
+                        No story in progress yet
+                      </p>
+                      <p className="mt-1 hidden text-[0.88rem] leading-relaxed sm:block lg:mt-2 lg:text-[0.94rem]">
+                        Open your library or create a new story to start
+                        tracking progress here.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setLocation("/library")}
+                        className="mt-3 inline-flex h-10 items-center justify-center rounded-full bg-white/90 px-5 text-[0.9rem] font-semibold text-[#5A3D7B] shadow-[0_10px_18px_rgba(177,145,213,0.16)] transition-transform duration-200 hover:-translate-y-0.5 lg:mt-4 lg:h-11 lg:text-[0.95rem]"
+                      >
+                        Open Library
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* DAILY CHALLENGE — full-width below the top grid */}
+                <div className="lg:col-start-1 lg:row-start-2">
+                  <div className="relative mt-6 overflow-visible rounded-[28px] border border-[#EDE4F6] bg-[linear-gradient(105deg,#F3EDFF_0%,#FDFBFF_35%,#FFFDFE_100%)] shadow-[0_8px_24px_rgba(179,156,223,0.10)] lg:mt-0">
+                    <Sparkles
+                      className="pointer-events-none absolute right-4 top-3 h-4 w-4 text-[#D4C9B8] opacity-50"
+                      strokeWidth={1.5}
+                    />
+                    <span className="pointer-events-none absolute right-10 top-2.5 h-1.5 w-1.5 rounded-full bg-[#D4C9B8] opacity-40" />
+
+                    <div className="flex items-center gap-2.5 px-3 py-3.5 sm:gap-4 sm:px-5 sm:py-4 lg:gap-4 lg:px-5 lg:py-3">
+                      {/* Mascot */}
+                      <div className="relative h-[72px] w-[76px] shrink-0 sm:h-[78px] sm:w-[88px] lg:h-[56px] lg:w-[72px] xl:h-[62px] xl:w-[80px] 2xl:h-[76px] 2xl:w-[100px]">
+                        <StorylingMascot
+                          className="pointer-events-none absolute z-10 -left-5 -top-4 h-[96px] w-[96px] sm:-left-8 sm:-top-6 sm:h-[116px] sm:w-[116px] lg:-left-7 lg:-top-5 lg:h-[92px] lg:w-[92px] xl:-left-8 xl:-top-6 xl:h-[102px] xl:w-[102px] 2xl:-left-10 2xl:-top-8 2xl:h-[130px] 2xl:w-[130px]"
+                          imageClassName="-rotate-[8deg]"
+                        />
+                      </div>
+
+                      {/* Content — title + subtitle left, badges + button right */}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate whitespace-nowrap text-[0.92rem] font-semibold leading-none text-[#231532] sm:text-[1.2rem] lg:text-[0.95rem] xl:text-[1rem] 2xl:text-[1.15rem]">
+                          {challengeCopy.title}
+                        </p>
+                        <p className="mt-1.5 text-[0.76rem] leading-[1.2] text-[#6B5A82] sm:text-[0.86rem] lg:text-[0.76rem] xl:text-[0.8rem] 2xl:text-[0.88rem]">
+                          {challengeCopy.subtitle}
+                        </p>
+                      </div>
+
+                      {/* Right column — badges stacked above button, same width */}
+                      <div className="flex w-max shrink-0 flex-col items-stretch gap-1.5 sm:w-[164px] sm:gap-2 lg:w-auto lg:gap-1.5">
+                        <div className="flex w-full items-center justify-between gap-1 sm:gap-2">
+                          {challengeBadges.map(badge => (
+                            <div
+                              key={badge.label}
+                              className={`inline-flex h-[21px] shrink-0 items-center gap-0.5 rounded-full px-1.5 text-[0.6rem] font-semibold sm:h-[26px] sm:gap-1 sm:px-2.5 sm:text-[0.74rem] lg:h-[22px] lg:px-2 lg:text-[0.68rem] xl:h-[24px] xl:px-2.5 xl:text-[0.7rem] 2xl:h-[26px] 2xl:px-3 2xl:text-[0.76rem] ${badge.className}`}
+                            >
+                              {badge.icon}
+                              {badge.label}
+                            </div>
+                          ))}
+                        </div>
+                        <motion.button
+                          type="button"
+                          onClick={challengeCopy.action}
+                          whileHover={{ scale: 1.05, y: -2 }}
+                          whileTap={{ scale: 0.96 }}
+                          className="relative inline-flex h-[40px] w-full items-center justify-center overflow-hidden rounded-full bg-[linear-gradient(180deg,#FF9B8E_0%,#FF8577_50%,#FF7468_100%)] px-3 text-[0.8rem] font-semibold text-white shadow-[0_8px_18px_rgba(255,118,116,0.22)] sm:h-[44px] sm:px-6 sm:text-[0.92rem] lg:h-[36px] lg:px-4 lg:text-[0.78rem] xl:h-[38px] xl:px-5 xl:text-[0.82rem] 2xl:h-[44px] 2xl:px-6 2xl:text-[0.92rem]"
+                        >
+                          {challengeCopy.actionLabel}
+                        </motion.button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="mt-7 border-t border-[#EEE8FA] pt-5 xl:mt-9 xl:pt-7"
+                data-tutorial="progress-tracking"
+              >
+                <motion.div variants={fadeSlideUp} className="mb-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-[1.65rem] font-semibold leading-none text-[#231532] xl:text-[1.78rem] 2xl:text-[1.9rem]">
+                      Explore new stories
+                    </h2>
+                    {/* Decorative confetti streamer */}
+                    <span className="pointer-events-none hidden select-none text-[0.85rem] opacity-60 sm:inline">
+                      💜✨⭐🩷🎵✨
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLocation("/discover")}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full text-[#B1A1CE] transition-colors hover:bg-[#F6F1FF] hover:text-[#7C63A6]"
+                    aria-label="Open discover"
+                  >
+                    <ChevronRight className="h-6 w-6" />
+                  </button>
+                </motion.div>
+
+                <div className="relative">
+                  <div
+                    className="pointer-events-none absolute left-1/2 top-[-8px] hidden h-16 w-48 -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(255,120,168,0.15)_0%,rgba(193,145,255,0.08)_46%,transparent_75%)] md:block"
+                    style={{
+                      animation: "shimmer-drift 5s ease-in-out infinite",
+                    }}
+                  />
+                  {exploreAvatars.length > 0 ? (
+                    <div className="relative flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] xl:gap-4 [&::-webkit-scrollbar]:hidden">
+                      {exploreAvatars.map((avatar, i) => (
+                        <button
+                          type="button"
+                          key={avatar.id}
+                          onClick={() => setLocation(avatar.targetPath)}
+                          className="relative shrink-0"
+                          aria-label={`Open ${avatar.collectionName} by ${avatar.name}`}
+                          title={`${avatar.name} · ${avatar.collectionName}`}
+                        >
+                          <ExploreAvatarCard avatar={avatar} />
+                          {/* Decorative mini books below avatars */}
+                          {i < 8 && (
+                            <span
+                              className="pointer-events-none absolute -bottom-1 left-1/2 -translate-x-1/2 text-[0.7rem] opacity-80"
+                              style={{ filter: `hue-rotate(${i * 42}deg)` }}
+                            >
+                              📖
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="rounded-[24px] bg-[linear-gradient(135deg,#F7F2FF_0%,#FFF8FC_100%)] px-5 py-4 text-[0.95rem] text-[#6C5687] shadow-[0_10px_20px_rgba(177,145,213,0.12)]">
+                      No public stories available yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.section>
+
+            <motion.div variants={fadeSlideUp} className="pointer-events-none absolute inset-x-0 top-[92px] hidden lg:block">
+              <div className="mx-auto flex max-w-[1220px] justify-end px-8">
+                <span className="mr-[230px] mt-1 text-[#F9B252]">* *</span>
+              </div>
+            </motion.div>
+          </motion.div>
         </div>
-      ))}
+      </PullToRefresh>
     </>
   );
 }

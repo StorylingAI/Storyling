@@ -1,9 +1,9 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Trophy, Medal, Award, TrendingUp } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { UserAvatar } from "./UserAvatar";
 
 export function LeaderboardWidget() {
   const { data: topAchievers, isLoading } = trpc.leaderboard.getTopWeeklyAchievers.useQuery({ limit: 10 });
@@ -88,11 +88,12 @@ export function LeaderboardWidget() {
               </div>
 
               {/* User Avatar */}
-              <Avatar className="h-10 w-10">
-                <AvatarFallback className="bg-gradient-to-br from-purple-500 to-teal-500 text-white font-semibold">
-                  {entry.userName?.charAt(0).toUpperCase() || "?"}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={entry.userName}
+                avatarUrl={entry.avatarUrl}
+                className="h-10 w-10 border-0"
+                fallbackClassName="text-sm"
+              />
 
               {/* User Info */}
               <div className="flex-1 min-w-0">

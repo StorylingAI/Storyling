@@ -49,6 +49,7 @@ export const discoveryRouter = router({
           createdAt: collections.createdAt,
           userId: collections.userId,
           userName: users.name,
+          avatarUrl: users.avatarUrl,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
@@ -57,7 +58,7 @@ export const discoveryRouter = router({
         .where(
           and(...baseConditions, gte(collections.createdAt, oneWeekAgo))
         )
-        .groupBy(collections.id, users.name)
+        .groupBy(collections.id, users.name, users.avatarUrl)
         .orderBy(desc(collections.cloneCount))
         .limit(10);
 
@@ -73,6 +74,7 @@ export const discoveryRouter = router({
           createdAt: collections.createdAt,
           userId: collections.userId,
           userName: users.name,
+          avatarUrl: users.avatarUrl,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
@@ -81,7 +83,7 @@ export const discoveryRouter = router({
         .where(
           and(...baseConditions, gte(collections.createdAt, oneMonthAgo))
         )
-        .groupBy(collections.id, users.name)
+        .groupBy(collections.id, users.name, users.avatarUrl)
         .orderBy(desc(collections.createdAt))
         .limit(10);
 
@@ -97,13 +99,14 @@ export const discoveryRouter = router({
           createdAt: collections.createdAt,
           userId: collections.userId,
           userName: users.name,
+          avatarUrl: users.avatarUrl,
           itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
         })
         .from(collections)
         .innerJoin(users, eq(collections.userId, users.id))
         .leftJoin(collectionItems, eq(collectionItems.collectionId, collections.id))
         .where(and(...baseConditions))
-        .groupBy(collections.id, users.name)
+        .groupBy(collections.id, users.name, users.avatarUrl)
         .orderBy(desc(collections.cloneCount))
         .limit(10);
 
@@ -155,6 +158,7 @@ export const discoveryRouter = router({
                   createdAt: collections.createdAt,
                   userId: collections.userId,
                   userName: users.name,
+                  avatarUrl: users.avatarUrl,
                   itemCount: sql<number>`COUNT(DISTINCT ${collectionItems.id})`,
                 })
                 .from(collections)
@@ -166,7 +170,7 @@ export const discoveryRouter = router({
                     inArray(collections.id, collectionIds)
                   )
                 )
-                .groupBy(collections.id, users.name)
+                .groupBy(collections.id, users.name, users.avatarUrl)
                 .orderBy(desc(collections.cloneCount))
                 .limit(10);
             }

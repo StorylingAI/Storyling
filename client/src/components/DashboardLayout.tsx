@@ -1,5 +1,4 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +31,7 @@ import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { AppFooter } from './AppFooter';
+import { UserAvatar } from "./UserAvatar";
 
 const learningItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/app" },
@@ -411,11 +411,12 @@ function DashboardLayoutContent({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="flex items-center gap-3 rounded-lg px-1 py-1 hover:bg-accent/50 transition-colors w-full text-left group-data-[collapsible=icon]:justify-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar className="h-9 w-9 border shrink-0">
-                    <AvatarFallback className="text-xs font-medium">
-                      {user?.name?.charAt(0).toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    name={user?.name || user?.email}
+                    avatarUrl={user?.avatarUrl}
+                    className="h-9 w-9 shrink-0"
+                    fallbackClassName="text-xs font-medium"
+                  />
                   <div className="flex-1 min-w-0 group-data-[collapsible=icon]:hidden">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-medium truncate leading-none">

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
+import { randomBytes } from "crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { resolveFilmNarrationSettings } from "@shared/filmDefaults";
 import { getSessionCookieOptions } from "./_core/cookies";
@@ -32,7 +33,13 @@ import {
   users,
 } from "../drizzle/schema";
 import { eq, and, inArray } from "drizzle-orm";
-import { organizationRouter, classRouter, assignmentRouter, enrollmentRouter, analyticsRouter } from "./b2bRouters";
+import {
+  organizationRouter,
+  classRouter,
+  assignmentRouter,
+  enrollmentRouter,
+  analyticsRouter,
+} from "./b2bRouters";
 import { gamificationRouter } from "./gamificationRouters";
 import { wordbankRouter } from "./wordbankRouters";
 import { audioRouter } from "./audioRouters";
@@ -83,11 +90,31 @@ import {
   generateFilm,
   generatePreview,
 } from "./contentGeneration";
-import { getAvailableMoods, getTracksByMood, getMoodDisplayName } from "./musicLibrary";
+import {
+  getAvailableMoods,
+  getTracksByMood,
+  getMoodDisplayName,
+} from "./musicLibrary";
 import { generateMusicPreview } from "./musicPreview";
+import { storagePut } from "./storage";
+
+const AVATAR_MIME_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const;
+
+const AVATAR_UPLOAD_SCHEMA = z
+  .string()
+  .regex(
+    /^data:(image\/(?:jpeg|png|webp));base64,[A-Za-z0-9+/=]+$/,
+    "Unsupported avatar format"
+  );
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
+  // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   emailAuth: emailAuthRouter,
   payout: payoutRouter,
@@ -135,10 +162,19 @@ export const appRouter = router({
   entitlement: entitlementRouter,
   achievements: router({
     trackShare: protectedProcedure
-      .input(z.object({ achievementType: z.string(), platform: z.enum(["twitter", "facebook", "linkedin"]) }))
+      .input(
+        z.object({
+          achievementType: z.string(),
+          platform: z.enum(["twitter", "facebook", "linkedin"]),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         const { achievementShares } = await import("../drizzle/schema");
         await db.insert(achievementShares).values({
           userId: ctx.user.id,
@@ -153,40 +189,78 @@ export const appRouter = router({
       .input(z.object({ subscription: z.any() }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         const { pushSubscriptions } = await import("../drizzle/schema");
-        await db.insert(pushSubscriptions).values({
-          userId: ctx.user.id,
-          subscription: JSON.stringify(input.subscription),
-        }).onDuplicateKeyUpdate({ set: { subscription: JSON.stringify(input.subscription) } });
+        await db
+          .insert(pushSubscriptions)
+          .values({
+            userId: ctx.user.id,
+            subscription: JSON.stringify(input.subscription),
+          })
+          .onDuplicateKeyUpdate({
+            set: { subscription: JSON.stringify(input.subscription) },
+          });
         return { success: true };
       }),
-    unsubscribeFromPush: protectedProcedure
-      .mutation(async ({ ctx }) => {
-        const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-        const { pushSubscriptions } = await import("../drizzle/schema");
-        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, ctx.user.id));
-        return { success: true };
-      }),
-    getPreferences: protectedProcedure
-      .query(async ({ ctx }) => {
-        const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
-        const { notificationPreferences } = await import("../drizzle/schema");
-        const prefs = await db.select().from(notificationPreferences).where(eq(notificationPreferences.userId, ctx.user.id)).limit(1);
-        return prefs[0] || { weeklyGoalReminders: true, achievementNotifications: true };
-      }),
+    unsubscribeFromPush: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
+      const { pushSubscriptions } = await import("../drizzle/schema");
+      await db
+        .delete(pushSubscriptions)
+        .where(eq(pushSubscriptions.userId, ctx.user.id));
+      return { success: true };
+    }),
+    getPreferences: protectedProcedure.query(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
+      const { notificationPreferences } = await import("../drizzle/schema");
+      const prefs = await db
+        .select()
+        .from(notificationPreferences)
+        .where(eq(notificationPreferences.userId, ctx.user.id))
+        .limit(1);
+      return (
+        prefs[0] || {
+          weeklyGoalReminders: true,
+          achievementNotifications: true,
+        }
+      );
+    }),
     updatePreferences: protectedProcedure
-      .input(z.object({ weeklyGoalReminders: z.boolean().optional(), achievementNotifications: z.boolean().optional() }))
+      .input(
+        z.object({
+          weeklyGoalReminders: z.boolean().optional(),
+          achievementNotifications: z.boolean().optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         const { notificationPreferences } = await import("../drizzle/schema");
-        await db.insert(notificationPreferences).values({
-          userId: ctx.user.id,
-          ...input,
-        }).onDuplicateKeyUpdate({ set: input });
+        await db
+          .insert(notificationPreferences)
+          .values({
+            userId: ctx.user.id,
+            ...input,
+          })
+          .onDuplicateKeyUpdate({ set: input });
         return { success: true };
       }),
   }),
@@ -223,7 +297,11 @@ export const appRouter = router({
       .input(z.object({ language: z.string().max(10) }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         await db
           .update(users)
           .set({ preferredLanguage: input.language })
@@ -234,7 +312,11 @@ export const appRouter = router({
       .input(z.object({ language: z.string().max(10) }))
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         await db
           .update(users)
           .set({ preferredTranslationLanguage: input.language })
@@ -249,23 +331,98 @@ export const appRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
         await db
           .update(users)
           .set({ name: input.name })
           .where(eq(users.id, ctx.user.id));
         return { success: true };
       }),
-    completePremiumOnboarding: protectedProcedure
-      .mutation(async ({ ctx }) => {
+    uploadAvatar: protectedProcedure
+      .input(
+        z.object({
+          dataUrl: AVATAR_UPLOAD_SCHEMA,
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
         const db = await getDb();
-        if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+        if (!db)
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Database unavailable",
+          });
+
+        const match = input.dataUrl.match(
+          /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/
+        );
+        if (!match) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Unsupported avatar format",
+          });
+        }
+
+        const mimeType = match[1] as keyof typeof AVATAR_MIME_TYPES;
+        const base64Payload = match[2];
+        const buffer = Buffer.from(base64Payload, "base64");
+
+        if (!buffer.length) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Avatar file is empty",
+          });
+        }
+
+        if (buffer.length > MAX_AVATAR_BYTES) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Avatar must be 2MB or smaller",
+          });
+        }
+
+        const extension = AVATAR_MIME_TYPES[mimeType];
+        const fileKey = `avatars/user-${ctx.user.id}/${Date.now()}-${randomBytes(8).toString("hex")}.${extension}`;
+        const { url } = await storagePut(fileKey, buffer, mimeType);
+
         await db
           .update(users)
-          .set({ premiumOnboardingCompleted: true })
+          .set({ avatarUrl: url })
           .where(eq(users.id, ctx.user.id));
-        return { success: true };
+
+        return { success: true, avatarUrl: url };
       }),
+    removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
+
+      await db
+        .update(users)
+        .set({ avatarUrl: null })
+        .where(eq(users.id, ctx.user.id));
+
+      return { success: true };
+    }),
+    completePremiumOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
+      const db = await getDb();
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
+      await db
+        .update(users)
+        .set({ premiumOnboardingCompleted: true })
+        .where(eq(users.id, ctx.user.id));
+      return { success: true };
+    }),
   }),
 
   content: router({
@@ -300,7 +457,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const vocabularyWords = input.vocabularyText
           .split(/[,\n]/)
-          .map((w) => w.trim())
+          .map(w => w.trim())
           .filter(Boolean);
 
         const preview = await generatePreview({
@@ -324,12 +481,31 @@ export const appRouter = router({
           topicPrompt: z.string().optional(),
           translationLanguage: z.string().optional(),
           mode: z.enum(["podcast", "film"]),
-          storyLength: z.enum(["short", "medium", "long"]).optional().default("medium"),
+          storyLength: z
+            .enum(["short", "medium", "long"])
+            .optional()
+            .default("medium"),
           voiceType: z.string().optional(),
           narratorGender: z.enum(["male", "female"]).optional(),
           cinematicStyle: z.string().optional(),
           videoDuration: z.number().optional().default(30), // Video duration in seconds for film mode
-          backgroundMusic: z.enum(["calm", "upbeat", "dramatic", "adventure", "suspenseful", "romantic", "mysterious", "comedic", "energetic", "melancholic", "triumphant", "peaceful", "none"]).optional(),
+          backgroundMusic: z
+            .enum([
+              "calm",
+              "upbeat",
+              "dramatic",
+              "adventure",
+              "suspenseful",
+              "romantic",
+              "mysterious",
+              "comedic",
+              "energetic",
+              "melancholic",
+              "triumphant",
+              "peaceful",
+              "none",
+            ])
+            .optional(),
           musicVolume: z.number().min(0).max(100).optional().default(20),
           selectedMusicTrack: z.string().optional(),
           addSubtitles: z.boolean().optional(),
@@ -341,10 +517,15 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         // --- SERVER-SIDE FREE TIER LIMIT: 1 story/day (with 3 starter bonus credits) ---
         let usedBonusCredit = false;
-        if (ctx.user.subscriptionTier !== "premium" && ctx.user.subscriptionTier !== "premium_plus") { // premium_plus is legacy, kept for backward compat
+        if (
+          ctx.user.subscriptionTier !== "premium" &&
+          ctx.user.subscriptionTier !== "premium_plus"
+        ) {
+          // premium_plus is legacy, kept for backward compat
           const db = await getDb();
           if (db) {
-            const { generatedContent, users: usersTable } = await import("../drizzle/schema");
+            const { generatedContent, users: usersTable } =
+              await import("../drizzle/schema");
             const { eq, and, gte } = await import("drizzle-orm");
             const oneDayAgo = new Date();
             oneDayAgo.setDate(oneDayAgo.getDate() - 1);
@@ -369,7 +550,8 @@ export const appRouter = router({
               } else {
                 throw new TRPCError({
                   code: "FORBIDDEN",
-                  message: "You've used your free story for today. Upgrade to Premium for unlimited stories!",
+                  message:
+                    "You've used your free story for today. Upgrade to Premium for unlimited stories!",
                 });
               }
             }
@@ -380,7 +562,7 @@ export const appRouter = router({
 
         const vocabularyWords = input.vocabularyText
           .split(/[,\n]/)
-          .map((w) => w.trim())
+          .map(w => w.trim())
           .filter(Boolean);
 
         const vocabList = await createVocabularyList({
@@ -392,20 +574,28 @@ export const appRouter = router({
         });
 
         // Generate a temporary title (will be replaced with AI-generated title)
-        const tempTitle = input.topicPrompt 
-          ? `${input.theme}: ${input.topicPrompt.substring(0, 50)}${input.topicPrompt.length > 50 ? '...' : ''}`
-          : `${input.theme} ${input.mode === 'podcast' ? 'Podcast' : 'Film'} - ${input.targetLanguage}`;
+        const tempTitle = input.topicPrompt
+          ? `${input.theme}: ${input.topicPrompt.substring(0, 50)}${input.topicPrompt.length > 50 ? "..." : ""}`
+          : `${input.theme} ${input.mode === "podcast" ? "Podcast" : "Film"} - ${input.targetLanguage}`;
 
         // Calculate difficulty level based on language and proficiency
-        const difficultyLevel = calculateDifficultyLevel(input.targetLanguage, input.proficiencyLevel);
+        const difficultyLevel = calculateDifficultyLevel(
+          input.targetLanguage,
+          input.proficiencyLevel
+        );
         const filmNarration =
           input.mode === "film"
-            ? resolveFilmNarrationSettings(input.voiceType, input.narratorGender)
+            ? resolveFilmNarrationSettings(
+                input.voiceType,
+                input.narratorGender
+              )
             : null;
         const effectiveVoiceType =
           input.mode === "film" ? filmNarration?.voiceType : input.voiceType;
         const effectiveNarratorGender =
-          input.mode === "film" ? filmNarration?.narratorGender : input.narratorGender;
+          input.mode === "film"
+            ? filmNarration?.narratorGender
+            : input.narratorGender;
 
         const content = await createGeneratedContent({
           userId: ctx.user.id,
@@ -425,13 +615,16 @@ export const appRouter = router({
           try {
             // Import progress helper
             const { updateContentProgress } = await import("./db");
-            
+
             // Get translation language from input or user preference
-            const translationLanguage = input.translationLanguage || ctx.user.preferredTranslationLanguage || "English";
-            
+            const translationLanguage =
+              input.translationLanguage ||
+              ctx.user.preferredTranslationLanguage ||
+              "English";
+
             // Stage 1: Story Generation (0-40%)
             await updateContentProgress(content.id, 10, "Generating story...");
-            
+
             const story = await generateStory({
               targetLanguage: input.targetLanguage,
               proficiencyLevel: input.proficiencyLevel,
@@ -448,9 +641,13 @@ export const appRouter = router({
               targetVideoDuration:
                 input.mode === "film" ? input.videoDuration : undefined,
             });
-            
-            await updateContentProgress(content.id, 40, "Story created successfully");
-            
+
+            await updateContentProgress(
+              content.id,
+              40,
+              "Story created successfully"
+            );
+
             // Use the AI-generated title from the story
             const finalTitle = story.title || tempTitle;
 
@@ -461,19 +658,33 @@ export const appRouter = router({
             let audioAlignment: any = null;
 
             // Stage 2: Thumbnail Generation (40-50%)
-            await updateContentProgress(content.id, 42, "Generating thumbnail...");
-            
+            await updateContentProgress(
+              content.id,
+              42,
+              "Generating thumbnail..."
+            );
+
             // Generate thumbnail image based on theme and story content
             try {
-              console.log("[Thumbnail Generation] Starting thumbnail generation for content ID:", content.id);
+              console.log(
+                "[Thumbnail Generation] Starting thumbnail generation for content ID:",
+                content.id
+              );
               const { generateImage } = await import("./_core/imageGeneration");
-              
+
               const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${input.theme.toLowerCase()} story titled "${finalTitle}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
-              
+
               const { url } = await generateImage({ prompt: thumbnailPrompt });
               thumbnailUrl = url;
-              console.log("[Thumbnail Generation] Success! Thumbnail URL:", thumbnailUrl);
-              await updateContentProgress(content.id, 50, "Thumbnail generated");
+              console.log(
+                "[Thumbnail Generation] Success! Thumbnail URL:",
+                thumbnailUrl
+              );
+              await updateContentProgress(
+                content.id,
+                50,
+                "Thumbnail generated"
+              );
             } catch (error) {
               console.error("[Thumbnail Generation] Failed:", error);
               // Continue without thumbnail - it's not critical
@@ -481,12 +692,24 @@ export const appRouter = router({
 
             if (input.mode === "podcast" && input.voiceType) {
               // Stage 3: Audio Generation (50-90%)
-              await updateContentProgress(content.id, 55, "Generating audio...");
-              
-              console.log("[Podcast Generation] Starting podcast generation for content ID:", content.id);
-              console.log("[Podcast Generation] Voice type:", input.voiceType, "Gender:", input.narratorGender);
-              
-              const podcast = await generatePodcast(
+              await updateContentProgress(
+                content.id,
+                55,
+                "Generating audio..."
+              );
+
+              console.log(
+                "[Podcast Generation] Starting podcast generation for content ID:",
+                content.id
+              );
+              console.log(
+                "[Podcast Generation] Voice type:",
+                input.voiceType,
+                "Gender:",
+                input.narratorGender
+              );
+
+              const podcast = (await generatePodcast(
                 {
                   targetLanguage: input.targetLanguage,
                   proficiencyLevel: input.proficiencyLevel,
@@ -497,20 +720,39 @@ export const appRouter = router({
                   narratorGender: input.narratorGender,
                 },
                 story.storyText
-              ) as { audioUrl: string; transcript: string; audioAlignment?: any };
-              
-              console.log("[Podcast Generation] Success! Audio URL:", podcast.audioUrl);
+              )) as {
+                audioUrl: string;
+                transcript: string;
+                audioAlignment?: any;
+              };
+
+              console.log(
+                "[Podcast Generation] Success! Audio URL:",
+                podcast.audioUrl
+              );
               audioUrl = podcast.audioUrl;
               transcript = podcast.transcript;
               if (podcast.audioAlignment) {
                 audioAlignment = podcast.audioAlignment;
-                console.log("[Podcast Generation] Saving audio alignment data with", podcast.audioAlignment.characters.length, "character timestamps");
+                console.log(
+                  "[Podcast Generation] Saving audio alignment data with",
+                  podcast.audioAlignment.characters.length,
+                  "character timestamps"
+                );
               }
-              await updateContentProgress(content.id, 90, "Audio generated successfully");
+              await updateContentProgress(
+                content.id,
+                90,
+                "Audio generated successfully"
+              );
             } else if (input.mode === "film" && input.cinematicStyle) {
               // Stage 3: Video Generation (50-90%)
-              await updateContentProgress(content.id, 55, "Generating video...");
-              
+              await updateContentProgress(
+                content.id,
+                55,
+                "Generating video..."
+              );
+
               const film = await generateFilm(
                 {
                   targetLanguage: input.targetLanguage,
@@ -534,17 +776,25 @@ export const appRouter = router({
                 story.storyText,
                 async (stage: string, progress: number) => {
                   // Update progress with detailed stage information
-                  await updateContentProgress(content.id, 55 + Math.floor(progress * 0.35), stage);
+                  await updateContentProgress(
+                    content.id,
+                    55 + Math.floor(progress * 0.35),
+                    stage
+                  );
                 }
               );
               videoUrl = film.videoUrl;
               transcript = film.transcript;
-              await updateContentProgress(content.id, 90, "Video generated successfully");
+              await updateContentProgress(
+                content.id,
+                90,
+                "Video generated successfully"
+              );
             }
 
             // Stage 4: Finalizing (90-100%)
             await updateContentProgress(content.id, 95, "Finalizing...");
-            
+
             await updateGeneratedContent(content.id, {
               title: finalTitle, // Update with AI-generated title
               titleTranslation: story.titleTranslation, // Save translated title
@@ -560,18 +810,20 @@ export const appRouter = router({
               progress: 100,
               progressStage: "Completed",
             });
-            
+
             const progress = await getLearningProgressByUserId(ctx.user.id);
             const existingProgress = progress.find(
-              (p) => p.targetLanguage === input.targetLanguage
+              p => p.targetLanguage === input.targetLanguage
             );
 
             await upsertLearningProgress({
               userId: ctx.user.id,
               targetLanguage: input.targetLanguage,
               totalWordsLearned:
-                (existingProgress?.totalWordsLearned || 0) + vocabularyWords.length,
-              totalStoriesGenerated: (existingProgress?.totalStoriesGenerated || 0) + 1,
+                (existingProgress?.totalWordsLearned || 0) +
+                vocabularyWords.length,
+              totalStoriesGenerated:
+                (existingProgress?.totalStoriesGenerated || 0) + 1,
               totalTimeSpent: existingProgress?.totalTimeSpent || 0,
               currentStreak: existingProgress?.currentStreak || 1,
               longestStreak: existingProgress?.longestStreak || 1,
@@ -581,11 +833,12 @@ export const appRouter = router({
             // Award XP for story creation
             const xpReward = 25; // Story creation XP
             const { getDb } = await import("./db");
-            const { userStats, achievements, userAchievements, notifications } = await import("../drizzle/schema");
+            const { userStats, achievements, userAchievements, notifications } =
+              await import("../drizzle/schema");
             const { eq } = await import("drizzle-orm");
             const db = await getDb();
             if (!db) return;
-            
+
             // Send notification to user
             await db.insert(notifications).values({
               userId: ctx.user.id,
@@ -610,6 +863,7 @@ export const appRouter = router({
                 longestStreak: 0,
                 lastActivityDate: null,
                 totalXp: 0,
+                coins: 0,
                 level: 1,
                 storiesCompleted: 0,
                 quizzesCompleted: 0,
@@ -623,10 +877,14 @@ export const appRouter = router({
               .from(userStats)
               .where(eq(userStats.userId, ctx.user.id))
               .limit(1);
-            
+
             const current = stats[0];
             const now = new Date();
-            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const today = new Date(
+              now.getFullYear(),
+              now.getMonth(),
+              now.getDate()
+            );
             const lastActivity = current.lastActivityDate
               ? new Date(
                   current.lastActivityDate.getFullYear(),
@@ -639,7 +897,10 @@ export const appRouter = router({
             if (!lastActivity) {
               newStreak = 1;
             } else {
-              const daysDiff = Math.floor((today.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24));
+              const daysDiff = Math.floor(
+                (today.getTime() - lastActivity.getTime()) /
+                  (1000 * 60 * 60 * 24)
+              );
               if (daysDiff === 0) {
                 newStreak = current.currentStreak;
               } else if (daysDiff === 1) {
@@ -657,7 +918,8 @@ export const appRouter = router({
             if (newTotalXp >= 100) newLevel = 2;
             if (newTotalXp >= 300) newLevel = 3;
             if (newTotalXp >= 600) newLevel = 4;
-            if (newTotalXp >= 1000) newLevel = 5 + Math.floor((newTotalXp - 1000) / 500);
+            if (newTotalXp >= 1000)
+              newLevel = 5 + Math.floor((newTotalXp - 1000) / 500);
 
             // Update user stats
             await db
@@ -675,15 +937,20 @@ export const appRouter = router({
 
             // Mark "Create Story" challenge as completed
             try {
-              const { completeChallenge, TUTORIAL_CHALLENGES } = await import("./tutorialRouter");
-              await completeChallenge(ctx.user.id, TUTORIAL_CHALLENGES.CREATE_STORY);
+              const { completeChallenge, TUTORIAL_CHALLENGES } =
+                await import("./tutorialRouter");
+              await completeChallenge(
+                ctx.user.id,
+                TUTORIAL_CHALLENGES.CREATE_STORY
+              );
             } catch (error) {
               console.error("Failed to mark challenge as completed:", error);
             }
 
             // Increment weekly progress
             try {
-              const { incrementWeeklyProgress } = await import("./weeklyGoalRouter");
+              const { incrementWeeklyProgress } =
+                await import("./weeklyGoalRouter");
               await incrementWeeklyProgress(ctx.user.id);
             } catch (error) {
               console.error("Failed to increment weekly progress:", error);
@@ -696,7 +963,7 @@ export const appRouter = router({
                 .select({ achievementId: userAchievements.achievementId })
                 .from(userAchievements)
                 .where(eq(userAchievements.userId, ctx.user.id))
-            ).map((u) => u.achievementId);
+            ).map(u => u.achievementId);
 
             for (const achievement of allAchievements) {
               if (unlockedIds.includes(achievement.id)) continue;
@@ -709,13 +976,25 @@ export const appRouter = router({
                 .limit(1);
               const latestStats = updatedStats[0];
 
-              if (achievement.category === "streak" && latestStats.currentStreak >= achievement.requirement) {
+              if (
+                achievement.category === "streak" &&
+                latestStats.currentStreak >= achievement.requirement
+              ) {
                 shouldUnlock = true;
-              } else if (achievement.category === "quizzes" && latestStats.quizzesCompleted >= achievement.requirement) {
+              } else if (
+                achievement.category === "quizzes" &&
+                latestStats.quizzesCompleted >= achievement.requirement
+              ) {
                 shouldUnlock = true;
-              } else if (achievement.category === "stories" && latestStats.storiesCompleted >= achievement.requirement) {
+              } else if (
+                achievement.category === "stories" &&
+                latestStats.storiesCompleted >= achievement.requirement
+              ) {
                 shouldUnlock = true;
-              } else if (achievement.category === "vocabulary" && latestStats.wordsLearned >= achievement.requirement) {
+              } else if (
+                achievement.category === "vocabulary" &&
+                latestStats.wordsLearned >= achievement.requirement
+              ) {
                 shouldUnlock = true;
               }
 
@@ -736,14 +1015,17 @@ export const appRouter = router({
               }
             }
           } catch (error) {
-            console.error("[Content Generation] Error generating content:", error);
+            console.error(
+              "[Content Generation] Error generating content:",
+              error
+            );
             console.error("[Content Generation] Error details:", {
               message: error instanceof Error ? error.message : String(error),
               stack: error instanceof Error ? error.stack : undefined,
               contentId: content.id,
               mode: input.mode,
             });
-            
+
             await updateGeneratedContent(content.id, {
               status: "failed",
             });
@@ -756,10 +1038,15 @@ export const appRouter = router({
           if (db) {
             const { users: usersTable } = await import("../drizzle/schema");
             const { eq, sql } = await import("drizzle-orm");
-            await db.update(usersTable)
-              .set({ bonusStoryCredits: sql`GREATEST(${usersTable.bonusStoryCredits} - 1, 0)` })
+            await db
+              .update(usersTable)
+              .set({
+                bonusStoryCredits: sql`GREATEST(${usersTable.bonusStoryCredits} - 1, 0)`,
+              })
               .where(eq(usersTable.id, ctx.user.id));
-            console.log(`[StarterPack] Used 1 bonus credit for user ${ctx.user.id}`);
+            console.log(
+              `[StarterPack] Used 1 bonus credit for user ${ctx.user.id}`
+            );
           }
         }
 
@@ -776,24 +1063,39 @@ export const appRouter = router({
         }
         // Return limited preview data — first 3 sentences, title, thumbnail, metadata
         const storyText = content.storyText || "";
-        const sentences = storyText.split(/(?<=[.!?。！？])\s*/).filter(s => s.trim());
+        const sentences = storyText
+          .split(/(?<=[.!?。！？])\s*/)
+          .filter(s => s.trim());
         const previewText = sentences.slice(0, 3).join(" ");
-        const lineTranslations = (content.lineTranslations || []) as Array<{ original: string; english: string; pinyin?: string }>;
+        const lineTranslations = (content.lineTranslations || []) as Array<{
+          original: string;
+          english: string;
+          pinyin?: string;
+        }>;
         const previewTranslations = lineTranslations.slice(0, 3);
 
         // Get vocabulary list for language info
         const db = await getDb();
-        const { vocabularyLists, users: usersTable } = await import("../drizzle/schema");
+        const { vocabularyLists, users: usersTable } =
+          await import("../drizzle/schema");
         let targetLanguage = "Unknown";
         if (db) {
-          const vocabResult = await db.select().from(vocabularyLists).where(eq(vocabularyLists.id, content.vocabularyListId)).limit(1);
+          const vocabResult = await db
+            .select()
+            .from(vocabularyLists)
+            .where(eq(vocabularyLists.id, content.vocabularyListId))
+            .limit(1);
           if (vocabResult[0]) targetLanguage = vocabResult[0].targetLanguage;
         }
 
         // Get author name
         let authorName = "A Storyling learner";
         if (db) {
-          const userResult = await db.select({ name: usersTable.name }).from(usersTable).where(eq(usersTable.id, content.userId)).limit(1);
+          const userResult = await db
+            .select({ name: usersTable.name })
+            .from(usersTable)
+            .where(eq(usersTable.id, content.userId))
+            .limit(1);
           if (userResult[0]?.name) authorName = userResult[0].name;
         }
 
@@ -820,22 +1122,33 @@ export const appRouter = router({
         if (!content || content.userId !== ctx.user.id) {
           throw new Error("Content not found");
         }
-        
+
         // Get vocabulary list to include target language and words
         const vocabList = await getVocabularyListsByUserId(ctx.user.id);
-        const matchingList = vocabList.find((v) => v.id === content.vocabularyListId);
-        
+        const matchingList = vocabList.find(
+          v => v.id === content.vocabularyListId
+        );
+
         // Parse vocabulary words from comma-separated string
         console.log("[getById] matchingList.words:", matchingList?.words);
-        console.log("[getById] matchingList.words type:", typeof matchingList?.words);
-        
+        console.log(
+          "[getById] matchingList.words type:",
+          typeof matchingList?.words
+        );
+
         const vocabularyWords = matchingList?.words
-          ? matchingList.words.split(',').map(w => w.trim()).filter(w => w.length > 0)
+          ? matchingList.words
+              .split(",")
+              .map(w => w.trim())
+              .filter(w => w.length > 0)
           : [];
-        
+
         console.log("[getById] vocabularyWords after split:", vocabularyWords);
-        console.log("[getById] content.vocabularyTranslations:", content.vocabularyTranslations);
-        
+        console.log(
+          "[getById] content.vocabularyTranslations:",
+          content.vocabularyTranslations
+        );
+
         return {
           ...content,
           targetLanguage: matchingList?.targetLanguage || "Unknown",
@@ -849,30 +1162,36 @@ export const appRouter = router({
 
     getLibrary: protectedProcedure.query(async ({ ctx }) => {
       const content = await getGeneratedContentByUserId(ctx.user.id);
-      
+
       // Auto-cleanup: mark stories stuck in 'generating' for over 10 minutes as 'failed'
       const TEN_MINUTES = 10 * 60 * 1000;
       const stuckStories = content.filter(
-        c => c.status === 'generating' && c.generatedAt && 
-             (Date.now() - new Date(c.generatedAt).getTime() > TEN_MINUTES) &&
-             (!c.storyText || c.storyText.length === 0)
+        c =>
+          c.status === "generating" &&
+          c.generatedAt &&
+          Date.now() - new Date(c.generatedAt).getTime() > TEN_MINUTES &&
+          (!c.storyText || c.storyText.length === 0)
       );
       if (stuckStories.length > 0) {
         (async () => {
           try {
             for (const story of stuckStories) {
-              await updateGeneratedContent(story.id, { status: 'failed' as any });
-              console.log(`[Auto-Cleanup] Marked stuck story ${story.id} as failed (was generating for >10min)`);
+              await updateGeneratedContent(story.id, {
+                status: "failed" as any,
+              });
+              console.log(
+                `[Auto-Cleanup] Marked stuck story ${story.id} as failed (was generating for >10min)`
+              );
             }
           } catch (err) {
-            console.error('[Auto-Cleanup] Error:', err);
+            console.error("[Auto-Cleanup] Error:", err);
           }
         })();
       }
-      
+
       // Get vocabulary lists to include target language
       const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-      
+
       // Add targetLanguage to each content item
       const contentWithLanguage = content.map(c => {
         const matchingList = vocabLists.find(v => v.id === c.vocabularyListId);
@@ -884,7 +1203,7 @@ export const appRouter = router({
 
       // Async backfill: translate titles for stories missing titleTranslation
       const storiesNeedingTranslation = content.filter(
-        c => c.status === 'completed' && c.title && !c.titleTranslation
+        c => c.status === "completed" && c.title && !c.titleTranslation
       );
       if (storiesNeedingTranslation.length > 0) {
         (async () => {
@@ -893,23 +1212,41 @@ export const appRouter = router({
             const batch = storiesNeedingTranslation.slice(0, 10);
             for (const story of batch) {
               try {
-                const matchingList = vocabLists.find(v => v.id === story.vocabularyListId);
-                const targetLang = matchingList?.targetLanguage || 'unknown';
+                const matchingList = vocabLists.find(
+                  v => v.id === story.vocabularyListId
+                );
+                const targetLang = matchingList?.targetLanguage || "unknown";
                 const result = await invokeLLM({
                   messages: [
-                    { role: 'system', content: 'You are a translator. Translate the given title to English. Return ONLY the English translation, nothing else.' },
-                    { role: 'user', content: `Translate this ${targetLang} title to English: "${story.title}"` },
+                    {
+                      role: "system",
+                      content:
+                        "You are a translator. Translate the given title to English. Return ONLY the English translation, nothing else.",
+                    },
+                    {
+                      role: "user",
+                      content: `Translate this ${targetLang} title to English: "${story.title}"`,
+                    },
                   ],
                   maxTokens: 100,
                 });
                 const translation = result.choices?.[0]?.message?.content;
-                if (translation && typeof translation === 'string') {
-                  const cleanTranslation = translation.replace(/^"|"$/g, '').trim();
-                  await updateGeneratedContent(story.id, { titleTranslation: cleanTranslation });
-                  console.log(`[Title Translation Backfill] Translated "${story.title}" -> "${cleanTranslation}"`);
+                if (translation && typeof translation === "string") {
+                  const cleanTranslation = translation
+                    .replace(/^"|"$/g, "")
+                    .trim();
+                  await updateGeneratedContent(story.id, {
+                    titleTranslation: cleanTranslation,
+                  });
+                  console.log(
+                    `[Title Translation Backfill] Translated "${story.title}" -> "${cleanTranslation}"`
+                  );
                 }
               } catch (err) {
-                console.error(`[Title Translation Backfill] Failed for story ${story.id}:`, err);
+                console.error(
+                  `[Title Translation Backfill] Failed for story ${story.id}:`,
+                  err
+                );
               }
             }
           } catch (err) {
@@ -922,9 +1259,10 @@ export const appRouter = router({
       // 1. Don't have a thumbnail at all, or
       // 2. Have a non-pixar style thumbnail that needs upgrading
       const storiesNeedingThumbnails = content.filter(
-        c => c.status === 'completed' && c.title && (
-          !c.thumbnailUrl || c.thumbnailStyle !== 'pixar'
-        )
+        c =>
+          c.status === "completed" &&
+          c.title &&
+          (!c.thumbnailUrl || c.thumbnailStyle !== "pixar")
       );
       if (storiesNeedingThumbnails.length > 0) {
         // Fire and forget - don't block the response. Process max 20 at a time to catch up faster.
@@ -934,17 +1272,24 @@ export const appRouter = router({
             const batch = storiesNeedingThumbnails.slice(0, 20);
             for (const story of batch) {
               try {
-                const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || 'adventure'} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
-                const { url } = await generateImage({ prompt: thumbnailPrompt });
+                const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || "adventure"} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+                const { url } = await generateImage({
+                  prompt: thumbnailPrompt,
+                });
                 if (url) {
                   await updateGeneratedContent(story.id, {
                     thumbnailUrl: url,
                     thumbnailStyle: "pixar" as any,
                   });
-                  console.log(`[Thumbnail Backfill] Generated Pixar thumbnail for story ${story.id}: ${story.title}`);
+                  console.log(
+                    `[Thumbnail Backfill] Generated Pixar thumbnail for story ${story.id}: ${story.title}`
+                  );
                 }
               } catch (err) {
-                console.error(`[Thumbnail Backfill] Failed for story ${story.id}:`, err);
+                console.error(
+                  `[Thumbnail Backfill] Failed for story ${story.id}:`,
+                  err
+                );
               }
             }
           } catch (err) {
@@ -952,22 +1297,22 @@ export const appRouter = router({
           }
         })();
       }
-      
+
       return contentWithLanguage;
     }),
 
     hasChineseStories: protectedProcedure.query(async ({ ctx }) => {
       const content = await getGeneratedContentByUserId(ctx.user.id);
       const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-      
+
       // Check if user has any completed Chinese stories
       const hasChineseStory = content.some(c => {
-        if (c.status !== 'completed') return false;
+        if (c.status !== "completed") return false;
         const matchingList = vocabLists.find(v => v.id === c.vocabularyListId);
-        const lang = matchingList?.targetLanguage?.toLowerCase() || '';
-        return lang.includes('chinese') || lang === 'zh';
+        const lang = matchingList?.targetLanguage?.toLowerCase() || "";
+        return lang.includes("chinese") || lang === "zh";
       });
-      
+
       return { hasChineseStories: hasChineseStory };
     }),
 
@@ -975,15 +1320,19 @@ export const appRouter = router({
       .input(z.object({ contentId: z.number() }))
       .mutation(async ({ input, ctx }) => {
         await incrementPlayCount(input.contentId);
-        
+
         // Mark audio playback challenge as completed
         try {
-          const { completeChallenge, TUTORIAL_CHALLENGES } = await import("./tutorialRouter");
-          await completeChallenge(ctx.user.id, TUTORIAL_CHALLENGES.PLAY_CONTENT);
+          const { completeChallenge, TUTORIAL_CHALLENGES } =
+            await import("./tutorialRouter");
+          await completeChallenge(
+            ctx.user.id,
+            TUTORIAL_CHALLENGES.PLAY_CONTENT
+          );
         } catch (error) {
           console.error("Failed to mark audio playback challenge:", error);
         }
-        
+
         return { success: true };
       }),
 
@@ -1008,7 +1357,10 @@ export const appRouter = router({
           .where(eq(generatedContent.id, story.id));
       }
 
-      return { cleaned: stuckStories.length, storyIds: stuckStories.map(s => s.id) };
+      return {
+        cleaned: stuckStories.length,
+        storyIds: stuckStories.map(s => s.id),
+      };
     }),
 
     backfillTitles: protectedProcedure.mutation(async ({ ctx }) => {
@@ -1016,13 +1368,16 @@ export const appRouter = router({
       if (!db) throw new Error("Database unavailable");
 
       // Find all content without titles
-      const { generatedContent, vocabularyLists } = await import("../drizzle/schema");
+      const { generatedContent, vocabularyLists } =
+        await import("../drizzle/schema");
       const { eq, isNull, or } = await import("drizzle-orm");
 
       const contentWithoutTitles = await db
         .select()
         .from(generatedContent)
-        .where(or(isNull(generatedContent.title), eq(generatedContent.title, "")));
+        .where(
+          or(isNull(generatedContent.title), eq(generatedContent.title, ""))
+        );
 
       // Get all vocabulary lists for language info
       const vocabLists = await db.select().from(vocabularyLists);
@@ -1034,7 +1389,7 @@ export const appRouter = router({
         const targetLanguage = vocabList?.targetLanguage || "Unknown";
 
         // Generate title from theme and mode
-        const title = `${content.theme} ${content.mode === 'podcast' ? 'Podcast' : 'Film'} - ${targetLanguage}`;
+        const title = `${content.theme} ${content.mode === "podcast" ? "Podcast" : "Film"} - ${targetLanguage}`;
 
         await db
           .update(generatedContent)
@@ -1067,24 +1422,35 @@ export const appRouter = router({
     }),
 
     regenerateThumbnail: protectedProcedure
-      .input(z.object({ 
-        contentId: z.number(),
-        style: z.enum(["realistic", "illustrated", "minimalist", "pixar"]).optional()
-      }))
+      .input(
+        z.object({
+          contentId: z.number(),
+          style: z
+            .enum(["realistic", "illustrated", "minimalist", "pixar"])
+            .optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         // Get the content to verify ownership and get theme/title
         const content = await getGeneratedContentById(input.contentId);
         if (!content || content.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Content not found or unauthorized" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Content not found or unauthorized",
+          });
         }
 
         try {
-          console.log("[Thumbnail Regeneration] Starting for content ID:", input.contentId);
+          console.log(
+            "[Thumbnail Regeneration] Starting for content ID:",
+            input.contentId
+          );
           const { generateImage } = await import("./_core/imageGeneration");
-          
+
           // Determine style (use input style or existing style or default to pixar)
-          const thumbnailStyle = input.style || content.thumbnailStyle || "pixar";
-          
+          const thumbnailStyle =
+            input.style || content.thumbnailStyle || "pixar";
+
           // Generate style-specific prompts
           let thumbnailPrompt: string;
           if (thumbnailStyle === "pixar") {
@@ -1093,39 +1459,49 @@ export const appRouter = router({
             thumbnailPrompt = `A photorealistic, cinematic image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should be visually stunning, emotionally engaging, and capture the essence of the story. Style: realistic photography, professional lighting, high detail. No text or words in the image.`;
           } else if (thumbnailStyle === "illustrated") {
             thumbnailPrompt = `A vibrant, eye-catching illustrated image for a ${content.theme.toLowerCase()} story titled "${content.title}". The image should be colorful, engaging, and suitable for a language learning app. Style: modern, playful illustration with bold colors and clean lines. No text in the image.`;
-          } else { // minimalist
+          } else {
+            // minimalist
             thumbnailPrompt = `A minimalist, clean image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The design should be simple, elegant, and modern with limited colors and geometric shapes. Style: minimalist design, flat colors, negative space. No text in the image.`;
           }
-          
+
           const { url } = await generateImage({ prompt: thumbnailPrompt });
           console.log("[Thumbnail Regeneration] Success! Thumbnail URL:", url);
 
           // Update the content with new thumbnail and style
           await updateGeneratedContent(input.contentId, {
             thumbnailUrl: url,
-            thumbnailStyle: thumbnailStyle as "realistic" | "illustrated" | "minimalist" | "pixar",
+            thumbnailStyle: thumbnailStyle as
+              | "realistic"
+              | "illustrated"
+              | "minimalist"
+              | "pixar",
           });
 
           return { success: true, thumbnailUrl: url };
         } catch (error) {
           console.error("[Thumbnail Regeneration] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to regenerate thumbnail" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to regenerate thumbnail",
           });
         }
       }),
 
     updateTitle: protectedProcedure
-      .input(z.object({ 
-        contentId: z.number(),
-        title: z.string().min(1).max(200)
-      }))
+      .input(
+        z.object({
+          contentId: z.number(),
+          title: z.string().min(1).max(200),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         // Get the content to verify ownership
         const content = await getGeneratedContentById(input.contentId);
         if (!content || content.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Content not found or unauthorized" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Content not found or unauthorized",
+          });
         }
 
         // Update the title
@@ -1140,18 +1516,18 @@ export const appRouter = router({
       .input(z.object({ contentIds: z.array(z.number()) }))
       .mutation(async ({ input, ctx }) => {
         const { bulkDeleteContent } = await import("./db");
-        
+
         try {
           await bulkDeleteContent(ctx.user.id, input.contentIds);
-          return { 
+          return {
             success: true,
-            deletedCount: input.contentIds.length
+            deletedCount: input.contentIds.length,
           };
         } catch (error) {
           console.error("[Bulk Delete] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to delete stories" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to delete stories",
           });
         }
       }),
@@ -1160,30 +1536,32 @@ export const appRouter = router({
       .input(z.object({ contentIds: z.array(z.number()) }))
       .mutation(async ({ input, ctx }) => {
         const { bulkMarkComplete } = await import("./db");
-        
+
         try {
           await bulkMarkComplete(ctx.user.id, input.contentIds);
-          return { 
+          return {
             success: true,
-            markedCount: input.contentIds.length
+            markedCount: input.contentIds.length,
           };
         } catch (error) {
           console.error("[Bulk Mark Complete] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to mark stories as complete" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to mark stories as complete",
           });
         }
       }),
 
     bulkRegenerateThumbnails: protectedProcedure
-      .input(z.object({ 
-        contentIds: z.array(z.number()),
-        style: z.enum(["realistic", "illustrated", "minimalist", "pixar"])
-      }))
+      .input(
+        z.object({
+          contentIds: z.array(z.number()),
+          style: z.enum(["realistic", "illustrated", "minimalist", "pixar"]),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         const { generateImage } = await import("./_core/imageGeneration");
-        
+
         let successCount = 0;
         let failureCount = 0;
         const errors: string[] = [];
@@ -1206,10 +1584,11 @@ export const appRouter = router({
               thumbnailPrompt = `A photorealistic, cinematic image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should be visually stunning, emotionally engaging, and capture the essence of the story. Style: realistic photography, professional lighting, high detail. No text or words in the image.`;
             } else if (input.style === "illustrated") {
               thumbnailPrompt = `A vibrant, eye-catching illustrated image for a ${content.theme.toLowerCase()} story titled "${content.title}". The image should be colorful, engaging, and suitable for a language learning app. Style: modern, playful illustration with bold colors and clean lines. No text in the image.`;
-            } else { // minimalist
+            } else {
+              // minimalist
               thumbnailPrompt = `A minimalist, clean image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The design should be simple, elegant, and modern with limited colors and geometric shapes. Style: minimalist design, flat colors, negative space. No text in the image.`;
             }
-            
+
             const { url } = await generateImage({ prompt: thumbnailPrompt });
 
             // Update the content with new thumbnail and style
@@ -1220,57 +1599,75 @@ export const appRouter = router({
 
             successCount++;
           } catch (error) {
-            console.error(`[Bulk Thumbnail Regeneration] Error for content ${contentId}:`, error);
-            errors.push(`Content ${contentId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            console.error(
+              `[Bulk Thumbnail Regeneration] Error for content ${contentId}:`,
+              error
+            );
+            errors.push(
+              `Content ${contentId}: ${error instanceof Error ? error.message : "Unknown error"}`
+            );
             failureCount++;
           }
         }
 
-        return { 
+        return {
           success: failureCount === 0,
           successCount,
           failureCount,
-          errors: errors.length > 0 ? errors : undefined
+          errors: errors.length > 0 ? errors : undefined,
         };
       }),
 
-    regenerateAllToPixar: protectedProcedure
-      .mutation(async ({ ctx }) => {
-        const content = await getGeneratedContentByUserId(ctx.user.id);
-        const completedStories = content.filter(c => c.status === 'completed' && c.title);
-        
-        if (completedStories.length === 0) {
-          return { success: true, total: 0, queued: 0 };
-        }
+    regenerateAllToPixar: protectedProcedure.mutation(async ({ ctx }) => {
+      const content = await getGeneratedContentByUserId(ctx.user.id);
+      const completedStories = content.filter(
+        c => c.status === "completed" && c.title
+      );
 
-        // Fire and forget - process all in background
-        const total = completedStories.length;
-        (async () => {
-          try {
-            const { generateImage } = await import("./_core/imageGeneration");
-            for (const story of completedStories) {
-              try {
-                const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || 'adventure'} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
-                const { url } = await generateImage({ prompt: thumbnailPrompt });
-                if (url) {
-                  await updateGeneratedContent(story.id, {
-                    thumbnailUrl: url,
-                    thumbnailStyle: "pixar" as any,
-                  });
-                  console.log(`[Pixar Migration] Generated thumbnail for story ${story.id}: ${story.title}`);
-                }
-              } catch (err) {
-                console.error(`[Pixar Migration] Failed for story ${story.id}:`, err);
+      if (completedStories.length === 0) {
+        return { success: true, total: 0, queued: 0 };
+      }
+
+      // Fire and forget - process all in background
+      const total = completedStories.length;
+      (async () => {
+        try {
+          const { generateImage } = await import("./_core/imageGeneration");
+          for (const story of completedStories) {
+            try {
+              const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || "adventure"} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+              const { url } = await generateImage({ prompt: thumbnailPrompt });
+              if (url) {
+                await updateGeneratedContent(story.id, {
+                  thumbnailUrl: url,
+                  thumbnailStyle: "pixar" as any,
+                });
+                console.log(
+                  `[Pixar Migration] Generated thumbnail for story ${story.id}: ${story.title}`
+                );
               }
+            } catch (err) {
+              console.error(
+                `[Pixar Migration] Failed for story ${story.id}:`,
+                err
+              );
             }
-            console.log(`[Pixar Migration] Completed! Processed ${total} stories.`);
-          } catch (err) {
-            console.error("[Pixar Migration] Error:", err);
           }
-        })();
+          console.log(
+            `[Pixar Migration] Completed! Processed ${total} stories.`
+          );
+        } catch (err) {
+          console.error("[Pixar Migration] Error:", err);
+        }
+      })();
 
-        return { success: true, total, queued: total, message: `Regenerating ${total} story covers in Pixar style. This runs in the background.` };
-      }),
+      return {
+        success: true,
+        total,
+        queued: total,
+        message: `Regenerating ${total} story covers in Pixar style. This runs in the background.`,
+      };
+    }),
 
     regenerateStory: protectedProcedure
       .input(z.object({ contentId: z.number() }))
@@ -1278,34 +1675,51 @@ export const appRouter = router({
         // Get the content to verify ownership
         const content = await getGeneratedContentById(input.contentId);
         if (!content || content.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Content not found or unauthorized" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Content not found or unauthorized",
+          });
         }
 
         // Get vocabulary list for language info
         const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-        const vocabList = vocabLists.find(v => v.id === content.vocabularyListId);
+        const vocabList = vocabLists.find(
+          v => v.id === content.vocabularyListId
+        );
         if (!vocabList) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Vocabulary list not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Vocabulary list not found",
+          });
         }
 
         try {
-          console.log("[Story Regeneration] Starting for content ID:", input.contentId);
-          
-          const words = vocabList.words.split(/[,，、\n]/).map((w: string) => w.trim()).filter(Boolean);
-          
+          console.log(
+            "[Story Regeneration] Starting for content ID:",
+            input.contentId
+          );
+
+          const words = vocabList.words
+            .split(/[,，、\n]/)
+            .map((w: string) => w.trim())
+            .filter(Boolean);
+
           // First generate the story content
           const storyResult = await generateStory({
             theme: content.theme,
             vocabularyWords: words,
             targetLanguage: vocabList.targetLanguage,
             proficiencyLevel: vocabList.proficiencyLevel,
-            translationLanguage: ctx.user.preferredTranslationLanguage || "English",
+            translationLanguage:
+              ctx.user.preferredTranslationLanguage || "English",
             mode: content.mode as "podcast" | "film",
             targetSceneCount: content.mode === "film" ? 6 : undefined,
           });
-          
-          console.log("[Story Regeneration] Story generated, updating database");
-          
+
+          console.log(
+            "[Story Regeneration] Story generated, updating database"
+          );
+
           // Update the content with new story data (keeping original audio/video)
           await updateGeneratedContent(input.contentId, {
             title: storyResult.title,
@@ -1314,13 +1728,13 @@ export const appRouter = router({
             vocabularyTranslations: storyResult.vocabularyTranslations as any,
             status: "completed",
           });
-          
+
           return { success: true, title: storyResult.title };
         } catch (error) {
           console.error("[Story Regeneration] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to regenerate story" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to regenerate story",
           });
         }
       }),
@@ -1331,51 +1745,69 @@ export const appRouter = router({
         // Get the content to verify ownership
         const content = await getGeneratedContentById(input.contentId);
         if (!content || content.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Content not found or unauthorized" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Content not found or unauthorized",
+          });
         }
 
         // Get vocabulary list for language info
         const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-        const vocabList = vocabLists.find(v => v.id === content.vocabularyListId);
+        const vocabList = vocabLists.find(
+          v => v.id === content.vocabularyListId
+        );
         if (!vocabList) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Vocabulary list not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Vocabulary list not found",
+          });
         }
 
         try {
-          console.log("[Title Regeneration] Starting for content ID:", input.contentId);
+          console.log(
+            "[Title Regeneration] Starting for content ID:",
+            input.contentId
+          );
           const { invokeLLM } = await import("./_core/llm");
-          
-          const words = vocabList.words.split(/[,，、\n]/).map((w: string) => w.trim()).filter(Boolean);
-          
+
+          const words = vocabList.words
+            .split(/[,，、\n]/)
+            .map((w: string) => w.trim())
+            .filter(Boolean);
+
           // Generate a new title based on the story content
           const titlePrompt = `Generate a creative, engaging title in ${vocabList.targetLanguage} for a ${content.theme.toLowerCase()} story that uses these vocabulary words: ${words.join(", ")}. The title should be concise (3-8 words), memorable, and capture the essence of a ${content.theme.toLowerCase()} story. Return ONLY the title text, nothing else.`;
-          
+
           const response = await invokeLLM({
             messages: [
-              { role: "system", content: "You are a creative title generator for language learning stories." },
+              {
+                role: "system",
+                content:
+                  "You are a creative title generator for language learning stories.",
+              },
               { role: "user", content: titlePrompt },
             ],
           });
-          
+
           const responseContent = response.choices[0]?.message?.content;
           if (!responseContent || typeof responseContent !== "string") {
             throw new Error("Failed to generate new title");
           }
           const newTitle = responseContent.trim();
-          
+
           console.log("[Title Regeneration] New title:", newTitle);
-          
+
           // Update the content with new title
           await updateGeneratedContent(input.contentId, {
             title: newTitle,
           });
-          
+
           return { success: true, title: newTitle };
         } catch (error) {
           console.error("[Title Regeneration] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to regenerate title" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to regenerate title",
           });
         }
       }),
@@ -1429,37 +1861,74 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         const content = await getGeneratedContentById(input.contentId);
         if (!content || content.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Content not found or unauthorized" });
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Content not found or unauthorized",
+          });
         }
-        console.log("[backfillVocabularyTranslations] Content fields:", Object.keys(content));
-        console.log("[backfillVocabularyTranslations] storyText type:", typeof content.storyText, "length:", content.storyText?.length);
+        console.log(
+          "[backfillVocabularyTranslations] Content fields:",
+          Object.keys(content)
+        );
+        console.log(
+          "[backfillVocabularyTranslations] storyText type:",
+          typeof content.storyText,
+          "length:",
+          content.storyText?.length
+        );
 
         // Check if translations already exist
-        const hasVocabTranslations = content.vocabularyTranslations && Object.keys(content.vocabularyTranslations).length > 0;
-        const hasLineTranslations = content.lineTranslations && Array.isArray(content.lineTranslations) && content.lineTranslations.length > 0;
-        
+        const hasVocabTranslations =
+          content.vocabularyTranslations &&
+          Object.keys(content.vocabularyTranslations).length > 0;
+        const hasLineTranslations =
+          content.lineTranslations &&
+          Array.isArray(content.lineTranslations) &&
+          content.lineTranslations.length > 0;
+
         if (hasVocabTranslations && hasLineTranslations) {
-          return { success: true, message: "Translations already exist", updated: false };
+          return {
+            success: true,
+            message: "Translations already exist",
+            updated: false,
+          };
         }
 
         try {
-          console.log("[backfillVocabularyTranslations] Starting for content ID:", input.contentId);
-          
+          console.log(
+            "[backfillVocabularyTranslations] Starting for content ID:",
+            input.contentId
+          );
+
           // Get vocabulary list for language info
           const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-          const vocabList = vocabLists.find(v => v.id === content.vocabularyListId);
+          const vocabList = vocabLists.find(
+            v => v.id === content.vocabularyListId
+          );
           if (!vocabList) {
-            throw new TRPCError({ code: "NOT_FOUND", message: "Vocabulary list not found" });
+            throw new TRPCError({
+              code: "NOT_FOUND",
+              message: "Vocabulary list not found",
+            });
           }
 
           const { invokeLLM } = await import("./_core/llm");
-          const isChinese = vocabList.targetLanguage.toLowerCase().includes('chinese');
+          const isChinese = vocabList.targetLanguage
+            .toLowerCase()
+            .includes("chinese");
           let vocabularyTranslations = content.vocabularyTranslations || {};
 
           // Generate vocabulary translations if missing
           if (!hasVocabTranslations) {
-            const words = vocabList.words.split(/[,，、\n]/).map((w: string) => w.trim()).filter(Boolean);
-            console.log("[backfillVocabularyTranslations] Processing", words.length, "words");
+            const words = vocabList.words
+              .split(/[,，、\n]/)
+              .map((w: string) => w.trim())
+              .filter(Boolean);
+            console.log(
+              "[backfillVocabularyTranslations] Processing",
+              words.length,
+              "words"
+            );
 
             const prompt = `Translate these ${vocabList.targetLanguage} vocabulary words to English and provide example sentences.
 
@@ -1474,31 +1943,53 @@ Return ONLY a JSON object where each vocabulary word is a key.`;
 
             const response = await invokeLLM({
               messages: [
-                { role: "system", content: "You are a helpful language learning assistant. Always respond with valid JSON." },
-                { role: "user", content: prompt }
+                {
+                  role: "system",
+                  content:
+                    "You are a helpful language learning assistant. Always respond with valid JSON.",
+                },
+                { role: "user", content: prompt },
               ],
-              response_format: { type: "json_object" }
+              response_format: { type: "json_object" },
             });
 
             const messageContent = response.choices[0].message.content;
-            console.log("[backfillVocabularyTranslations] Raw LLM response:", messageContent);
-            vocabularyTranslations = JSON.parse(typeof messageContent === 'string' ? messageContent : "{}");
-            console.log("[backfillVocabularyTranslations] Parsed translations:", vocabularyTranslations);
-            console.log("[backfillVocabularyTranslations] Generated translations:", Object.keys(vocabularyTranslations));
+            console.log(
+              "[backfillVocabularyTranslations] Raw LLM response:",
+              messageContent
+            );
+            vocabularyTranslations = JSON.parse(
+              typeof messageContent === "string" ? messageContent : "{}"
+            );
+            console.log(
+              "[backfillVocabularyTranslations] Parsed translations:",
+              vocabularyTranslations
+            );
+            console.log(
+              "[backfillVocabularyTranslations] Generated translations:",
+              Object.keys(vocabularyTranslations)
+            );
           } else {
-            console.log("[backfillVocabularyTranslations] Vocabulary translations already exist, skipping");
+            console.log(
+              "[backfillVocabularyTranslations] Vocabulary translations already exist, skipping"
+            );
           }
 
           // Generate line translations if missing
           let lineTranslations = content.lineTranslations;
-          console.log("[backfillVocabularyTranslations] Checking line translations:", {
-            hasLineTranslations,
-            hasStoryText: !!content.storyText,
-            storyTextLength: content.storyText?.length || 0
-          });
+          console.log(
+            "[backfillVocabularyTranslations] Checking line translations:",
+            {
+              hasLineTranslations,
+              hasStoryText: !!content.storyText,
+              storyTextLength: content.storyText?.length || 0,
+            }
+          );
           if (!hasLineTranslations && content.storyText) {
-            console.log("[backfillVocabularyTranslations] Generating line translations...");
-            
+            console.log(
+              "[backfillVocabularyTranslations] Generating line translations..."
+            );
+
             // Split story into sentences
             const sentences = content.storyText
               .split(/([.!?。！？]+)/)
@@ -1510,9 +2001,13 @@ Return ONLY a JSON object where each vocabulary word is a key.`;
                 return acc;
               }, [])
               .filter((s: string) => s.length > 0);
-            
-            console.log("[backfillVocabularyTranslations] Found", sentences.length, "sentences to translate");
-            
+
+            console.log(
+              "[backfillVocabularyTranslations] Found",
+              sentences.length,
+              "sentences to translate"
+            );
+
             const linePrompt = `Translate these ${vocabList.targetLanguage} sentences to English.
 
 Sentences:
@@ -1524,23 +2019,39 @@ Return a JSON array where each element has:
 
             const lineResponse = await invokeLLM({
               messages: [
-                { role: "system", content: "You are a helpful language learning assistant. Always respond with valid JSON." },
-                { role: "user", content: linePrompt }
+                {
+                  role: "system",
+                  content:
+                    "You are a helpful language learning assistant. Always respond with valid JSON.",
+                },
+                { role: "user", content: linePrompt },
               ],
-              response_format: { type: "json_object" }
+              response_format: { type: "json_object" },
             });
 
             const lineContent = lineResponse.choices[0].message.content;
-            console.log("[backfillVocabularyTranslations] Line translations response:", lineContent);
-            const lineData = JSON.parse(typeof lineContent === 'string' ? lineContent : "{}");
-            
+            console.log(
+              "[backfillVocabularyTranslations] Line translations response:",
+              lineContent
+            );
+            const lineData = JSON.parse(
+              typeof lineContent === "string" ? lineContent : "{}"
+            );
+
             // Handle both array and object responses
-            lineTranslations = Array.isArray(lineData) ? lineData : 
-                              lineData.translations ? lineData.translations :
-                              lineData.sentences ? lineData.sentences :
-                              Object.values(lineData);
-            
-            console.log("[backfillVocabularyTranslations] Generated", Array.isArray(lineTranslations) ? lineTranslations.length : 0, "line translations");
+            lineTranslations = Array.isArray(lineData)
+              ? lineData
+              : lineData.translations
+                ? lineData.translations
+                : lineData.sentences
+                  ? lineData.sentences
+                  : Object.values(lineData);
+
+            console.log(
+              "[backfillVocabularyTranslations] Generated",
+              Array.isArray(lineTranslations) ? lineTranslations.length : 0,
+              "line translations"
+            );
           }
 
           // Update the content with translations
@@ -1551,23 +2062,23 @@ Return a JSON array where each element has:
           if (!hasLineTranslations && lineTranslations) {
             updateData.lineTranslations = lineTranslations;
           }
-          
+
           // Only update if there's data to update
           if (Object.keys(updateData).length > 0) {
             await updateGeneratedContent(input.contentId, updateData);
           }
 
-          return { 
-            success: true, 
+          return {
+            success: true,
             message: `Successfully generated translations for ${Object.keys(vocabularyTranslations).length} words`,
             updated: true,
-            wordCount: Object.keys(vocabularyTranslations).length
+            wordCount: Object.keys(vocabularyTranslations).length,
           };
         } catch (error) {
           console.error("[backfillVocabularyTranslations] Error:", error);
-          throw new TRPCError({ 
-            code: "INTERNAL_SERVER_ERROR", 
-            message: "Failed to generate vocabulary translations" 
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Failed to generate vocabulary translations",
           });
         }
       }),
@@ -1578,49 +2089,97 @@ Return a JSON array where each element has:
           contentId: z.number(),
           cinematicStyle: z.string().default("cinematic"),
           audioDuration: z.number().optional(), // Podcast audio duration in seconds (auto-detected on client)
-          targetVideoDuration: z.number().min(30).max(90).optional().default(30),
-          backgroundMusic: z.enum(["calm", "upbeat", "dramatic", "adventure", "suspenseful", "romantic", "mysterious", "comedic", "energetic", "melancholic", "triumphant", "peaceful", "none"]).optional().default("none"),
+          targetVideoDuration: z
+            .number()
+            .min(30)
+            .max(90)
+            .optional()
+            .default(30),
+          backgroundMusic: z
+            .enum([
+              "calm",
+              "upbeat",
+              "dramatic",
+              "adventure",
+              "suspenseful",
+              "romantic",
+              "mysterious",
+              "comedic",
+              "energetic",
+              "melancholic",
+              "triumphant",
+              "peaceful",
+              "none",
+            ])
+            .optional()
+            .default("none"),
           musicVolume: z.number().min(0).max(100).optional().default(20),
           selectedMusicTrack: z.string().optional(),
           addSubtitles: z.boolean().optional().default(false),
-          subtitleFontSize: z.enum(["small", "medium", "large"]).optional().default("medium"),
-          subtitlePosition: z.enum(["top", "bottom"]).optional().default("bottom"),
-          subtitleColor: z.enum(["white", "yellow", "cyan"]).optional().default("white"),
+          subtitleFontSize: z
+            .enum(["small", "medium", "large"])
+            .optional()
+            .default("medium"),
+          subtitlePosition: z
+            .enum(["top", "bottom"])
+            .optional()
+            .default("bottom"),
+          subtitleColor: z
+            .enum(["white", "yellow", "cyan"])
+            .optional()
+            .default("white"),
         })
       )
       .mutation(async ({ input, ctx }) => {
         // Get the source podcast content
         const sourceContent = await getGeneratedContentById(input.contentId);
         if (!sourceContent || sourceContent.userId !== ctx.user.id) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Content not found" });
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Content not found",
+          });
         }
         if (sourceContent.mode !== "podcast") {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Only podcast content can be converted to film" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Only podcast content can be converted to film",
+          });
         }
         if (!sourceContent.storyText) {
-          throw new TRPCError({ code: "BAD_REQUEST", message: "Source content has no story text" });
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Source content has no story text",
+          });
         }
 
         const targetVideoDuration = Math.ceil(input.targetVideoDuration || 30);
         console.log(
-          `[convertToFilm] Target video duration: ${targetVideoDuration}s (requested: ${input.targetVideoDuration}, audioDuration: ${input.audioDuration}, storyWords: ${sourceContent.storyText.split(/\s+/).length})`,
+          `[convertToFilm] Target video duration: ${targetVideoDuration}s (requested: ${input.targetVideoDuration}, audioDuration: ${input.audioDuration}, storyWords: ${sourceContent.storyText.split(/\s+/).length})`
         );
         const filmNarration = resolveFilmNarrationSettings(
           sourceContent.voiceType,
-          sourceContent.narratorGender,
+          sourceContent.narratorGender
         );
 
         // Get vocabulary list for language info
         const vocabLists = await getVocabularyListsByUserId(ctx.user.id);
-        const matchingList = vocabLists.find((v) => v.id === sourceContent.vocabularyListId);
+        const matchingList = vocabLists.find(
+          v => v.id === sourceContent.vocabularyListId
+        );
         const targetLanguage = matchingList?.targetLanguage || "Unknown";
         const proficiencyLevel = matchingList?.proficiencyLevel || "B1";
         const vocabularyWords = matchingList?.words
-          ? matchingList.words.split(',').map((w: string) => w.trim()).filter(Boolean)
+          ? matchingList.words
+              .split(",")
+              .map((w: string) => w.trim())
+              .filter(Boolean)
           : [];
 
         // Calculate difficulty level
-        const difficultyLevel = calculateDifficultyLevel(targetLanguage, proficiencyLevel);
+        const difficultyLevel = calculateDifficultyLevel(
+          targetLanguage,
+          proficiencyLevel
+        );
 
         // Create new content entry for the film version
         const filmContent = await createGeneratedContent({
@@ -1648,12 +2207,20 @@ Return a JSON array where each element has:
         (async () => {
           try {
             const { updateContentProgress } = await import("./db");
-            
-            await updateContentProgress(filmContent.id, 10, "Preparing film conversion...");
+
+            await updateContentProgress(
+              filmContent.id,
+              10,
+              "Preparing film conversion..."
+            );
 
             // Generate film from existing story text
-            await updateContentProgress(filmContent.id, 20, "Generating video clips...");
-            
+            await updateContentProgress(
+              filmContent.id,
+              20,
+              "Generating video clips..."
+            );
+
             const film = await generateFilm(
               {
                 targetLanguage,
@@ -1674,7 +2241,11 @@ Return a JSON array where each element has:
               },
               sourceContent.storyText,
               async (stage: string, progress: number) => {
-                await updateContentProgress(filmContent.id, 20 + Math.floor(progress * 0.7), stage);
+                await updateContentProgress(
+                  filmContent.id,
+                  20 + Math.floor(progress * 0.7),
+                  stage
+                );
               }
             );
 
@@ -1705,7 +2276,8 @@ Return a JSON array where each element has:
             console.error("[convertToFilm] Error:", error);
             await updateGeneratedContent(filmContent.id, {
               status: "failed",
-              failureReason: error instanceof Error ? error.message : String(error),
+              failureReason:
+                error instanceof Error ? error.message : String(error),
             });
           }
         })();
@@ -1785,8 +2357,12 @@ Return a JSON array where each element has:
           );
 
         // Return the most recent active conversion (generating or just completed)
-        const active = conversions.find((c: { status: string }) => c.status === "generating");
-        const completed = conversions.find((c: { status: string }) => c.status === "completed");
+        const active = conversions.find(
+          (c: { status: string }) => c.status === "generating"
+        );
+        const completed = conversions.find(
+          (c: { status: string }) => c.status === "completed"
+        );
         return active || completed || null;
       }),
   }),
@@ -1814,9 +2390,12 @@ Return a JSON array where each element has:
             )
           : eq(wordMastery.userId, ctx.user.id);
 
-        const words = await db.select().from(wordMastery).where(whereConditions);
+        const words = await db
+          .select()
+          .from(wordMastery)
+          .where(whereConditions);
 
-        const wordsWithMastery = words.map((word) => ({
+        const wordsWithMastery = words.map(word => ({
           ...word,
           masteryLevel: calculateMasteryLevel(word),
         }));
@@ -1841,15 +2420,22 @@ Return a JSON array where each element has:
             )
           : eq(wordMastery.userId, ctx.user.id);
 
-        const words = await db.select().from(wordMastery).where(whereConditions);
+        const words = await db
+          .select()
+          .from(wordMastery)
+          .where(whereConditions);
 
         const totalWords = words.length;
-        const mastered = words.filter((w) => calculateMasteryLevel(w) >= 80).length;
-        const learning = words.filter((w) => {
+        const mastered = words.filter(
+          w => calculateMasteryLevel(w) >= 80
+        ).length;
+        const learning = words.filter(w => {
           const level = calculateMasteryLevel(w);
           return level >= 40 && level < 80;
         }).length;
-        const struggling = words.filter((w) => calculateMasteryLevel(w) < 40).length;
+        const struggling = words.filter(
+          w => calculateMasteryLevel(w) < 40
+        ).length;
 
         const quizData = await db
           .select()
@@ -1859,7 +2445,10 @@ Return a JSON array where each element has:
         const totalQuizzes = quizData.length;
         const averageScore =
           totalQuizzes > 0
-            ? quizData.reduce((sum, q) => sum + (q.score / q.totalQuestions) * 100, 0) / totalQuizzes
+            ? quizData.reduce(
+                (sum, q) => sum + (q.score / q.totalQuestions) * 100,
+                0
+              ) / totalQuizzes
             : 0;
 
         const sortedAttempts = quizData.sort(
@@ -1885,7 +2474,7 @@ Return a JSON array where each element has:
         }
 
         const now = new Date();
-        const wordsDue = words.filter((w) => w.nextReviewDate <= now).length;
+        const wordsDue = words.filter(w => w.nextReviewDate <= now).length;
 
         return {
           totalWords,
@@ -1922,7 +2511,7 @@ Return a JSON array where each element has:
           );
 
         const activityByDate: Record<string, number> = {};
-        attempts.forEach((attempt) => {
+        attempts.forEach(attempt => {
           const dateKey = attempt.completedAt.toISOString().split("T")[0];
           activityByDate[dateKey] = (activityByDate[dateKey] || 0) + 1;
         });
@@ -1934,7 +2523,8 @@ Return a JSON array where each element has:
       .input(z.object({ targetLanguage: z.string().optional() }))
       .query(async ({ input, ctx }) => {
         const { getDb } = await import("./db");
-        const { generatedContent, vocabularyLists, storyProgress } = await import("../drizzle/schema");
+        const { generatedContent, vocabularyLists, storyProgress } =
+          await import("../drizzle/schema");
         const { eq, and, desc } = await import("drizzle-orm");
         const db = await getDb();
         if (!db) throw new Error("Database not available");
@@ -1948,12 +2538,17 @@ Return a JSON array where each element has:
             targetLanguage: vocabularyLists.targetLanguage,
           })
           .from(generatedContent)
-          .innerJoin(vocabularyLists, eq(generatedContent.vocabularyListId, vocabularyLists.id))
+          .innerJoin(
+            vocabularyLists,
+            eq(generatedContent.vocabularyListId, vocabularyLists.id)
+          )
           .where(
             and(
               eq(generatedContent.userId, ctx.user.id),
               eq(generatedContent.status, "completed"),
-              input.targetLanguage ? eq(vocabularyLists.targetLanguage, input.targetLanguage) : undefined
+              input.targetLanguage
+                ? eq(vocabularyLists.targetLanguage, input.targetLanguage)
+                : undefined
             )
           )
           .orderBy(desc(generatedContent.generatedAt));
@@ -1965,7 +2560,8 @@ Return a JSON array where each element has:
         const difficultyDistribution: Record<string, number> = {};
         storiesWithDifficulty.forEach(story => {
           const level = story.difficultyLevel!;
-          difficultyDistribution[level] = (difficultyDistribution[level] || 0) + 1;
+          difficultyDistribution[level] =
+            (difficultyDistribution[level] || 0) + 1;
         });
 
         // Calculate progression timeline (group by month)
@@ -1977,12 +2573,12 @@ Return a JSON array where each element has:
         const timelineMap = new Map<string, Record<string, number>>();
         storiesWithDifficulty.forEach(story => {
           const date = new Date(story.generatedAt);
-          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-          
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+
           if (!timelineMap.has(monthKey)) {
             timelineMap.set(monthKey, {});
           }
-          
+
           const monthData = timelineMap.get(monthKey)!;
           const level = story.difficultyLevel!;
           monthData[level] = (monthData[level] || 0) + 1;
@@ -1995,16 +2591,33 @@ Return a JSON array where each element has:
 
         // Calculate current level (most recent stories)
         const recentStories = storiesWithDifficulty.slice(0, 5);
-        const currentLevel = recentStories.length > 0 ? recentStories[0].difficultyLevel : null;
+        const currentLevel =
+          recentStories.length > 0 ? recentStories[0].difficultyLevel : null;
 
         // Calculate highest level achieved
-        const difficultyOrder = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'HSK 1', 'HSK 2', 'HSK 3', 'HSK 4', 'HSK 5', 'HSK 6'];
+        const difficultyOrder = [
+          "A1",
+          "A2",
+          "B1",
+          "B2",
+          "C1",
+          "C2",
+          "HSK 1",
+          "HSK 2",
+          "HSK 3",
+          "HSK 4",
+          "HSK 5",
+          "HSK 6",
+        ];
         const levelsAchieved = Object.keys(difficultyDistribution);
-        const highestLevel = levelsAchieved.length > 0 ? levelsAchieved.reduce((highest, level) => {
-          const currentIndex = difficultyOrder.indexOf(level);
-          const highestIndex = difficultyOrder.indexOf(highest);
-          return currentIndex > highestIndex ? level : highest;
-        }, levelsAchieved[0]) : null;
+        const highestLevel =
+          levelsAchieved.length > 0
+            ? levelsAchieved.reduce((highest, level) => {
+                const currentIndex = difficultyOrder.indexOf(level);
+                const highestIndex = difficultyOrder.indexOf(highest);
+                return currentIndex > highestIndex ? level : highest;
+              }, levelsAchieved[0])
+            : null;
 
         return {
           totalStories: storiesWithDifficulty.length,
@@ -2033,7 +2646,9 @@ Return a JSON array where each element has:
         }
 
         const vocabList = await getVocabularyListsByUserId(ctx.user.id);
-        const matchingList = vocabList.find((v) => v.id === content.vocabularyListId);
+        const matchingList = vocabList.find(
+          v => v.id === content.vocabularyListId
+        );
         if (!matchingList) {
           throw new Error("Vocabulary list not found");
         }
@@ -2061,11 +2676,11 @@ Return a JSON array where each element has:
 
           // Create a map of existing mastery records
           const masteryMap = new Map(
-            masteryRecords.map((record) => [record.word.toLowerCase(), record])
+            masteryRecords.map(record => [record.word.toLowerCase(), record])
           );
 
           // Build word data with mastery info
-          const wordData = words.map((word) => {
+          const wordData = words.map(word => {
             const mastery = masteryMap.get(word.toLowerCase());
             return {
               word,
@@ -2080,7 +2695,7 @@ Return a JSON array where each element has:
 
           // Prioritize words using SRS algorithm
           const prioritized = prioritizeWordsForQuiz(wordData, 5);
-          selectedWords = prioritized.map((w) => w.word);
+          selectedWords = prioritized.map(w => w.word);
         }
 
         // Generate quiz questions using AI
@@ -2128,7 +2743,13 @@ Return a JSON array where each element has:
                         correctIndex: { type: "number" },
                         explanation: { type: "string" },
                       },
-                      required: ["word", "question", "options", "correctIndex", "explanation"],
+                      required: [
+                        "word",
+                        "question",
+                        "options",
+                        "correctIndex",
+                        "explanation",
+                      ],
                       additionalProperties: false,
                     },
                   },
@@ -2141,7 +2762,8 @@ Return a JSON array where each element has:
         });
 
         const messageContent = response.choices[0].message.content;
-        const contentString = typeof messageContent === 'string' ? messageContent : '';
+        const contentString =
+          typeof messageContent === "string" ? messageContent : "";
         const quizData = JSON.parse(contentString || "{}");
         return quizData;
       }),
@@ -2167,7 +2789,8 @@ Return a JSON array where each element has:
         const { getDb } = await import("./db");
         const { quizAttempts, wordMastery } = await import("../drizzle/schema");
         const { eq, and } = await import("drizzle-orm");
-        const { calculateSM2, answerToQuality } = await import("./spacedRepetition");
+        const { calculateSM2, answerToQuality } =
+          await import("./spacedRepetition");
         const db = await getDb();
         if (!db) throw new Error("Database not available");
 
@@ -2182,7 +2805,8 @@ Return a JSON array where each element has:
 
         // Mark quiz challenge as completed
         try {
-          const { completeChallenge, TUTORIAL_CHALLENGES } = await import("./tutorialRouter");
+          const { completeChallenge, TUTORIAL_CHALLENGES } =
+            await import("./tutorialRouter");
           await completeChallenge(ctx.user.id, TUTORIAL_CHALLENGES.TAKE_QUIZ);
         } catch (error) {
           console.error("Failed to mark quiz challenge:", error);
@@ -2191,13 +2815,15 @@ Return a JSON array where each element has:
         // Calculate XP reward based on score
         const percentage = (input.score / input.totalQuestions) * 100;
         let xpReward = 10; // Base participation XP
-        if (percentage === 100) xpReward = 50; // Perfect score
-        else if (percentage >= 80) xpReward = 30; // Great score
+        if (percentage === 100)
+          xpReward = 50; // Perfect score
+        else if (percentage >= 80)
+          xpReward = 30; // Great score
         else if (percentage >= 60) xpReward = 20; // Good score
 
         // Award XP and update streak
         const { userStats } = await import("../drizzle/schema");
-        
+
         // Get or create user stats
         const existingStats = await db
           .select()
@@ -2212,6 +2838,7 @@ Return a JSON array where each element has:
             longestStreak: 0,
             lastActivityDate: null,
             totalXp: 0,
+            coins: 0,
             level: 1,
             storiesCompleted: 0,
             quizzesCompleted: 0,
@@ -2225,10 +2852,14 @@ Return a JSON array where each element has:
           .from(userStats)
           .where(eq(userStats.userId, ctx.user.id))
           .limit(1);
-        
+
         const current = stats[0];
         const now = new Date();
-        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const today = new Date(
+          now.getFullYear(),
+          now.getMonth(),
+          now.getDate()
+        );
         const lastActivity = current.lastActivityDate
           ? new Date(
               current.lastActivityDate.getFullYear(),
@@ -2241,7 +2872,9 @@ Return a JSON array where each element has:
         if (!lastActivity) {
           newStreak = 1;
         } else {
-          const daysDiff = Math.floor((today.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24));
+          const daysDiff = Math.floor(
+            (today.getTime() - lastActivity.getTime()) / (1000 * 60 * 60 * 24)
+          );
           if (daysDiff === 0) {
             // Same day, maintain streak
             newStreak = current.currentStreak;
@@ -2263,7 +2896,8 @@ Return a JSON array where each element has:
         if (newTotalXp >= 100) newLevel = 2;
         if (newTotalXp >= 300) newLevel = 3;
         if (newTotalXp >= 600) newLevel = 4;
-        if (newTotalXp >= 1000) newLevel = 5 + Math.floor((newTotalXp - 1000) / 500);
+        if (newTotalXp >= 1000)
+          newLevel = 5 + Math.floor((newTotalXp - 1000) / 500);
         const leveledUp = newLevel > previousLevel;
 
         // Update user stats
@@ -2280,14 +2914,15 @@ Return a JSON array where each element has:
           .where(eq(userStats.userId, ctx.user.id));
 
         // Check for new achievements
-        const { achievements, userAchievements } = await import("../drizzle/schema");
+        const { achievements, userAchievements } =
+          await import("../drizzle/schema");
         const allAchievements = await db.select().from(achievements);
         const unlockedIds = (
           await db
             .select({ achievementId: userAchievements.achievementId })
             .from(userAchievements)
             .where(eq(userAchievements.userId, ctx.user.id))
-        ).map((u) => u.achievementId);
+        ).map(u => u.achievementId);
 
         const newlyUnlocked: any[] = [];
         for (const achievement of allAchievements) {
@@ -2301,13 +2936,25 @@ Return a JSON array where each element has:
             .limit(1);
           const latestStats = updatedStats[0];
 
-          if (achievement.category === "streak" && latestStats.currentStreak >= achievement.requirement) {
+          if (
+            achievement.category === "streak" &&
+            latestStats.currentStreak >= achievement.requirement
+          ) {
             shouldUnlock = true;
-          } else if (achievement.category === "quizzes" && latestStats.quizzesCompleted >= achievement.requirement) {
+          } else if (
+            achievement.category === "quizzes" &&
+            latestStats.quizzesCompleted >= achievement.requirement
+          ) {
             shouldUnlock = true;
-          } else if (achievement.category === "stories" && latestStats.storiesCompleted >= achievement.requirement) {
+          } else if (
+            achievement.category === "stories" &&
+            latestStats.storiesCompleted >= achievement.requirement
+          ) {
             shouldUnlock = true;
-          } else if (achievement.category === "vocabulary" && latestStats.wordsLearned >= achievement.requirement) {
+          } else if (
+            achievement.category === "vocabulary" &&
+            latestStats.wordsLearned >= achievement.requirement
+          ) {
             shouldUnlock = true;
           }
 
@@ -2366,8 +3013,12 @@ Return a JSON array where each element has:
                 repetitions: sm2Result.repetitions,
                 nextReviewDate: sm2Result.nextReviewDate,
                 lastReviewedAt: new Date(),
-                correctCount: answer.correct ? current.correctCount + 1 : current.correctCount,
-                incorrectCount: !answer.correct ? current.incorrectCount + 1 : current.incorrectCount,
+                correctCount: answer.correct
+                  ? current.correctCount + 1
+                  : current.correctCount,
+                incorrectCount: !answer.correct
+                  ? current.incorrectCount + 1
+                  : current.incorrectCount,
               })
               .where(eq(wordMastery.id, current.id));
           } else {
@@ -2394,8 +3045,8 @@ Return a JSON array where each element has:
           }
         }
 
-        return { 
-          success: true, 
+        return {
+          success: true,
           xpEarned: xpReward,
           newStreak,
           newLevel,
@@ -2470,7 +3121,7 @@ Return a JSON array where each element has:
         const jobId = Number(result[0].insertId);
 
         // Start processing in background (non-blocking)
-        processBatchJob(jobId).catch((error) => {
+        processBatchJob(jobId).catch(error => {
           console.error(`Batch job ${jobId} failed:`, error);
         });
 
@@ -2526,19 +3177,18 @@ Return a JSON array where each element has:
     }),
 
     // Backfill difficulty levels for existing stories
-    backfillDifficultyLevels: protectedProcedure
-      .mutation(async ({ ctx }) => {
-        // Only allow admin users to run backfill
-        if (ctx.user.role !== "admin") {
-          throw new TRPCError({
-            code: "FORBIDDEN",
-            message: "Only admins can run backfill operations",
-          });
-        }
+    backfillDifficultyLevels: protectedProcedure.mutation(async ({ ctx }) => {
+      // Only allow admin users to run backfill
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Only admins can run backfill operations",
+        });
+      }
 
-        const result = await backfillDifficultyLevels();
-        return result;
-      }),
+      const result = await backfillDifficultyLevels();
+      return result;
+    }),
   }),
 
   organization: organizationRouter,
@@ -2555,14 +3205,20 @@ export type AppRouter = typeof appRouter;
  */
 async function processBatchJob(jobId: number) {
   const { getDb } = await import("./db");
-  const { batchJobs, vocabularyLists, generatedContent } = await import("../drizzle/schema");
+  const { batchJobs, vocabularyLists, generatedContent } =
+    await import("../drizzle/schema");
   const { eq } = await import("drizzle-orm");
-  const { generateStory, generatePodcast, generateFilm } = await import("./contentGeneration");
+  const { generateStory, generatePodcast, generateFilm } =
+    await import("./contentGeneration");
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   // Fetch job
-  const jobs = await db.select().from(batchJobs).where(eq(batchJobs.id, jobId)).limit(1);
+  const jobs = await db
+    .select()
+    .from(batchJobs)
+    .where(eq(batchJobs.id, jobId))
+    .limit(1);
   if (jobs.length === 0) return;
 
   const job = jobs[0];
@@ -2570,7 +3226,10 @@ async function processBatchJob(jobId: number) {
   const results: Array<{ contentId?: number; error?: string }> = [];
 
   // Update status to processing
-  await db.update(batchJobs).set({ status: "processing" }).where(eq(batchJobs.id, jobId));
+  await db
+    .update(batchJobs)
+    .set({ status: "processing" })
+    .where(eq(batchJobs.id, jobId));
 
   let completedCount = 0;
   let failedCount = 0;
@@ -2604,9 +3263,11 @@ async function processBatchJob(jobId: number) {
       });
 
       // 3. Create content record with AI-generated title
-      const finalTitle = story.title || (item.topicPrompt 
-        ? `${item.theme}: ${item.topicPrompt.substring(0, 50)}${item.topicPrompt.length > 50 ? '...' : ''}}`
-        : `${item.theme} ${item.format === 'podcast' ? 'Podcast' : 'Film'} - ${item.targetLanguage}`);
+      const finalTitle =
+        story.title ||
+        (item.topicPrompt
+          ? `${item.theme}: ${item.topicPrompt.substring(0, 50)}${item.topicPrompt.length > 50 ? "..." : ""}}`
+          : `${item.theme} ${item.format === "podcast" ? "Podcast" : "Film"} - ${item.targetLanguage}`);
 
       const contentResult = await db.insert(generatedContent).values({
         userId: job.userId,
@@ -2631,13 +3292,13 @@ async function processBatchJob(jobId: number) {
       let audioAlignment: any = null;
 
       if (item.format === "podcast" && item.voiceType) {
-        const podcast = await generatePodcast(
+        const podcast = (await generatePodcast(
           {
             ...item,
             voiceType: item.voiceType,
           },
           story.storyText
-        ) as { audioUrl: string; transcript: string; audioAlignment?: any };
+        )) as { audioUrl: string; transcript: string; audioAlignment?: any };
         audioUrl = podcast.audioUrl;
         if (podcast.audioAlignment) {
           audioAlignment = podcast.audioAlignment;
@@ -2645,7 +3306,7 @@ async function processBatchJob(jobId: number) {
       } else if (item.format === "film" && item.cinematicStyle) {
         const filmNarration = resolveFilmNarrationSettings(
           item.voiceType,
-          undefined,
+          undefined
         );
         const film = await generateFilm(
           {
@@ -2675,9 +3336,11 @@ async function processBatchJob(jobId: number) {
       completedCount++;
     } catch (error) {
       console.error("Error processing batch item:", error);
-      results.push({ error: error instanceof Error ? error.message : String(error) });
+      results.push({
+        error: error instanceof Error ? error.message : String(error),
+      });
       failedCount++;
-      
+
       // Mark the content as failed if it was created
       if (contentId) {
         try {

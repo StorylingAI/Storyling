@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
-import { BookMarked, BookOpen, Globe, Home, Plus, Settings } from "lucide-react";
+import { Globe, Home, Library, MessageCircle, Plus, UserRound } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { APP_LOGO, APP_TITLE } from "@/const";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const appPages = [
     "/app",
@@ -47,17 +46,8 @@ export function Footer() {
   const isAuthenticatedPage = appPages.some((page) => location.startsWith(page));
   const showDesktopFooter = !isAuthenticatedPage;
 
-  const [isLargeDesktop, setIsLargeDesktop] = useState(false);
-
-  useEffect(() => {
-    const checkViewport = () => setIsLargeDesktop(window.innerWidth >= 1024);
-    checkViewport();
-    window.addEventListener("resize", checkViewport);
-    return () => window.removeEventListener("resize", checkViewport);
-  }, []);
-
   const isDashboard = location === "/app" || location === "/dashboard";
-  const showBottomNav = isDashboard && !isLargeDesktop;
+  const showBottomNav = isDashboard;
   const isActive = (path: string, matchPath?: string) => {
     const activePath = matchPath ?? path;
     if (activePath === "/app") return location === "/app" || location === "/dashboard";
@@ -65,14 +55,12 @@ export function Footer() {
     return location === path || location.startsWith(activePath + "/");
   };
 
-  const leftNavItems = [
-    { href: "/app", label: "Home", icon: Home, matchPath: "/app" },
-    { href: "/library", label: "Library", icon: BookOpen, matchPath: "/library" },
-  ];
-
-  const rightNavItems = [
-    { href: "/wordbank", label: "Word Bank", icon: BookMarked, matchPath: "/wordbank" },
-    { href: "/settings", label: "Settings", icon: Settings, matchPath: "/profile" },
+  const navItems = [
+    { key: "home", label: "Home", icon: Home, path: "/app", matchPath: "/app" },
+    { key: "add", label: "Add", icon: Plus, path: "/create", matchPath: "/create" },
+    { key: "library", label: "Library", icon: Library, path: "/library", matchPath: "/library" },
+    { key: "chat", label: "Chat", icon: MessageCircle, path: "__chat__", matchPath: "__chat__" },
+    { key: "profile", label: "Profile", icon: UserRound, path: "/settings", matchPath: "/profile" },
   ];
 
   return (
@@ -243,78 +231,53 @@ export function Footer() {
 
       {showBottomNav && (
         <nav
-          className="fixed inset-x-0 bottom-0 z-50 px-3 md:hidden"
+          className="fixed inset-x-0 bottom-0 z-50 px-4"
           style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 10px)" }}
         >
-          <div className="pointer-events-none mx-auto max-w-md">
-            <div className="pointer-events-auto relative">
-              <div className="absolute left-1/2 -translate-x-1/2 -top-7 z-10">
-                <Link href="/create">
+          <div className="mx-auto max-w-[960px]">
+            <div
+              className="grid grid-cols-5 items-center gap-1 rounded-[28px] border px-2 py-1.5 sm:px-2.5 sm:py-2"
+              style={{
+                borderColor: "rgba(238,233,251,0.94)",
+                background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(248,244,255,0.94) 100%)",
+                boxShadow: "0 18px 36px rgba(174, 147, 222, 0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
+                backdropFilter: "blur(18px)",
+                WebkitBackdropFilter: "blur(18px)",
+              }}
+            >
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const active = item.path === "__chat__" ? false : isActive(item.path, item.matchPath);
+
+                return (
                   <button
-                    className="relative flex h-16 w-16 items-center justify-center rounded-full active:scale-95 transition-transform"
-                    style={{
-                      background: "linear-gradient(180deg, #B46BFF 0%, #9057FF 52%, #6F47E3 100%)",
-                      boxShadow: "0 14px 32px rgba(88, 46, 160, 0.34), inset 0 1px 0 rgba(255,255,255,0.34)",
+                    key={item.key}
+                    type="button"
+                    onClick={() => {
+                      if (item.path === "__chat__") {
+                        window.dispatchEvent(new CustomEvent("open-booki-chat"));
+                        return;
+                      }
+                      setLocation(item.path);
                     }}
+                    className={cn(
+                      "relative flex min-h-[58px] flex-col items-center justify-center gap-1 rounded-[20px] px-2 py-2 transition-all active:scale-95 sm:min-h-[62px]",
+                      active ? "bg-[linear-gradient(135deg,#EEE1FF_0%,#E7D7FF_100%)] shadow-[0_10px_18px_rgba(166,140,215,0.16)]" : "hover:bg-[#F8F2FF]"
+                    )}
                   >
-                    <div className="absolute inset-[2px] rounded-full border border-white/30" />
-                    <Plus className="h-8 w-8 text-white" strokeWidth={2.5} />
+                    <Icon className={cn("h-5 w-5 sm:h-6 sm:w-6", active ? "text-[#8350E5]" : "text-[#B39CCC]")} strokeWidth={2.2} />
+                    {item.key === "chat" ? (
+                      <span className="absolute right-[30%] top-[14px] h-2.5 w-2.5 rounded-full bg-[#FF7F7F] shadow-[0_0_0_3px_rgba(255,255,255,0.95)] sm:top-[16px]" />
+                    ) : null}
+                    <span
+                      className={cn("text-[10px] font-medium sm:text-xs", active ? "text-[#5A368E]" : "text-[#A591C2]")}
+                      style={{ fontFamily: "Fredoka, sans-serif" }}
+                    >
+                      {item.label}
+                    </span>
                   </button>
-                </Link>
-              </div>
-
-              <div
-                className="grid grid-cols-5 items-end rounded-[28px] border px-3 pt-4 pb-2"
-                style={{
-                  borderColor: "rgba(255,255,255,0.2)",
-                  background: "linear-gradient(180deg, rgba(162,170,196,0.34) 0%, rgba(105,112,140,0.64) 100%)",
-                  backdropFilter: "blur(20px)",
-                  WebkitBackdropFilter: "blur(20px)",
-                  boxShadow: "0 12px 32px rgba(28, 18, 68, 0.28), inset 0 1px 0 rgba(255,255,255,0.24)",
-                }}
-              >
-                {leftNavItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item.href, item.matchPath);
-                  return (
-                    <Link key={item.href} href={item.href}>
-                      <button className="flex w-full flex-col items-center justify-center gap-1 py-1 active:scale-95 transition-transform">
-                        <Icon className={cn("h-5 w-5 transition-all", active ? "text-[#FFF1C8]" : "text-white/70")} />
-                        <span
-                          className={cn("text-[11px] transition-all", active ? "font-bold text-[#FFF1C8]" : "font-medium text-white/72")}
-                          style={{ fontFamily: "Fredoka, sans-serif", textShadow: active ? "0 2px 8px rgba(77, 43, 125, 0.3)" : "none" }}
-                        >
-                          {item.label}
-                        </span>
-                      </button>
-                    </Link>
-                  );
-                })}
-
-                <div className="flex flex-col items-center justify-end pt-7">
-                  <span className="text-[11px] font-medium text-white/84" style={{ fontFamily: "Fredoka, sans-serif" }}>
-                    Create
-                  </span>
-                </div>
-
-                {rightNavItems.map((item) => {
-                  const Icon = item.icon;
-                  const active = isActive(item.href, item.matchPath);
-                  return (
-                    <Link key={item.href} href={item.href}>
-                      <button className="flex w-full flex-col items-center justify-center gap-1 py-1 active:scale-95 transition-transform">
-                        <Icon className={cn("h-5 w-5 transition-all", active ? "text-[#FFF1C8]" : "text-white/70")} />
-                        <span
-                          className={cn("text-[11px] transition-all", active ? "font-bold text-[#FFF1C8]" : "font-medium text-white/72")}
-                          style={{ fontFamily: "Fredoka, sans-serif", textShadow: active ? "0 2px 8px rgba(77, 43, 125, 0.3)" : "none" }}
-                        >
-                          {item.label}
-                        </span>
-                      </button>
-                    </Link>
-                  );
-                })}
-              </div>
+                );
+              })}
             </div>
           </div>
         </nav>

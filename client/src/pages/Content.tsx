@@ -100,7 +100,6 @@ export default function Content() {
   const entitlements = useEntitlements();
   const [showSpeedGatePaywall, setShowSpeedGatePaywall] = useState(false);
   const [showDownloadGatePaywall, setShowDownloadGatePaywall] = useState(false);
-  const [xpToastShown, setXpToastShown] = useState(false);
   const [thumbnailFailed, setThumbnailFailed] = useState(false);
   const [currentSentence, setCurrentSentence] = useState(0);
   const [progressLoaded, setProgressLoaded] = useState(false);
@@ -315,16 +314,8 @@ export default function Content() {
   useEffect(() => {
     if (content && content.status === "completed") {
       incrementPlayMutation.mutate({ contentId: content.id });
-      
-      // Show XP reward toast once when story generation completes
-      if (!xpToastShown) {
-        setXpToastShown(true);
-        toast.success("🎉 Story Created!", {
-          description: "You earned 25 XP for creating a new story! Keep learning to unlock achievements."
-        });
-      }
     }
-  }, [content?.id, content?.status, xpToastShown]);
+  }, [content?.id, content?.status]);
 
   const toggleFavorite = async () => {
     if (isFavorite) {
@@ -885,7 +876,10 @@ export default function Content() {
         </div>
 
         {/* Audio/Video player area */}
-        <div className="relative -mt-10 px-4 sm:px-8 max-w-5xl mx-auto z-10">
+        <div
+          className="relative px-4 sm:px-8 max-w-5xl mx-auto z-10"
+          style={{ marginTop: content.mode === "podcast" ? "-2.5rem" : "1.5rem" }}
+        >
           {content.mode === "podcast" ? (
             <>
               {content.audioUrl && (
@@ -1245,7 +1239,7 @@ export default function Content() {
           </TabsList>
 
           <TabsContent value="transcript" className="mt-4">
-            <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
+            <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white text-gray-900 dark:bg-white dark:text-gray-900">
               <CardContent className="pt-6">
                 <StoryDisplay
                   storyText={content.storyText}
@@ -1260,7 +1254,7 @@ export default function Content() {
           </TabsContent>
 
           <TabsContent value="vocabulary" className="mt-4">
-            <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white">
+            <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white text-gray-900 dark:bg-white dark:text-gray-900">
               <CardContent className="pt-6">
                 {vocabularyWords.length > 0 ? (
                   <VocabularyTable

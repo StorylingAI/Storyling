@@ -1,9 +1,19 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "./_core/trpc";
 import { getDb } from "./db";
-import { wordbank, practiceHistory, userStats, wordMastery } from "../drizzle/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
-import { calculateSM2, answerToQuality, WordMasteryData } from "./spacedRepetition";
+import {
+  wordbank,
+  practiceHistory,
+  userStats,
+  wordMastery,
+} from "../drizzle/schema";
+import { eq, and, desc, sql, lte } from "drizzle-orm";
+import {
+  calculateSM2,
+  answerToQuality,
+  WordMasteryData,
+} from "./spacedRepetition";
+import { claimReviewClearReward } from "./challengeRewards";
 
 export const practiceRouter = router({
   /**
@@ -24,11 +34,11 @@ export const practiceRouter = router({
 
       // Build query conditions
       const conditions = [eq(wordbank.userId, ctx.user.id)];
-      
+
       if (input.targetLanguage) {
         conditions.push(eq(wordbank.targetLanguage, input.targetLanguage));
       }
-      
+
       if (input.masteryLevel) {
         conditions.push(eq(wordbank.masteryLevel, input.masteryLevel));
       }
@@ -42,13 +52,15 @@ export const practiceRouter = router({
         .limit(input.count);
 
       if (words.length === 0) {
-        throw new Error("No words found in wordbank. Please save some words first!");
+        throw new Error(
+          "No words found in wordbank. Please save some words first!"
+        );
       }
 
       return {
         sessionId: Date.now().toString(),
         quizMode: input.quizMode,
-        words: words.map((w) => ({
+        words: words.map(w => ({
           id: w.id,
           word: w.word,
           pinyin: w.pinyin,
@@ -75,6 +87,28 @@ export const practiceRouter = router({
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error("Database not available");
+      const submittedAt = new Date();
+
+      const existingStats = await db
+        .select({ id: userStats.id })
+        .from(userStats)
+        .where(eq(userStats.userId, ctx.user.id))
+        .limit(1);
+
+      if (existingStats.length === 0) {
+        await db.insert(userStats).values({
+          userId: ctx.user.id,
+          currentStreak: 0,
+          longestStreak: 0,
+          lastActivityDate: null,
+          totalXp: 0,
+          coins: 0,
+          level: 1,
+          quizzesCompleted: 0,
+          storiesCompleted: 0,
+          wordsLearned: 0,
+        });
+      }
 
       // Calculate XP reward
       const xpEarned = input.isCorrect ? 5 : 0;
@@ -86,7 +120,7 @@ export const practiceRouter = router({
         quizMode: input.quizMode,
         isCorrect: input.isCorrect,
         xpEarned,
-        createdAt: new Date(),
+        createdAt: submittedAt,
       });
 
       // Update wordbank stats
@@ -122,6 +156,8 @@ export const practiceRouter = router({
         )
         .limit(1);
 
+      let wasDueForReview = false;
+
       // Update spaced repetition schedule
       if (word) {
         // Get or create word mastery record
@@ -137,12 +173,18 @@ export const practiceRouter = router({
           )
           .limit(1);
 
+        wasDueForReview = existingMastery
+          ? existingMastery.nextReviewDate <= submittedAt
+          : false;
+
         // Convert response time and correctness to SM-2 quality rating
         const quality = answerToQuality(input.isCorrect, input.responseTime);
 
         // Calculate new SM-2 parameters
         const currentData: WordMasteryData = {
-          easinessFactor: existingMastery ? existingMastery.easinessFactor : 2500, // Stored as 1000x (2500 = 2.5)
+          easinessFactor: existingMastery
+            ? existingMastery.easinessFactor
+            : 2500, // Stored as 1000x (2500 = 2.5)
           interval: existingMastery?.interval || 0,
           repetitions: existingMastery?.repetitions || 0,
           nextReviewDate: existingMastery?.nextReviewDate || new Date(),
@@ -194,10 +236,11 @@ export const practiceRouter = router({
       if (word) {
         // Auto-upgrade mastery level based on performance (keeping existing logic)
         const totalAttempts = word.timesCorrect + word.timesIncorrect;
-        const accuracy = totalAttempts > 0 ? word.timesCorrect / totalAttempts : 0;
+        const accuracy =
+          totalAttempts > 0 ? word.timesCorrect / totalAttempts : 0;
 
         let newMasteryLevel = word.masteryLevel;
-        
+
         if (accuracy >= 0.9 && totalAttempts >= 5) {
           newMasteryLevel = "mastered";
         } else if (accuracy >= 0.7 && totalAttempts >= 3) {
@@ -228,6 +271,33 @@ export const practiceRouter = router({
             .where(eq(userStats.userId, ctx.user.id));
         }
 
+        if (wasDueForReview) {
+          const [remainingDue] = await db
+            .select({
+              count: sql<number>`COUNT(*)`,
+            })
+            .from(wordbank)
+            .innerJoin(
+              wordMastery,
+              and(
+                eq(wordbank.userId, wordMastery.userId),
+                eq(wordbank.word, wordMastery.word),
+                eq(wordbank.targetLanguage, wordMastery.targetLanguage)
+              )
+            )
+            .where(
+              and(
+                eq(wordbank.userId, ctx.user.id),
+                lte(wordMastery.nextReviewDate, submittedAt),
+                sql`NOT (${wordMastery.easinessFactor} >= 2500 AND ${wordMastery.interval} >= 30)`
+              )
+            );
+
+          if (Number(remainingDue.count) === 0) {
+            await claimReviewClearReward(ctx.user.id);
+          }
+        }
+
         return {
           success: true,
           xpEarned,
@@ -236,7 +306,12 @@ export const practiceRouter = router({
         };
       }
 
-      return { success: true, xpEarned, newMasteryLevel: null, leveledUp: false };
+      return {
+        success: true,
+        xpEarned,
+        newMasteryLevel: null,
+        leveledUp: false,
+      };
     }),
 
   /**
@@ -309,7 +384,7 @@ export const practiceRouter = router({
       correctAttempts: totalStats.correctAttempts || 0,
       accuracy: Math.round(accuracy),
       totalXpEarned: totalStats.totalXpEarned || 0,
-      masteryDistribution: masteryDistribution.map((m) => ({
+      masteryDistribution: masteryDistribution.map(m => ({
         level: m.masteryLevel,
         count: m.count,
       })),

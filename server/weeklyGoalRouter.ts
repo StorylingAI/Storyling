@@ -5,13 +5,16 @@ import { getDb } from "./db";
 import { users } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { notifyOwner } from "./_core/notification";
+import { claimWeeklyGoalReward } from "./challengeRewards";
 
 /**
  * Check if a week has passed since the given start date
  */
 function hasWeekPassed(weekStartDate: Date): boolean {
   const now = new Date();
-  const daysSinceStart = Math.floor((now.getTime() - weekStartDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysSinceStart = Math.floor(
+    (now.getTime() - weekStartDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
   return daysSinceStart >= 7;
 }
 
@@ -33,9 +36,17 @@ function getWeekStartDate(): Date {
  */
 async function checkAndResetWeeklyProgress(userId: number) {
   const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  if (!db)
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database unavailable",
+    });
 
-  const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const user = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (!user.length) return;
 
   const userData = user[0];
@@ -45,7 +56,7 @@ async function checkAndResetWeeklyProgress(userId: number) {
   if (hasWeekPassed(weekStartDate)) {
     // Check if last week's goal was reached
     const lastWeekGoalReached = userData.weeklyProgress >= userData.weeklyGoal;
-    
+
     // Update streak based on last week's performance
     let newStreak = userData.weeklyGoalStreak;
     if (lastWeekGoalReached && userData.lastWeekGoalReached) {
@@ -83,13 +94,21 @@ async function checkAndResetWeeklyProgress(userId: number) {
  */
 export async function incrementWeeklyProgress(userId: number) {
   const db = await getDb();
-  if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+  if (!db)
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Database unavailable",
+    });
 
   // First check and reset if needed
   await checkAndResetWeeklyProgress(userId);
 
   // Get current user data
-  const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+  const user = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
   if (!user.length) return;
 
   const userData = user[0];
@@ -101,13 +120,26 @@ export async function incrementWeeklyProgress(userId: number) {
     .set({ weeklyProgress: newProgress })
     .where(eq(users.id, userId));
 
+  const reachedGoalThisUpdate =
+    userData.weeklyProgress < userData.weeklyGoal &&
+    newProgress >= userData.weeklyGoal;
+
   // Check if goal is reached and send email if not sent yet
   if (newProgress >= userData.weeklyGoal && !userData.weeklyGoalEmailSent) {
-    await sendWeeklyGoalEmail(userId, userData.weeklyGoal, userData.email, userData.name);
+    await sendWeeklyGoalEmail(
+      userId,
+      userData.weeklyGoal,
+      userData.email,
+      userData.name
+    );
     await db
       .update(users)
       .set({ weeklyGoalEmailSent: true })
       .where(eq(users.id, userId));
+  }
+
+  if (reachedGoalThisUpdate) {
+    await claimWeeklyGoalReward(userId, userData.weekStartDate);
   }
 }
 
@@ -187,7 +219,12 @@ async function checkAndAwardStreakBadges(userId: number, streak: number) {
   }
 }
 
-async function sendWeeklyGoalEmail(userId: number, weeklyGoal: number, email: string | null, name: string | null) {
+async function sendWeeklyGoalEmail(
+  userId: number,
+  weeklyGoal: number,
+  email: string | null,
+  name: string | null
+) {
   if (!email) return;
 
   const content = `
@@ -233,12 +270,20 @@ export const weeklyGoalRouter = router({
    */
   getWeeklyGoalStatus: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database unavailable",
+      });
 
     // Check and reset if needed
     await checkAndResetWeeklyProgress(ctx.user.id);
 
-    const user = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
     if (!user.length) {
       throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
     }
@@ -258,11 +303,19 @@ export const weeklyGoalRouter = router({
    */
   getWeeklyGoalStreak: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+    if (!db)
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Database unavailable",
+      });
 
     await checkAndResetWeeklyProgress(ctx.user.id);
 
-    const user = await db.select().from(users).where(eq(users.id, ctx.user.id)).limit(1);
+    const user = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, ctx.user.id))
+      .limit(1);
     if (!user.length) {
       throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
     }
@@ -280,7 +333,11 @@ export const weeklyGoalRouter = router({
     .input(z.object({ weeklyGoal: z.number().min(1).max(100) }))
     .mutation(async ({ input, ctx }) => {
       const db = await getDb();
-      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+      if (!db)
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Database unavailable",
+        });
 
       await db
         .update(users)

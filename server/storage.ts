@@ -5,7 +5,7 @@ import path from "path";
 import { ENV } from "./_core/env";
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve("uploads");
-const BASE_URL = process.env.BASE_URL || "";
+const BASE_URL = ENV.isProduction ? process.env.BASE_URL || "" : "";
 
 // Ensure uploads directory exists
 function ensureUploadsDir() {

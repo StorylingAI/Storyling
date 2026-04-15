@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ChangeEvent } from "react";
 import { trpc } from "../lib/trpc";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
+import { UserAvatar } from "../components/UserAvatar";
 
 function BulkImport() {
   const { data: user } = trpc.auth.me.useQuery();
@@ -493,10 +494,47 @@ function AccountProfileSettings() {
   const { data: user } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const [displayName, setDisplayName] = useState("");
+  const [pendingAvatarDataUrl, setPendingAvatarDataUrl] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
+
+  const refreshIdentity = async () => {
+    await Promise.all([
+      utils.auth.me.invalidate(),
+      utils.discovery.getDiscoveryFeed.invalidate(),
+      utils.leaderboard.getTopWeeklyAchievers.invalidate(),
+      utils.leaderboard.getLeaderboard.invalidate(),
+      utils.leaderboard.getUserProfile.invalidate(),
+      utils.follow.getFollowers.invalidate(),
+      utils.follow.getFollowing.invalidate(),
+    ]);
+  };
 
   const updateProfile = trpc.auth.updateProfile.useMutation({
-    onSuccess: () => {
-      utils.auth.me.invalidate();
+    onSuccess: async () => {
+      await refreshIdentity();
+    },
+  });
+
+  const uploadAvatar = trpc.auth.uploadAvatar.useMutation({
+    onSuccess: async () => {
+      setPendingAvatarDataUrl(null);
+      setAvatarError(null);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      await refreshIdentity();
+    },
+  });
+
+  const removeAvatar = trpc.auth.removeAvatar.useMutation({
+    onSuccess: async () => {
+      setPendingAvatarDataUrl(null);
+      setAvatarError(null);
+      if (avatarInputRef.current) {
+        avatarInputRef.current.value = "";
+      }
+      await refreshIdentity();
     },
   });
 
@@ -507,9 +545,119 @@ function AccountProfileSettings() {
   const trimmedName = displayName.trim();
   const savedName = (user?.name || "").trim();
   const hasChanges = trimmedName.length > 0 && trimmedName !== savedName;
+  const currentAvatarUrl = pendingAvatarDataUrl ?? user?.avatarUrl ?? null;
+  const isAvatarBusy = uploadAvatar.isPending || removeAvatar.isPending;
+
+  const handleAvatarSelection = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setAvatarError("Use a PNG, JPG, or WEBP image.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      setAvatarError("Avatar must be 2MB or smaller.");
+      event.target.value = "";
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      setPendingAvatarDataUrl(typeof reader.result === "string" ? reader.result : null);
+      setAvatarError(null);
+    };
+    reader.onerror = () => {
+      setAvatarError("Failed to read the selected image.");
+      event.target.value = "";
+    };
+    reader.readAsDataURL(file);
+  };
 
   return (
     <div className="space-y-6">
+      <div className="space-y-3">
+        <Label className="text-base font-semibold">Profile Picture</Label>
+        <p className="text-sm text-muted-foreground">
+          Upload a square-ish image for the best result. PNG, JPG, or WEBP up to 2MB.
+        </p>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <UserAvatar
+            name={trimmedName || user?.name || user?.email}
+            avatarUrl={currentAvatarUrl}
+            className="h-20 w-20 border-2"
+            fallbackClassName="text-xl"
+          />
+          <div className="flex flex-wrap gap-3">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              className="hidden"
+              onChange={handleAvatarSelection}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={isAvatarBusy}
+            >
+              Choose Image
+            </Button>
+            <Button
+              type="button"
+              onClick={() => pendingAvatarDataUrl && uploadAvatar.mutate({ dataUrl: pendingAvatarDataUrl })}
+              disabled={!pendingAvatarDataUrl || isAvatarBusy}
+            >
+              {uploadAvatar.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                "Save Avatar"
+              )}
+            </Button>
+            {(pendingAvatarDataUrl || user?.avatarUrl) && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  if (pendingAvatarDataUrl) {
+                    setPendingAvatarDataUrl(null);
+                    setAvatarError(null);
+                    if (avatarInputRef.current) {
+                      avatarInputRef.current.value = "";
+                    }
+                    return;
+                  }
+                  removeAvatar.mutate();
+                }}
+                disabled={isAvatarBusy}
+              >
+                {removeAvatar.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Removing...
+                  </>
+                ) : pendingAvatarDataUrl ? (
+                  "Cancel"
+                ) : (
+                  "Remove Avatar"
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+        {avatarError ? (
+          <p className="text-sm text-red-600">{avatarError}</p>
+        ) : pendingAvatarDataUrl ? (
+          <p className="text-sm text-muted-foreground">Preview ready. Save to update your profile everywhere in the app.</p>
+        ) : null}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="display-name" className="text-base font-semibold">
           Display Name

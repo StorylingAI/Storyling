@@ -190,6 +190,7 @@ export default function CreateStory() {
   const [location, setLocation] = useLocation();
   const [step, setStep] = useState(1);
   const [generatingContentId, setGeneratingContentId] = useState<number | null>(null);
+  const completionToastShownRef = useRef(false);
 
   // Read URL params for pre-filling from level test
   const urlParams = new URLSearchParams(location.split('?')[1] || '');
@@ -320,6 +321,7 @@ export default function CreateStory() {
   const generateMutation = trpc.content.generate.useMutation({
     onSuccess: (data) => {
       setGeneratingContentId(data.contentId);
+      completionToastShownRef.current = false;
       toast.success("Content generation started! This may take a few minutes.");
     },
     onError: (error) => {
@@ -382,7 +384,12 @@ export default function CreateStory() {
   // Navigate when content is ready
   useEffect(() => {
     if (generatingContent?.status === 'completed') {
-      toast.success("Your content is ready!");
+      if (!completionToastShownRef.current) {
+        completionToastShownRef.current = true;
+        toast.success("Your content is ready!", {
+          description: "You earned 25 XP for creating a new story."
+        });
+      }
       setLocation(`/content/${generatingContent.id}`);
     } else if (generatingContent?.status === 'failed') {
       toast.error("Content generation failed. Please try again.");

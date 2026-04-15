@@ -532,7 +532,7 @@ export function StoryDisplay({
   // If we have line translations, display with translations
   if (lineTranslations && lineTranslations.length > 0) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 text-gray-900 [&_blockquote]:border-lime-500 [&_blockquote]:bg-lime-50 [&_blockquote]:text-gray-900 [&_blockquote_*]:text-gray-900 [&_mark]:bg-lime-100 [&_mark]:text-gray-900 [&_mark_*]:text-gray-900">
         {/* Toggle Controls */}
         <div className="flex gap-2 mb-4 flex-wrap">
           <Button
@@ -627,7 +627,10 @@ export function StoryDisplay({
 
   // Fallback: display plain text with tooltips if available
   return (
-    <div ref={storyContainerRef} className="prose max-w-none">
+    <div
+      ref={storyContainerRef}
+      className="prose max-w-none text-gray-900 [&_blockquote]:border-lime-500 [&_blockquote]:bg-lime-50 [&_blockquote]:text-gray-900 [&_blockquote_*]:text-gray-900 [&_mark]:bg-lime-100 [&_mark]:text-gray-900 [&_mark_*]:text-gray-900 [&_p]:text-gray-900 [&_strong]:text-gray-900"
+    >
       <p className="text-base leading-relaxed">
         {vocabularyTranslations
           ? renderTextWithTooltips(storyText)

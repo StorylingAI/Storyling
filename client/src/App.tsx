@@ -168,12 +168,13 @@ function AppShell() {
 
   // Hide chatbot on content pages where it overlaps the audio player
   const isContentPage = location.startsWith('/content/');
+  const isDashboardPage = location === "/app" || location === "/dashboard";
 
   return (
     <>
       <OfflineBanner />
       <Router />
-      {!isAuthPage && <Footer />}
+      {!isAuthPage && !isDashboardPage && <Footer />}
       <CookieConsent />
       {!isContentPage && <Chatbot context={bookiContext} />}
     </>

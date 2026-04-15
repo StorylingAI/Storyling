@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { APP_LOGO, APP_TITLE } from "@/const";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -10,7 +9,6 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Menu,
   LayoutDashboard,
@@ -27,6 +25,7 @@ import {
   UserCircle,
 } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { UserAvatar } from "./UserAvatar";
 
 const learningItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/app" },
@@ -174,11 +173,12 @@ export function MobileNav({
           {/* User info at top */}
           <div className="p-4 border-b bg-gradient-to-r from-purple-50 to-teal-50">
             <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10 border">
-                <AvatarFallback className="text-sm font-medium bg-purple-100 text-purple-700">
-                  {user?.name?.charAt(0).toUpperCase() || "?"}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar
+                name={user?.name || user?.email}
+                avatarUrl={user?.avatarUrl}
+                className="h-10 w-10"
+                fallbackClassName="text-sm font-medium"
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <p className="text-sm font-semibold truncate">

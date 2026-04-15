@@ -75,6 +75,7 @@ export function registerOAuthRoutes(app: Express) {
           openId,
           name,
           email,
+          avatarUrl: null,
           loginMethod: "dev",
           lastSignedIn: new Date(),
         });
@@ -164,6 +165,7 @@ export function registerOAuthRoutes(app: Express) {
         openId,
         name: googleUser.name || null,
         email: googleUser.email ?? null,
+        avatarUrl: googleUser.picture ?? null,
         loginMethod: "google",
         lastSignedIn: new Date(),
       });

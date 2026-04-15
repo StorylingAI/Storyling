@@ -26,6 +26,7 @@ export const leaderboardRouter = router({
         .select({
           userId: leaderboardEntries.userId,
           userName: users.name,
+          avatarUrl: users.avatarUrl,
           goalsCompleted: leaderboardEntries.goalsCompleted,
           streakDays: leaderboardEntries.streakDays,
           xpEarned: leaderboardEntries.xpEarned,
@@ -74,6 +75,7 @@ export const leaderboardRouter = router({
             userId: users.id,
             userName: users.name,
             userEmail: users.email,
+            avatarUrl: users.avatarUrl,
             goalsCompleted: leaderboardEntries.goalsCompleted,
             streakDays: leaderboardEntries.streakDays,
             xpEarned: leaderboardEntries.xpEarned,
@@ -95,6 +97,7 @@ export const leaderboardRouter = router({
           userId: user.userId,
           userName: user.userName || "Anonymous",
           userEmail: user.userEmail,
+          avatarUrl: user.avatarUrl,
           goalsCompleted: user.goalsCompleted,
           streakDays: user.streakDays,
           xpEarned: user.xpEarned,
@@ -116,6 +119,7 @@ export const leaderboardRouter = router({
           userId: users.id,
           userName: users.name,
           userEmail: users.email,
+          avatarUrl: users.avatarUrl,
           totalClones: sql<number>`COALESCE(SUM(${collections.cloneCount}), 0)`,
           collectionCount: sql<number>`COUNT(DISTINCT ${collections.id})`,
         })
@@ -127,7 +131,7 @@ export const leaderboardRouter = router({
             dateThreshold ? gte(collections.createdAt, dateThreshold) : undefined
           )
         )
-        .groupBy(users.id, users.name, users.email)
+        .groupBy(users.id, users.name, users.email, users.avatarUrl)
         .having(sql`COUNT(DISTINCT ${collections.id}) > 0`) // Only users with collections
         .orderBy(desc(sql`SUM(${collections.cloneCount})`))
         .limit(input.limit);
@@ -191,6 +195,7 @@ export const leaderboardRouter = router({
         userId: user.userId,
         userName: user.userName || "Anonymous",
         userEmail: user.userEmail,
+        avatarUrl: user.avatarUrl,
         totalClones: user.totalClones,
         collectionCount: user.collectionCount,
         badgeCount: badgeCountMap.get(user.userId) || 0,
@@ -220,6 +225,7 @@ export const leaderboardRouter = router({
           id: users.id,
           name: users.name,
           email: users.email,
+          avatarUrl: users.avatarUrl,
           createdAt: users.createdAt,
         })
         .from(users)
@@ -314,6 +320,7 @@ export const leaderboardRouter = router({
           id: user.id,
           name: user.name || "Anonymous",
           email: user.email,
+          avatarUrl: user.avatarUrl,
           joinedAt: user.createdAt,
         },
         stats: {
