@@ -12,11 +12,25 @@ export const ocrRouter = router({
     .input(
       z.object({
         imageBase64: z.string().describe('Base64 encoded image data'),
-        targetLanguage: z.enum(['Chinese', 'French', 'Spanish', 'German']),
+        targetLanguage: z.string().trim().min(1).optional(),
+        mimeType: z.string().trim().regex(/^image\/[a-z0-9.+-]+$/i).optional(),
       })
     )
     .mutation(async ({ input }) => {
       const { imageBase64, targetLanguage } = input;
+      const imageMimeType = input.mimeType || 'image/jpeg';
+      const languageGuidance = targetLanguage
+        ? `For ${targetLanguage}:
+            - Extract all visible words/phrases in the target language
+            - Ignore translations or explanations in other languages when the image is a vocabulary list
+            - Preserve the original text exactly as written`
+        : `No target language was selected:
+            - Infer the learner's target language from the image
+            - Extract the vocabulary words or short useful phrases most likely intended for study
+            - If the image has a vocabulary list with translations, prefer the non-English study terms`;
+      const vocabListGuidance = targetLanguage
+        ? `- If it's a vocab list with translations, only extract the ${targetLanguage} words`
+        : "- If it's a vocab list with translations, only extract the study-language words";
 
       // Use GPT-4 Vision to extract vocabulary from the image
       const response = await openai.chat.completions.create({
@@ -24,13 +38,10 @@ export const ocrRouter = router({
         messages: [
           {
             role: 'system',
-            content: `You are a language learning assistant. Extract vocabulary words from images of textbooks, handwritten notes, or vocabulary lists. 
+            content: `You are a language learning assistant. Extract vocabulary words from images of textbooks, handwritten notes, or vocabulary lists.
             
-            For ${targetLanguage}:
-            - Extract all visible words/phrases in the target language
-            - Ignore English translations or explanations (we'll generate those)
-            - Preserve the original text exactly as written
-            - If it's a vocab list with translations, only extract the ${targetLanguage} words
+            ${languageGuidance}
+            ${vocabListGuidance}
             - If it's a textbook page, extract key vocabulary (not full sentences)
             - Return one word/phrase per line
             - Remove any numbering, bullets, or formatting
@@ -42,12 +53,14 @@ export const ocrRouter = router({
             content: [
               {
                 type: 'text',
-                text: `Extract ${targetLanguage} vocabulary from this image:`,
+                text: targetLanguage
+                  ? `Extract ${targetLanguage} vocabulary from this image:`
+                  : 'Extract the study vocabulary from this image:',
               },
               {
                 type: 'image_url',
                 image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
+                  url: `data:${imageMimeType};base64,${imageBase64}`,
                 },
               },
             ],

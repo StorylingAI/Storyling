@@ -27,6 +27,8 @@ export default function PublicCollectionView() {
   const [, setLocation] = useLocation();
   const shareToken = params.token || "";
   const { isAuthenticated } = useAuth();
+  const backPath = isAuthenticated ? "/app" : "/";
+  const backLabel = isAuthenticated ? "Back to Dashboard" : "Go to Homepage";
 
   const { data: collection, isLoading, error } = trpc.collections.getPublicCollection.useQuery(
     { shareToken },
@@ -88,11 +90,11 @@ export default function PublicCollectionView() {
               {error?.message || "This collection doesn't exist or is no longer shared publicly."}
             </p>
             <Button
-              onClick={() => setLocation("/")}
+              onClick={() => setLocation(backPath)}
               className="rounded-button gradient-primary text-white hover-lift border-0"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Go to Homepage
+              {backLabel}
             </Button>
           </CardContent>
         </Card>
@@ -110,7 +112,7 @@ export default function PublicCollectionView() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setLocation("/")}
+                onClick={() => setLocation(backPath)}
                 className="rounded-button"
               >
                 <ArrowLeft className="h-4 w-4 mr-2" />

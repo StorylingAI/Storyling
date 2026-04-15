@@ -53,7 +53,12 @@ const tutorialSteps = [
 export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutorialProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [targetRect, setTargetRect] = useState<DOMRect | null>(null);
-  const [tooltipPosition, setTooltipPosition] = useState({ top: 0, left: 0 });
+  const [tooltipPosition, setTooltipPosition] = useState(() => {
+    if (typeof window === "undefined") {
+      return { top: 0, left: 0 };
+    }
+    return { top: window.innerHeight / 2, left: window.innerWidth / 2 };
+  });
   const prevElementRef = useRef<HTMLElement | null>(null);
 
   const step = tutorialSteps[currentStep];
@@ -102,7 +107,7 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
           );
           top = Math.max(viewportPadding, Math.min(maxTop, top));
 
-          let left = rect.left + rect.width / 2;
+          let left = window.innerWidth / 2;
           const minLeft = viewportPadding + tooltipWidth / 2;
           const maxLeft = window.innerWidth - viewportPadding - tooltipWidth / 2;
           left = Math.max(minLeft, Math.min(maxLeft, left));
@@ -110,6 +115,7 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
           setTooltipPosition({ top, left });
         };
 
+        const animationFrameId = window.requestAnimationFrame(updatePositions);
         const timeoutId = window.setTimeout(updatePositions, 300);
         window.addEventListener("resize", updatePositions);
         window.addEventListener("scroll", updatePositions, { passive: true });
@@ -121,6 +127,7 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
         element.style.transition = "all 0.3s ease";
 
         return () => {
+          window.cancelAnimationFrame(animationFrameId);
           window.clearTimeout(timeoutId);
           window.removeEventListener("resize", updatePositions);
           window.removeEventListener("scroll", updatePositions);
@@ -129,11 +136,13 @@ export function LibraryOnboardingTutorial({ onComplete }: LibraryOnboardingTutor
 
       setTargetRect(null);
       prevElementRef.current = null;
+      setTooltipPosition({ top: window.innerHeight / 2, left: window.innerWidth / 2 });
       return;
     }
 
     setTargetRect(null);
     prevElementRef.current = null;
+    setTooltipPosition({ top: window.innerHeight / 2, left: window.innerWidth / 2 });
     return;
   }, [currentStep, step, cleanupElement]);
 

@@ -721,17 +721,14 @@ export default function CreateStory() {
 
     if (!file.type.startsWith('image/')) {
       toast.error("Please upload an image file (JPG, PNG, etc.)");
+      e.target.value = "";
       return;
     }
 
     const maxSize = 10 * 1024 * 1024;
     if (file.size > maxSize) {
       toast.error("Image size must be less than 10MB");
-      return;
-    }
-
-    if (!targetLanguage) {
-      toast.error("Please select a target language first");
+      e.target.value = "";
       return;
     }
 
@@ -749,7 +746,8 @@ export default function CreateStory() {
 
         ocrMutation.mutate({
           imageBase64: base64Data,
-          targetLanguage: targetLanguage as 'Chinese' | 'French' | 'Spanish' | 'German',
+          mimeType: file.type || "image/jpeg",
+          targetLanguage: effectiveLanguage || undefined,
         });
       };
       reader.onerror = () => {
@@ -1019,7 +1017,7 @@ export default function CreateStory() {
                       <button
                         type="button"
                         onClick={() => photoInputRef.current?.click()}
-                        disabled={isProcessingPhoto || !targetLanguage}
+                        disabled={isProcessingPhoto}
                         className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left transition-all hover:border-purple-300 hover:bg-purple-50/60 disabled:cursor-not-allowed disabled:opacity-60"
                       >
                         <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-purple-100 text-purple-600">
