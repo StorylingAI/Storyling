@@ -248,7 +248,7 @@ export function QuickStartTutorial({
         variant="ghost"
         size="sm"
         onClick={restartTutorial}
-        className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-full px-5 hover-lift active-scale transition-all sm:bottom-6"
+        className="fixed bottom-[calc(5.5rem+env(safe-area-inset-bottom))] left-1/2 z-50 -translate-x-1/2 rounded-full px-5 hover-lift active-scale transition-all sm:bottom-6"
         style={{
           background: "linear-gradient(180deg, rgba(255,250,241,0.96) 0%, rgba(247,231,202,0.92) 100%)",
           border: "1px solid rgba(138,106,68,0.28)",
