@@ -961,7 +961,9 @@ export default function Library() {
                       <img 
                         src={content.thumbnailUrl} 
                         alt={content.title || content.theme}
-                        className="w-full h-full object-cover transition-opacity duration-300 group-hover:opacity-0"
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${
+                          content.mode === "film" && content.videoUrl ? "group-hover:opacity-0" : ""
+                        }`}
                         onError={(e) => {
                           // Fallback to gradient background if image fails to load
                           e.currentTarget.style.display = 'none';

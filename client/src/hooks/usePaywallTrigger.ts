@@ -34,8 +34,10 @@ export function usePaywallTrigger() {
     enabled: !!user && user.subscriptionTier === "free",
   });
 
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   // Get usage stats
-  const { data: usageStats } = trpc.subscription.getUsageStats.useQuery(undefined, {
+  const { data: usageStats } = trpc.subscription.getUsageStats.useQuery({ timezone }, {
     enabled: !!user && user.subscriptionTier === "free",
   });
 

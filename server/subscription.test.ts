@@ -80,7 +80,7 @@ describe("Subscription Router", () => {
     const usage = await caller.subscription.getUsageStats();
 
     expect(usage.tier).toBe("free");
-    expect(usage.storiesLimit).toBe(5);
+    expect(usage.storiesLimit).toBe(1);
     expect(usage.canCreateStory).toBe(true); // No stories created yet
     expect(usage.canUseFilmFormat).toBe(false); // Free tier cannot use film
   });
@@ -104,21 +104,18 @@ describe("Subscription Router", () => {
     const db = await getDb();
     if (!db) throw new Error("Database unavailable");
 
-    // Create 5 stories for the free user (reaching the limit)
+    // Create 1 story for the free user (reaching the daily limit)
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    for (let i = 0; i < 5; i++) {
-      await db.insert(generatedContent).values({
-        userId: testUserId,
-        vocabularyListId: 1, // Dummy value
-        mode: "podcast",
-        theme: "Comedy",
-        storyText: "Test story",
-        status: "completed",
-        generatedAt: new Date(startOfMonth.getTime() + i * 1000),
-      });
-    }
+    await db.insert(generatedContent).values({
+      userId: testUserId,
+      vocabularyListId: 1, // Dummy value
+      mode: "podcast",
+      theme: "Comedy",
+      storyText: "Test story",
+      status: "completed",
+      generatedAt: now,
+    });
 
     const caller = appRouter.createCaller({
       user: { id: testUserId, role: "user" },
@@ -128,7 +125,8 @@ describe("Subscription Router", () => {
 
     const usage = await caller.subscription.getUsageStats();
 
-    expect(usage.storiesThisMonth).toBe(5);
+    expect(usage.storiesToday).toBe(1);
+    expect(usage.storiesThisMonth).toBe(1);
     expect(usage.canCreateStory).toBe(false); // Reached limit
   });
 

@@ -122,7 +122,13 @@ function FaqItem({ q, a }: { q: string; a: string }) {
 }
 
 // ===== FEATURED COLLECTIONS =====
-function FeaturedCollectionsGrid() {
+function FeaturedCollectionsGrid({
+  isAuthenticated,
+  authLoading,
+}: {
+  isAuthenticated: boolean;
+  authLoading: boolean;
+}) {
   const [, setLocation] = useLocation();
 
   const staticCollections = [
@@ -133,6 +139,19 @@ function FeaturedCollectionsGrid() {
     { initial: "T", name: "Travel Japanese", author: "Kenji M.", desc: "Essential phrases for traveling through Japan", stories: 10, clones: 278, bg: "#FDF2F8", border: "#EC4899", avatarGrad: "linear-gradient(135deg, #EC4899, #DB2777)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-japanese_2ed715f8.png" },
     { initial: "K", name: "Korean Drama", author: "Min-ji K.", desc: "Learn Korean through popular K-drama dialogues", stories: 9, clones: 201, bg: "#F0FDFA", border: "#14B8A6", avatarGrad: "linear-gradient(135deg, #14B8A6, #0D9488)", cover: "https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/cover-korean_66d306b6.png" },
   ];
+
+  const handleCollectionClick = () => {
+    if (authLoading) {
+      return;
+    }
+
+    if (isAuthenticated) {
+      setLocation("/dashboard");
+      return;
+    }
+
+    window.location.href = getLoginUrl();
+  };
 
   return (
     <section className="py-20 md:py-28 px-4 relative overflow-hidden" style={{ background: "linear-gradient(180deg, #FAFAFA 0%, #F5F3FF08 50%, #FAFAFA 100%)" }}>
@@ -177,7 +196,7 @@ function FeaturedCollectionsGrid() {
                   backgroundColor: card.bg,
                   borderTop: `5px solid ${card.border}`,
                 }}
-                onClick={() => setLocation("/discovery?tab=collections")}
+                onClick={handleCollectionClick}
               >
                 {/* Cover image */}
                 <div className="w-full h-36 overflow-hidden">
@@ -247,7 +266,7 @@ export default function Landing() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, loading: authLoading } = useAuth();
 
   const createCheckout = trpc.checkout.createPremiumCheckout.useMutation({
     onSuccess: (data) => {
@@ -636,55 +655,28 @@ export default function Landing() {
               </div>
             </div>
 
-            {/* Row 2: Smart Word Bank (large) + Adventure Map */}
+            {/* Row 2: Smart Word Bank */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 md:gap-6">
               {/* Smart Word Bank */}
-              <RevealSection className="lg:col-span-7" delay={200}>
+              <RevealSection className="lg:col-span-12" delay={200}>
                 <div
                   className="group rounded-2xl overflow-hidden h-full shadow-sm hover:shadow-[0_8px_30px_rgba(16,185,129,0.18)] transition-all duration-300 ease-out hover:-translate-y-1.5 cursor-pointer"
                   style={{ border: "2px solid #6EE7B7", background: "linear-gradient(135deg, #F0FDFA 0%, #CCFBF1 100%)" }}
                   onClick={() => setLocation("/app")}
                 >
                   <div className="flex flex-col sm:flex-row h-full">
-                    <div className="sm:w-[50%] p-3 sm:p-4 flex-shrink-0 rounded-xl">
+                    <div className="sm:w-[45%] p-3 sm:p-4 flex-shrink-0 rounded-xl">
                       <img
                         src="https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/feature_word_bank-TD7bWqAGGYSZVDrEEBCe7Q.webp"
                         alt="Smart Word Bank"
-                        className="w-full h-48 sm:h-full object-cover rounded-xl transition-transform duration-500 ease-out group-hover:scale-105"
+                        className="w-full h-48 sm:h-64 lg:h-60 object-cover rounded-xl transition-transform duration-500 ease-out group-hover:scale-105"
                       />
                     </div>
-                    <div className="sm:w-[50%] p-5 sm:p-6 flex flex-col justify-center min-w-0">
+                    <div className="sm:w-[55%] p-5 sm:p-6 lg:p-8 flex flex-col justify-center min-w-0">
                       <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-1 transition-colors duration-300 group-hover:text-teal-700" style={{ fontFamily: "Fredoka, sans-serif" }}>Smart Word Bank</h3>
                       <p className="text-sm text-gray-500 mb-3" style={{ fontFamily: "Outfit, sans-serif" }}>Never forget a word</p>
-                      <p className="text-sm text-gray-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
+                      <p className="text-sm md:text-base text-gray-500 leading-relaxed max-w-2xl" style={{ fontFamily: "Outfit, sans-serif" }}>
                         Save words while reading, review with spaced repetition. Export as CSV or PDF for offline study.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </RevealSection>
-
-              {/* Adventure Map */}
-              <RevealSection className="lg:col-span-5" delay={350}>
-                <div
-                  className="group rounded-2xl overflow-hidden h-full shadow-sm hover:shadow-[0_8px_30px_rgba(139,92,246,0.18)] transition-all duration-300 ease-out hover:-translate-y-1.5 cursor-pointer"
-                  style={{ border: "2px solid #C4B5FD", background: "linear-gradient(135deg, #FAF5FF 0%, #EDE9FE 100%)" }}
-                  onClick={() => setLocation("/app")}
-                >
-                  <div className="flex flex-row h-full">
-                    <div className="w-[40%] p-3 flex-shrink-0 overflow-hidden rounded-xl">
-                      <img
-                        src="https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/feature_adventure_map-8gWtGMVRA4MJNDjuvhbvGQ.webp"
-                        alt="Adventure Map"
-                        className="w-full h-full object-cover rounded-xl transition-transform duration-500 ease-out group-hover:scale-105"
-                        style={{ minHeight: "160px" }}
-                      />
-                    </div>
-                    <div className="w-[60%] p-4 sm:p-5 flex flex-col justify-center">
-                      <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-0.5 transition-colors duration-300 group-hover:text-purple-700" style={{ fontFamily: "Fredoka, sans-serif" }}>Adventure Map</h3>
-                      <p className="text-xs md:text-sm font-semibold text-purple-600 mb-2" style={{ fontFamily: "Fredoka, sans-serif" }}>Your learning world</p>
-                      <p className="text-xs md:text-sm text-gray-500 leading-relaxed" style={{ fontFamily: "Outfit, sans-serif" }}>
-                        Explore a magical world where every building unlocks a feature. Track streaks, earn rewards, stay motivated.
                       </p>
                     </div>
                   </div>
@@ -934,7 +926,10 @@ export default function Landing() {
       </section>
 
       {/* Featured Collections */}
-      <FeaturedCollectionsGrid />
+      <FeaturedCollectionsGrid
+        isAuthenticated={isAuthenticated}
+        authLoading={authLoading}
+      />
 
       {/* ========== TESTIMONIALS ========== */}
       <section className="py-20 px-4 bg-gradient-to-br from-purple-50/80 via-pink-50/30 to-blue-50/30 relative overflow-hidden">

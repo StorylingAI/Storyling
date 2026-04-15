@@ -10,6 +10,7 @@ import {
   json,
   float,
   decimal,
+  uniqueIndex,
 } from "drizzle-orm/mysql-core";
 
 /**
@@ -85,7 +86,9 @@ export const dailyUsageTracking = mysqlTable("daily_usage_tracking", {
   storyCount: int("story_count").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => [
+  uniqueIndex("daily_usage_tracking_user_date_unique").on(table.userId, table.dateKey),
+]);
 export type DailyUsageTracking = typeof dailyUsageTracking.$inferSelect;
 
 /**

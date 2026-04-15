@@ -2,6 +2,14 @@ import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "./_core/trpc";
+import { FREE_TIER_LIMITS } from "../shared/freemiumLimits";
+import {
+  claimDailyLookup,
+  getDailyVocabSaveUsage,
+  getDailyWindow,
+  isFreeLimitedUser,
+  recordDailyVocabSave,
+} from "./dailyUsage";
 import {
   saveWordToWordbank,
   getWordbankByUserId,
@@ -37,6 +45,7 @@ export const wordbankRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const { invokeLLM } = await import("./_core/llm");
+      const dailyWindow = getDailyWindow(ctx.user.timezone || null);
       const results = {
         total: input.words.length,
         success: 0,
@@ -64,6 +73,17 @@ export const wordbankRouter = router({
             results.skipped++;
             results.errors.push(`"${trimmedWord}" already in wordbank`);
             continue;
+          }
+
+          if (isFreeLimitedUser(ctx.user)) {
+            const dailySaves = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
+            if (dailySaves >= FREE_TIER_LIMITS.vocabSavesPerDay) {
+              results.skipped++;
+              results.errors.push(
+                `Daily vocabulary save limit reached (${FREE_TIER_LIMITS.vocabSavesPerDay}/day)`,
+              );
+              continue;
+            }
           }
 
           // Get translation using LLM
@@ -108,6 +128,7 @@ export const wordbankRouter = router({
             translation: translationData.translation,
             targetLanguage: input.targetLanguage,
           });
+          await recordDailyVocabSave(ctx.user.id, dailyWindow);
 
           results.success++;
         } catch (error) {
@@ -142,10 +163,22 @@ export const wordbankRouter = router({
         throw new Error("Word already in wordbank");
       }
 
+      const dailyWindow = getDailyWindow(ctx.user.timezone || null);
+      if (isFreeLimitedUser(ctx.user)) {
+        const dailySaves = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
+        if (dailySaves >= FREE_TIER_LIMITS.vocabSavesPerDay) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You've saved ${FREE_TIER_LIMITS.vocabSavesPerDay} vocabulary words today. Upgrade to Premium for unlimited saves.`,
+          });
+        }
+      }
+
       const result = await saveWordToWordbank({
         userId: ctx.user.id,
         ...input,
       });
+      await recordDailyVocabSave(ctx.user.id, dailyWindow);
 
       // Check if user has added enough words and mark challenge as completed
       try {
@@ -162,6 +195,20 @@ export const wordbankRouter = router({
 
       return result;
     }),
+
+  getTodayWordCount: protectedProcedure.query(async ({ ctx }) => {
+    const dailyWindow = getDailyWindow(ctx.user.timezone || null);
+    const count = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
+    const isLimited = isFreeLimitedUser(ctx.user);
+    const limit = isLimited ? FREE_TIER_LIMITS.vocabSavesPerDay : null;
+
+    return {
+      count,
+      limit,
+      canSave: limit === null || count < limit,
+      nextResetAt: dailyWindow.nextResetAt.toISOString(),
+    };
+  }),
 
   getMyWords: protectedProcedure.query(async ({ ctx }) => {
     const { getDb } = await import("./db");
@@ -1037,10 +1084,23 @@ Return in JSON format.`,
       z.object({
         word: z.string(),
         targetLanguage: z.string().default("en"),
+        timezone: z.string().optional(),
       })
     )
-    .query(async ({ input }) => {
+    .query(async ({ input, ctx }) => {
       console.log("[translateWord] Input:", input);
+
+      if (isFreeLimitedUser(ctx.user)) {
+        const dailyWindow = getDailyWindow(input.timezone || ctx.user.timezone || null);
+        const claim = await claimDailyLookup(ctx.user.id, dailyWindow);
+
+        if (!claim.allowed) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You've used all ${claim.limit} dictionary lookups for today. Upgrade to Premium for unlimited lookups.`,
+          });
+        }
+      }
       
       try {
         const { invokeLLM } = await import("./_core/llm");

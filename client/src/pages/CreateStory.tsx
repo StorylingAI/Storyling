@@ -241,8 +241,10 @@ export default function CreateStory() {
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
   const [showFilmUpgradeModal, setShowFilmUpgradeModal] = useState(false);
 
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
   // Check usage stats for feature gating
-  const { data: usageStats } = trpc.subscription.getUsageStats.useQuery();
+  const { data: usageStats } = trpc.subscription.getUsageStats.useQuery({ timezone });
   const [subtitleFontSize, setSubtitleFontSize] = useState<"small" | "medium" | "large">("medium");
   const [subtitlePosition, setSubtitlePosition] = useState<"top" | "bottom">("bottom");
   const [subtitleColor, setSubtitleColor] = useState<"white" | "yellow" | "cyan">("white");
@@ -796,6 +798,7 @@ export default function CreateStory() {
       theme,
       topicPrompt,
       translationLanguage: translationLanguage || "en",
+      timezone,
       mode: mode as "podcast" | "film",
       storyLength,
       voiceType:

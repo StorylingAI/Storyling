@@ -9,6 +9,13 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { protectedProcedure, router } from "./_core/trpc";
 import { FREE_TIER_LIMITS, hasPremiumAccess, type SubscriptionTier } from "../shared/freemiumLimits";
+import {
+  claimDailyLookup,
+  getDailyLookupCount,
+  getDailyStoryUsage,
+  getDailyVocabSaveUsage,
+  getDailyWindow,
+} from "./dailyUsage";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -57,46 +64,6 @@ export interface Entitlements {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Get the start of the current day in the user's timezone.
- * Falls back to UTC if timezone is invalid or unavailable.
- */
-function getDayStartForTimezone(timezone?: string | null): Date {
-  const now = new Date();
-  
-  if (timezone) {
-    try {
-      // Get the current date string in the user's timezone
-      const formatter = new Intl.DateTimeFormat("en-CA", {
-        timeZone: timezone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      });
-      const dateStr = formatter.format(now); // "2026-03-07"
-      // Parse as midnight in UTC (we use this as the reference point)
-      const [year, month, day] = dateStr.split("-").map(Number);
-      return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
-    } catch {
-      // Invalid timezone, fall through to UTC
-    }
-  }
-  
-  // Fallback: use UTC midnight
-  const utcStart = new Date(now);
-  utcStart.setUTCHours(0, 0, 0, 0);
-  return utcStart;
-}
-
-/**
- * Get the next midnight reset time in the user's timezone.
- */
-function getNextResetTime(timezone?: string | null): Date {
-  const dayStart = getDayStartForTimezone(timezone);
-  dayStart.setUTCDate(dayStart.getUTCDate() + 1);
-  return dayStart;
-}
 
 /**
  * Determine the plan state from user subscription data.
@@ -148,8 +115,8 @@ export const entitlementRouter = router({
     .input(z.object({ timezone: z.string().optional() }).optional())
     .query(async ({ ctx, input }): Promise<Entitlements> => {
       const { getDb } = await import("./db");
-      const { generatedContent, users: usersTable, wordbank } = await import("../drizzle/schema");
-      const { eq, and, gte, count } = await import("drizzle-orm");
+      const { users: usersTable } = await import("../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
       
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
@@ -163,9 +130,8 @@ export const entitlementRouter = router({
       
       if (!user) throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
       
-      const timezone = input?.timezone || null;
-      const dayStart = getDayStartForTimezone(timezone);
-      const nextReset = getNextResetTime(timezone);
+      const timezone = input?.timezone || user.timezone || null;
+      const dailyWindow = getDailyWindow(timezone);
       const isPremium = hasPremiumAccess(user.subscriptionTier as "free" | "premium" | "premium_plus");
       const planState = determinePlanState(user);
       
@@ -194,45 +160,24 @@ export const entitlementRouter = router({
           canUseAdvancedComprehension: true,
           canUseFilmFormat: true,
           audioPlayback: "full",
-          nextResetAt: nextReset.toISOString(),
+          nextResetAt: dailyWindow.nextResetAt.toISOString(),
         };
       }
       
       // ─── Free tier calculations ──────────────────────────────────────
       
-      // Stories created today
-      const storyResult = await db
-        .select({ count: count() })
-        .from(generatedContent)
-        .where(
-          and(
-            eq(generatedContent.userId, ctx.user.id),
-            gte(generatedContent.generatedAt, dayStart)
-          )
-        );
-      const dailyStoriesUsed = storyResult[0]?.count || 0;
+      const dailyStoriesUsed = await getDailyStoryUsage(ctx.user.id, dailyWindow);
       
       // Starter stories: bonusStoryCredits tracks remaining
       const starterStoriesUsed = FREE_TIER_LIMITS.bonusStarterStories - Math.max(0, user.bonusStoryCredits ?? 0);
       const starterPackCompleted = (user.bonusStoryCredits ?? 0) <= 0;
       
-      // Can create if: daily limit not hit, OR bonus credits remain
-      const canCreateStory = dailyStoriesUsed < FREE_TIER_LIMITS.storiesPerDay || !starterPackCompleted;
+      const canCreateStory = dailyStoriesUsed < FREE_TIER_LIMITS.storiesPerDay;
       
-      // Vocab saves today
-      const vocabResult = await db
-        .select({ count: count() })
-        .from(wordbank)
-        .where(
-          and(
-            eq(wordbank.userId, ctx.user.id),
-            gte(wordbank.createdAt, dayStart)
-          )
-        );
-      const dailyVocabSavesUsed = vocabResult[0]?.count || 0;
+      const dailyVocabSavesUsed = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
       
       // Lookups today — read from DB-backed tracking
-      const dailyLookupsUsed = await getDailyLookupCount(ctx.user.id, dayStart);
+      const dailyLookupsUsed = await getDailyLookupCount(ctx.user.id, dailyWindow);
       
       return {
         planState: "free",
@@ -255,7 +200,7 @@ export const entitlementRouter = router({
         canUseAdvancedComprehension: false,
         canUseFilmFormat: false,
         audioPlayback: "standard",
-        nextResetAt: nextReset.toISOString(),
+        nextResetAt: dailyWindow.nextResetAt.toISOString(),
       };
     }),
 
@@ -271,98 +216,7 @@ export const entitlementRouter = router({
         return { allowed: true, used: 0, limit: null };
       }
       
-      const timezone = input?.timezone || null;
-      const dayStart = getDayStartForTimezone(timezone);
-      const currentCount = await getDailyLookupCount(ctx.user.id, dayStart);
-      
-      if (currentCount >= FREE_TIER_LIMITS.dictionaryLookupsPerDay) {
-        return { allowed: false, used: currentCount, limit: FREE_TIER_LIMITS.dictionaryLookupsPerDay };
-      }
-      
-      await incrementDailyLookupCount(ctx.user.id, dayStart);
-      return { allowed: true, used: currentCount + 1, limit: FREE_TIER_LIMITS.dictionaryLookupsPerDay };
+      const timezone = input?.timezone || ctx.user.timezone || null;
+      return claimDailyLookup(ctx.user.id, getDailyWindow(timezone));
     }),
 });
-
-// ─── Lookup Tracking (DB-backed, survives server restarts) ───────────────────
-
-/**
- * Get the daily lookup count for a user.
- * Uses the daily_usage_tracking table if available, falls back to in-memory.
- */
-async function getDailyLookupCount(userId: number, dayStart: Date): Promise<number> {
-  try {
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    if (!db) return getInMemoryLookupCount(userId, dayStart);
-    
-    const { dailyUsageTracking } = await import("../drizzle/schema");
-    const { eq, and } = await import("drizzle-orm");
-    
-    const dateStr = dayStart.toISOString().slice(0, 10);
-    const [record] = await db
-      .select()
-      .from(dailyUsageTracking)
-      .where(
-        and(
-          eq(dailyUsageTracking.userId, userId),
-          eq(dailyUsageTracking.dateKey, dateStr)
-        )
-      )
-      .limit(1);
-    
-    return record?.lookupCount ?? 0;
-  } catch {
-    // Table might not exist yet, fall back to in-memory
-    return getInMemoryLookupCount(userId, dayStart);
-  }
-}
-
-async function incrementDailyLookupCount(userId: number, dayStart: Date): Promise<void> {
-  try {
-    const { getDb } = await import("./db");
-    const db = await getDb();
-    if (!db) {
-      incrementInMemoryLookupCount(userId, dayStart);
-      return;
-    }
-    
-    const { dailyUsageTracking } = await import("../drizzle/schema");
-    const { eq, and, sql } = await import("drizzle-orm");
-    
-    const dateStr = dayStart.toISOString().slice(0, 10);
-    
-    // Upsert: increment if exists, insert if not
-    await db
-      .insert(dailyUsageTracking)
-      .values({
-        userId,
-        dateKey: dateStr,
-        lookupCount: 1,
-        vocabSaveCount: 0,
-        storyCount: 0,
-      })
-      .onDuplicateKeyUpdate({
-        set: {
-          lookupCount: sql`${dailyUsageTracking.lookupCount} + 1`,
-        },
-      });
-  } catch {
-    incrementInMemoryLookupCount(userId, dayStart);
-  }
-}
-
-// In-memory fallback (used if DB table doesn't exist yet)
-function getInMemoryLookupCount(userId: number, dayStart: Date): number {
-  const key = `${userId}:${dayStart.toISOString().slice(0, 10)}`;
-  return (globalThis as any).__lookupCounts?.get(key) ?? 0;
-}
-
-function incrementInMemoryLookupCount(userId: number, dayStart: Date): void {
-  const key = `${userId}:${dayStart.toISOString().slice(0, 10)}`;
-  if (!(globalThis as any).__lookupCounts) {
-    (globalThis as any).__lookupCounts = new Map();
-  }
-  const current = (globalThis as any).__lookupCounts.get(key) ?? 0;
-  (globalThis as any).__lookupCounts.set(key, current + 1);
-}

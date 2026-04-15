@@ -1046,28 +1046,9 @@
   place-items: center;
 }
 
-.storyling-loader-mascot::before {
-  content: "";
-  position: absolute;
-  width: 6.75rem;
-  height: 5.25rem;
-  border: 1px solid rgba(255, 255, 255, 0.82);
-  border-radius: 8px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(249, 244, 255, 0.5));
-  box-shadow: 0 1.25rem 3.5rem rgba(117, 96, 161, 0.18);
-  transform: rotate(-3deg);
-  animation: storyling-loader-page-glow 3s ease-in-out infinite;
-}
-
+.storyling-loader-mascot::before,
 .storyling-loader-mascot::after {
-  content: "";
-  position: absolute;
-  inset: 0.55rem;
-  border: 1px solid rgba(126, 106, 199, 0.22);
-  border-top-color: rgba(119, 211, 202, 0.78);
-  border-right-color: rgba(255, 154, 136, 0.52);
-  border-radius: 999px;
-  animation: storyling-loader-ring 2.8s linear infinite;
+  content: none;
 }
 
 .storyling-loader-logo {
@@ -1076,7 +1057,7 @@
   width: 6.75rem;
   height: 6.75rem;
   object-fit: contain;
-  filter: drop-shadow(0 0.75rem 1.25rem rgba(78, 58, 118, 0.16));
+  filter: none;
   animation: storyling-loader-float 3s ease-in-out infinite;
 }
 

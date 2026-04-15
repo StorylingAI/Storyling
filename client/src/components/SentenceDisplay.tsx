@@ -461,8 +461,9 @@ export function SentenceDisplay({
   // Fetch word translation when selected
   // targetLanguage should be the user's preferred language (the language to translate TO)
   const userLanguage = user?.preferredLanguage || "en";
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { data: wordData, isLoading: isLoadingWord, error: wordError } = trpc.wordbank.translateWord.useQuery(
-    { word: selectedWord || "", targetLanguage: userLanguage },
+    { word: selectedWord || "", targetLanguage: userLanguage, timezone },
     { 
       enabled: !!selectedWord && showVocabPopup,
       retry: 1

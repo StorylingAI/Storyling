@@ -7,8 +7,9 @@ import { trpc } from "@/lib/trpc";
 
 export function PremiumShowcase() {
   const [, setLocation] = useLocation();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { data: subscription } = trpc.subscription.getMySubscription.useQuery();
-  const { data: usage } = trpc.subscription.getUsageStats.useQuery();
+  const { data: usage } = trpc.subscription.getUsageStats.useQuery({ timezone });
 
   // Don't show to Premium users
   if (subscription?.isPremium) {

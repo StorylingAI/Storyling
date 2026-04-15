@@ -7,6 +7,13 @@ import {
   generateProgressReportData,
 } from "./exportUtils";
 import { saveWordToWordbank } from "./wordbankDb";
+import { FREE_TIER_LIMITS } from "../shared/freemiumLimits";
+import {
+  getDailyVocabSaveUsage,
+  getDailyWindow,
+  isFreeLimitedUser,
+  recordDailyVocabSave,
+} from "./dailyUsage";
 
 export const exportRouter = router({
   /**
@@ -60,6 +67,7 @@ export const exportRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { invokeLLM } = await import("./_core/llm");
       const lines = input.csvContent.split("\n").filter((line) => line.trim());
+      const dailyWindow = getDailyWindow(ctx.user.timezone || null);
       
       // Skip header row if it exists
       const hasHeader = lines[0]?.toLowerCase().includes("word") || lines[0]?.toLowerCase().includes("translation");
@@ -91,6 +99,17 @@ export const exportRouter = router({
           if (exists) {
             results.skipped++;
             continue;
+          }
+
+          if (isFreeLimitedUser(ctx.user)) {
+            const dailySaves = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
+            if (dailySaves >= FREE_TIER_LIMITS.vocabSavesPerDay) {
+              results.skipped++;
+              results.errors.push(
+                `Daily vocabulary save limit reached (${FREE_TIER_LIMITS.vocabSavesPerDay}/day)`,
+              );
+              continue;
+            }
           }
 
           // Generate translation and example sentences using LLM
@@ -143,6 +162,7 @@ export const exportRouter = router({
             pinyin: data.pinyin || null,
             exampleSentences: Array.isArray(data.exampleSentences) ? JSON.stringify(data.exampleSentences) : data.exampleSentences,
           });
+          await recordDailyVocabSave(ctx.user.id, dailyWindow);
 
           results.success++;
         } catch (error) {

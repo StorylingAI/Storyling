@@ -56,7 +56,7 @@ export function VocabularyTable({
     enabled: !!user && user.subscriptionTier !== "premium",
   });
   const currentWordCount = todayVocabData?.count ?? 0;
-  const FREE_VOCAB_LIMIT = todayVocabData?.limit ?? 10;
+  const FREE_VOCAB_LIMIT = todayVocabData?.limit ?? 3;
   const isPremium = user?.subscriptionTier === "premium";
 
   const saveWordMutation = trpc.wordbank.saveWord.useMutation({

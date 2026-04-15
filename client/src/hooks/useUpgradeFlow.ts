@@ -111,8 +111,9 @@ export function useFirstStoryTrigger() {
  */
 export function useWeeklyLimitCheck() {
   const { user } = useAuth();
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { data: usageStats } = trpc.subscription.getUsageStats.useQuery(
-    undefined,
+    { timezone },
     { enabled: !!user && user.subscriptionTier === "free" }
   );
 
@@ -129,17 +130,17 @@ export function useWeeklyLimitCheck() {
  */
 export function useVocabularyLimitCheck() {
   const { user } = useAuth();
-  const { data: words } = trpc.wordbank.getMyWords.useQuery(undefined, {
+  const { data: todayVocabData } = trpc.wordbank.getTodayWordCount.useQuery(undefined, {
     enabled: !!user && user.subscriptionTier !== "premium",
   });
 
-  const FREE_VOCAB_LIMIT = 10;
-  const wordCount = words?.length ?? 0;
+  const wordCount = todayVocabData?.count ?? 0;
+  const wordLimit = todayVocabData?.limit ?? 3;
 
   return {
-    hasReachedLimit: wordCount >= FREE_VOCAB_LIMIT,
+    hasReachedLimit: wordCount >= wordLimit,
     wordCount,
-    wordLimit: FREE_VOCAB_LIMIT,
+    wordLimit,
   };
 }
 

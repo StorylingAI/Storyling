@@ -91,6 +91,11 @@ import {
   generatePreview,
 } from "./contentGeneration";
 import {
+  claimDailyStoryGeneration,
+  getDailyWindow,
+  isFreeLimitedUser,
+} from "./dailyUsage";
+import {
   getAvailableMoods,
   getTracksByMood,
   getMoodDisplayName,
@@ -480,6 +485,7 @@ export const appRouter = router({
           theme: z.string(),
           topicPrompt: z.string().optional(),
           translationLanguage: z.string().optional(),
+          timezone: z.string().optional(),
           mode: z.enum(["podcast", "film"]),
           storyLength: z
             .enum(["short", "medium", "long"])
@@ -515,46 +521,29 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input, ctx }) => {
-        // --- SERVER-SIDE FREE TIER LIMIT: 1 story/day (with 3 starter bonus credits) ---
-        let usedBonusCredit = false;
-        if (
-          ctx.user.subscriptionTier !== "premium" &&
-          ctx.user.subscriptionTier !== "premium_plus"
-        ) {
-          // premium_plus is legacy, kept for backward compat
+        // --- SERVER-SIDE FREE TIER LIMIT: 1 story per calendar day ---
+        let shouldDecrementStarterCredit = false;
+        if (isFreeLimitedUser(ctx.user)) {
+          const dailyWindow = getDailyWindow(input.timezone || ctx.user.timezone || null);
+          const claim = await claimDailyStoryGeneration(ctx.user.id, dailyWindow);
+
+          if (!claim.allowed) {
+            throw new TRPCError({
+              code: "FORBIDDEN",
+              message:
+                "You've used your free story for today. Upgrade to Premium for unlimited stories!",
+            });
+          }
+
           const db = await getDb();
           if (db) {
-            const { generatedContent, users: usersTable } =
-              await import("../drizzle/schema");
-            const { eq, and, gte } = await import("drizzle-orm");
-            const oneDayAgo = new Date();
-            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-            const recentStories = await db
-              .select({ id: generatedContent.id })
-              .from(generatedContent)
-              .where(
-                and(
-                  eq(generatedContent.userId, ctx.user.id),
-                  gte(generatedContent.generatedAt, oneDayAgo)
-                )
-              );
-            if (recentStories.length >= 1) {
-              // Check if user has bonus story credits (starter pack)
-              const [currentUser] = await db
-                .select({ bonusStoryCredits: usersTable.bonusStoryCredits })
-                .from(usersTable)
-                .where(eq(usersTable.id, ctx.user.id));
-              if (currentUser && currentUser.bonusStoryCredits > 0) {
-                // Use a bonus credit instead of blocking
-                usedBonusCredit = true;
-              } else {
-                throw new TRPCError({
-                  code: "FORBIDDEN",
-                  message:
-                    "You've used your free story for today. Upgrade to Premium for unlimited stories!",
-                });
-              }
-            }
+            const { users: usersTable } = await import("../drizzle/schema");
+            const { eq } = await import("drizzle-orm");
+            const [currentUser] = await db
+              .select({ bonusStoryCredits: usersTable.bonusStoryCredits })
+              .from(usersTable)
+              .where(eq(usersTable.id, ctx.user.id));
+            shouldDecrementStarterCredit = (currentUser?.bonusStoryCredits ?? 0) > 0;
           }
         }
 
@@ -1032,8 +1021,8 @@ export const appRouter = router({
           }
         })();
 
-        // Decrement bonus story credit if one was used
-        if (usedBonusCredit) {
+        // Track the first 3 starter stories without allowing them to bypass the daily limit.
+        if (shouldDecrementStarterCredit) {
           const db = await getDb();
           if (db) {
             const { users: usersTable } = await import("../drizzle/schema");
@@ -1045,7 +1034,7 @@ export const appRouter = router({
               })
               .where(eq(usersTable.id, ctx.user.id));
             console.log(
-              `[StarterPack] Used 1 bonus credit for user ${ctx.user.id}`
+              `[StarterPack] Tracked 1 starter story for user ${ctx.user.id}`
             );
           }
         }

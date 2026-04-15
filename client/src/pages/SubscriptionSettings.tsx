@@ -28,9 +28,10 @@ export function SubscriptionSettings() {
   const [, setLocation] = useLocation();
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [showReactivateDialog, setShowReactivateDialog] = useState(false);
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const { data: subscription, isLoading, refetch } = trpc.subscription.getMySubscription.useQuery();
-  const { data: usage } = trpc.subscription.getUsageStats.useQuery();
+  const { data: usage } = trpc.subscription.getUsageStats.useQuery({ timezone });
   const { data: billingHistory, isLoading: historyLoading } = trpc.subscription.getBillingHistory.useQuery();
 
   const cancelMutation = trpc.subscription.cancelSubscription.useMutation({
@@ -357,21 +358,21 @@ export function SubscriptionSettings() {
         <Card>
           <CardHeader>
             <CardTitle>Usage</CardTitle>
-            <CardDescription>Track your free-plan story creation this month</CardDescription>
+            <CardDescription>Track your free-plan story creation today</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span>Stories Created This Month</span>
+                <span>Stories Created Today</span>
                 <span className="font-medium">
-                  {usage.storiesThisMonth} / {usage.storiesLimit ?? '\u221e'}
+                  {usage.storiesToday} / {usage.storiesLimit ?? '\u221e'}
                 </span>
               </div>
               <div className="w-full bg-secondary rounded-full h-2">
                 <div
                   className="bg-primary h-2 rounded-full transition-all"
                   style={{
-                    width: `${usage.storiesLimit ? Math.min((usage.storiesThisMonth / usage.storiesLimit) * 100, 100) : 0}%`,
+                    width: `${usage.storiesLimit ? Math.min((usage.storiesToday / usage.storiesLimit) * 100, 100) : 0}%`,
                   }}
                 />
               </div>

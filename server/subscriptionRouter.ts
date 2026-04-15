@@ -3,8 +3,10 @@ import { router, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import Stripe from "stripe";
 import { getDb } from "./db";
-import { users, generatedContent } from "../drizzle/schema";
-import { eq, and, gte, count } from "drizzle-orm";
+import { users } from "../drizzle/schema";
+import { eq } from "drizzle-orm";
+import { FREE_TIER_LIMITS } from "../shared/freemiumLimits";
+import { getDailyStoryUsage, getDailyWindow } from "./dailyUsage";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -263,7 +265,9 @@ export const subscriptionRouter = router({
   /**
    * Get usage stats for current billing period (for free tier limits)
    */
-  getUsageStats: protectedProcedure.query(async ({ ctx }) => {
+  getUsageStats: protectedProcedure
+    .input(z.object({ timezone: z.string().optional() }).optional())
+    .query(async ({ ctx, input }) => {
     const db = await getDb();
     if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -279,39 +283,29 @@ export const subscriptionRouter = router({
     }
 
     // If premium, no limits
-    if (user.subscriptionTier === "premium") {
+    if (user.subscriptionTier === "premium" || user.subscriptionTier === "premium_plus") {
       return {
-        tier: "premium",
+        tier: user.subscriptionTier,
+        storiesToday: 0,
         storiesThisMonth: 0,
         storiesLimit: null, // unlimited
         canCreateStory: true,
         canUseFilmFormat: true,
+        nextResetAt: null,
       };
     }
 
-    // For free tier, count stories created this month
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const result = await db
-      .select({ count: count() })
-      .from(generatedContent)
-      .where(
-        and(
-          eq(generatedContent.userId, ctx.user.id),
-          gte(generatedContent.generatedAt, startOfMonth)
-        )
-      );
-
-    const storyCount = result[0]?.count || 0;
-    const FREE_TIER_LIMIT = 5;
+    const dailyWindow = getDailyWindow(input?.timezone || user.timezone || null);
+    const storyCount = await getDailyStoryUsage(ctx.user.id, dailyWindow);
 
     return {
       tier: "free",
+      storiesToday: storyCount,
       storiesThisMonth: storyCount,
-      storiesLimit: FREE_TIER_LIMIT,
-      canCreateStory: storyCount < FREE_TIER_LIMIT,
+      storiesLimit: FREE_TIER_LIMITS.storiesPerDay,
+      canCreateStory: storyCount < FREE_TIER_LIMITS.storiesPerDay,
       canUseFilmFormat: false,
+      nextResetAt: dailyWindow.nextResetAt.toISOString(),
     };
   }),
 });
