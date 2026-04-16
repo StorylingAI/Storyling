@@ -1,11 +1,12 @@
 /**
  * Image generation helper.
- * Defaults to Higgsfield when Higgsfield credentials are configured, so story
- * images can use the same paid Higgsfield account as video generation.
- * Use IMAGE_PROVIDER=gemini or IMAGE_PROVIDER=openai to force another backend.
+ * Defaults to Replicate's google/nano-banana-2 model.
+ * Use IMAGE_PROVIDER=higgsfield, IMAGE_PROVIDER=gemini, or IMAGE_PROVIDER=openai
+ * to force another backend.
  */
 import { storagePut } from "server/storage";
 import { generateHiggsfieldImage } from "../higgsfield";
+import { generateReplicateImage } from "../replicateGeneration";
 
 export type GenerateImageOptions = {
   prompt: string;
@@ -118,6 +119,18 @@ function resolveHiggsfieldImageResolution(imageSize?: GenerateImageOptions["imag
     return configured;
   }
   return imageSize === "4K" ? "4K" : "2K";
+}
+
+function resolveOpenAiImageSize(aspectRatio?: string): string {
+  switch ((aspectRatio || "16:9").trim()) {
+    case "9:16":
+      return "1024x1792";
+    case "1:1":
+      return "1024x1024";
+    case "16:9":
+    default:
+      return "1792x1024";
+  }
 }
 
 async function resolveOriginalImageParts(
@@ -266,10 +279,23 @@ async function generateImageWithHiggsfield(
   return persistRemoteImage(result.imageUrl, "higgsfield-nano-banana-2");
 }
 
+async function generateImageWithReplicate(
+  options: GenerateImageOptions
+): Promise<GenerateImageResponse> {
+  return generateReplicateImage({
+    prompt: options.prompt,
+    aspectRatio: options.aspectRatio || "16:9",
+    resolution: options.imageSize,
+    imageInputUrls: resolveOriginalImageUrls(options.originalImages),
+    outputFormat: "png",
+  });
+}
+
 async function generateImageWithOpenAI(
   options: GenerateImageOptions
 ): Promise<GenerateImageResponse> {
   const apiKey = resolveOpenAiApiKey();
+  const model = process.env.IMAGE_MODEL || "dall-e-3";
 
   const response = await fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
@@ -278,10 +304,10 @@ async function generateImageWithOpenAI(
       authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: process.env.IMAGE_MODEL || "dall-e-3",
+      model,
       prompt: options.prompt,
       n: 1,
-      size: "1024x1024",
+      size: model === "dall-e-2" ? "1024x1024" : resolveOpenAiImageSize(options.aspectRatio),
       response_format: "b64_json",
     }),
   });
@@ -338,6 +364,10 @@ export async function generateImage(
 ): Promise<GenerateImageResponse> {
   const provider = process.env.IMAGE_PROVIDER?.trim().toLowerCase();
 
+  if (provider === "replicate" || provider === "nano-banana-2" || provider === "nanobanana") {
+    return generateImageWithReplicate(options);
+  }
+
   if (provider === "openai") {
     return generateImageWithOpenAI(options);
   }
@@ -352,13 +382,17 @@ export async function generateImage(
 
   if (provider && provider !== "auto") {
     throw new Error(
-      `Unsupported IMAGE_PROVIDER "${process.env.IMAGE_PROVIDER}". Use "higgsfield", "gemini", "openai", or "auto".`
+      `Unsupported IMAGE_PROVIDER "${process.env.IMAGE_PROVIDER}". Use "replicate", "higgsfield", "gemini", "openai", or "auto".`
     );
+  }
+
+  if (hasConfiguredValue(process.env.REPLICATE_API_TOKEN || process.env.REPLICATE_API_KEY)) {
+    return generateImageWithReplicate(options);
   }
 
   if (hasConfiguredHiggsfieldCredentials()) {
     return generateImageWithHiggsfield(options);
   }
 
-  return generateImageWithGemini(options);
+  return generateImageWithReplicate(options);
 }

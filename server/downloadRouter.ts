@@ -10,44 +10,31 @@ import { Readable } from "stream";
 /**
  * Generate .srt subtitle file content from story data
  */
-function generateSrtContent(story: any): string {
-  // Parse transcript which contains timing and text information
-  let segments: any[] = [];
-  
-  if (story.transcript) {
-    try {
-      // Transcript is stored as text, parse it to extract segments
-      const transcriptData = typeof story.transcript === 'string' ? JSON.parse(story.transcript) : story.transcript;
-      segments = transcriptData.segments || transcriptData || [];
-    } catch (e) {
-      throw new Error("Story transcript not available or invalid format");
-    }
-  }
-  
-  if (!Array.isArray(segments) || segments.length === 0) {
-    throw new Error("Story transcript not available");
+export function generateSrtContent(story: any): string {
+  const timedSegments = extractTimedSegments(story.transcript);
+  const segments = timedSegments.length > 0
+    ? timedSegments
+    : buildEstimatedSegments(story);
+
+  if (segments.length === 0) {
+    throw new Error("No subtitle text is available for this story");
   }
 
   let srtContent = "";
   let index = 1;
 
   for (const segment of segments) {
-    if (!segment.startTime || !segment.endTime || !segment.text) {
+    if (
+      !Number.isFinite(segment.startTime) ||
+      !Number.isFinite(segment.endTime) ||
+      !segment.text ||
+      segment.endTime <= segment.startTime
+    ) {
       continue;
     }
 
-    // Format time as HH:MM:SS,mmm
-    const formatTime = (seconds: number): string => {
-      const hours = Math.floor(seconds / 3600);
-      const minutes = Math.floor((seconds % 3600) / 60);
-      const secs = Math.floor(seconds % 60);
-      const milliseconds = Math.floor((seconds % 1) * 1000);
-      
-      return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
-    };
-
     srtContent += `${index}\n`;
-    srtContent += `${formatTime(segment.startTime)} --> ${formatTime(segment.endTime)}\n`;
+    srtContent += `${formatSrtTime(segment.startTime)} --> ${formatSrtTime(segment.endTime)}\n`;
     srtContent += `${segment.text}\n`;
     
     // Add translation if available
@@ -59,7 +46,112 @@ function generateSrtContent(story: any): string {
     index++;
   }
 
+  if (index === 1) {
+    throw new Error("No valid subtitle segments are available for this story");
+  }
+
   return srtContent;
+}
+
+function extractTimedSegments(transcript: any): any[] {
+  if (!transcript) {
+    return [];
+  }
+
+  let transcriptData = transcript;
+  if (typeof transcript === "string") {
+    try {
+      transcriptData = JSON.parse(transcript);
+    } catch {
+      return [];
+    }
+  }
+
+  const rawSegments = Array.isArray(transcriptData)
+    ? transcriptData
+    : transcriptData?.segments;
+
+  if (!Array.isArray(rawSegments)) {
+    return [];
+  }
+
+  return rawSegments
+    .map((segment) => ({
+      startTime: Number(segment.startTime ?? segment.start_time ?? segment.start),
+      endTime: Number(segment.endTime ?? segment.end_time ?? segment.end),
+      text: String(segment.text || "").trim(),
+      translation: segment.translation ? String(segment.translation).trim() : undefined,
+    }))
+    .filter((segment) =>
+      Number.isFinite(segment.startTime) &&
+      Number.isFinite(segment.endTime) &&
+      segment.text
+    );
+}
+
+function parseJsonValue(value: any): any {
+  if (!value || typeof value !== "string") {
+    return value;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+function buildEstimatedSegments(story: any): any[] {
+  const lineTranslations = parseJsonValue(story.lineTranslations);
+
+  if (Array.isArray(lineTranslations) && lineTranslations.length > 0) {
+    return estimateSegmentTiming(
+      lineTranslations
+        .map((line) => ({
+          text: String(line.original || "").trim(),
+          translation: line.english ? String(line.english).trim() : undefined,
+        }))
+        .filter((line) => line.text)
+    );
+  }
+
+  const transcriptText = typeof story.transcript === "string" ? story.transcript : "";
+  const sourceText = (transcriptText || story.storyText || "").trim();
+  const lines = splitSubtitleText(sourceText).map((text) => ({ text }));
+
+  return estimateSegmentTiming(lines);
+}
+
+function splitSubtitleText(text: string): string[] {
+  return (text.match(/[^.!?]+[.!?]?/g) || [text])
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function estimateSegmentTiming(lines: Array<{ text: string; translation?: string }>): any[] {
+  let currentTime = 0;
+
+  return lines.map((line) => {
+    const wordCount = line.text.split(/\s+/).filter(Boolean).length;
+    const duration = Math.max(2.5, Math.min(7, wordCount / 2.2));
+    const segment = {
+      startTime: currentTime,
+      endTime: currentTime + duration,
+      text: line.text,
+      translation: line.translation,
+    };
+    currentTime = segment.endTime;
+    return segment;
+  });
+}
+
+function formatSrtTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const milliseconds = Math.floor((seconds % 1) * 1000);
+
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
 }
 
 /**
@@ -136,7 +228,15 @@ export const downloadRouter = router({
       }
 
       // Generate SRT content
-      const srtContent = generateSrtContent(story);
+      let srtContent: string;
+      try {
+        srtContent = generateSrtContent(story);
+      } catch (error) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: error instanceof Error ? error.message : "Unable to export subtitles",
+        });
+      }
       
       // Create filename
       const sanitizedTitle = (story.title || 'story').replace(/[^a-z0-9]/gi, '_').toLowerCase();

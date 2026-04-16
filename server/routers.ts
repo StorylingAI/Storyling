@@ -130,6 +130,16 @@ function buildCuteStoryThumbnailPrompt(theme?: string | null, title?: string | n
   ].join(" ");
 }
 
+async function generateStoryThumbnailImage(theme?: string | null, title?: string | null): Promise<string | undefined> {
+  const { generateImage } = await import("./_core/imageGeneration");
+  const thumbnailPrompt = buildCuteStoryThumbnailPrompt(theme, title);
+  const { url } = await generateImage({
+    prompt: thumbnailPrompt,
+    aspectRatio: "16:9",
+  });
+  return url;
+}
+
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
@@ -676,40 +686,43 @@ export const appRouter = router({
             let thumbnailUrl: string | undefined;
             let audioAlignment: any = null;
 
-            // Stage 2: Thumbnail Generation (40-50%)
-            await updateContentProgress(
-              content.id,
-              42,
-              "Generating thumbnail..."
-            );
-
-            // Generate thumbnail image based on theme and story content
-            try {
-              console.log(
-                "[Thumbnail Generation] Starting thumbnail generation for content ID:",
-                content.id
-              );
-              const { generateImage } = await import("./_core/imageGeneration");
-
-              const thumbnailPrompt = buildCuteStoryThumbnailPrompt(
-                input.theme,
-                finalTitle
-              );
-
-              const { url } = await generateImage({ prompt: thumbnailPrompt });
-              thumbnailUrl = url;
-              console.log(
-                "[Thumbnail Generation] Success! Thumbnail URL:",
-                thumbnailUrl
-              );
+            if (input.mode === "film") {
               await updateContentProgress(
                 content.id,
                 50,
-                "Thumbnail generated"
+                "Preparing video thumbnail..."
               );
-            } catch (error) {
-              console.error("[Thumbnail Generation] Failed:", error);
-              // Continue without thumbnail - it's not critical
+            } else {
+              // Stage 2: Thumbnail Generation (40-50%)
+              await updateContentProgress(
+                content.id,
+                42,
+                "Generating thumbnail..."
+              );
+
+              // Generate thumbnail image based on theme and story content
+              try {
+                console.log(
+                  "[Thumbnail Generation] Starting thumbnail generation for content ID:",
+                  content.id
+                );
+                thumbnailUrl = await generateStoryThumbnailImage(
+                  input.theme,
+                  finalTitle
+                );
+                console.log(
+                  "[Thumbnail Generation] Success! Thumbnail URL:",
+                  thumbnailUrl
+                );
+                await updateContentProgress(
+                  content.id,
+                  50,
+                  "Thumbnail generated"
+                );
+              } catch (error) {
+                console.error("[Thumbnail Generation] Failed:", error);
+                // Continue without thumbnail - it's not critical
+              }
             }
 
             if (input.mode === "podcast" && input.voiceType) {
@@ -807,6 +820,21 @@ export const appRouter = router({
               );
               videoUrl = film.videoUrl;
               transcript = film.transcript;
+              thumbnailUrl = film.thumbnailUrl || thumbnailUrl;
+              if (!thumbnailUrl) {
+                try {
+                  console.log(
+                    "[Thumbnail Generation] Film did not return a scene still; generating fallback thumbnail for content ID:",
+                    content.id
+                  );
+                  thumbnailUrl = await generateStoryThumbnailImage(
+                    input.theme,
+                    finalTitle
+                  );
+                } catch (error) {
+                  console.error("[Thumbnail Generation] Film fallback failed:", error);
+                }
+              }
               await updateContentProgress(
                 content.id,
                 90,
@@ -2287,6 +2315,7 @@ Return a JSON array where each element has:
 
             await updateGeneratedContent(filmContent.id, {
               videoUrl: film.videoUrl,
+              thumbnailUrl: film.thumbnailUrl || sourceContent.thumbnailUrl,
               transcript: film.transcript,
               status: "completed",
               progress: 100,
@@ -3323,6 +3352,7 @@ async function processBatchJob(jobId: number) {
       // 4. Generate audio/video
       let audioUrl: string | undefined;
       let videoUrl: string | undefined;
+      let thumbnailUrl: string | undefined;
       let audioAlignment: any = null;
 
       if (item.format === "podcast" && item.voiceType) {
@@ -3353,6 +3383,7 @@ async function processBatchJob(jobId: number) {
           story.storyText
         );
         videoUrl = film.videoUrl;
+        thumbnailUrl = film.thumbnailUrl;
       }
 
       // 5. Update content with URLs
@@ -3362,6 +3393,7 @@ async function processBatchJob(jobId: number) {
           audioUrl,
           audioAlignment,
           videoUrl,
+          thumbnailUrl,
           status: "completed",
         })
         .where(eq(generatedContent.id, contentId));

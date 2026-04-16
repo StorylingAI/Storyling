@@ -1,53 +1,94 @@
-/**
- * Google Veo 3 API Integration Tests
- */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { storagePut } from "server/storage";
+import { generateVeo3Video } from "./googleVeo3";
 
-import { describe, it, expect } from 'vitest';
-import { generateVeo3Video } from './googleVeo3';
+vi.mock("server/storage", () => ({
+  storagePut: vi.fn(),
+}));
 
-describe('Google Veo 3 API Integration', () => {
-  it('should have GOOGLE_VEO_API_KEY configured', () => {
-    expect(process.env.GOOGLE_VEO_API_KEY).toBeDefined();
-    expect(process.env.GOOGLE_VEO_API_KEY).not.toBe('');
+describe("Google Veo 3 via Replicate", () => {
+  const originalEnv = { ...process.env };
+  const mockedStoragePut = vi.mocked(storagePut);
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    process.env.REPLICATE_API_TOKEN = "r8-test-token";
+    delete process.env.REPLICATE_VEO3_RESOLUTION;
+    mockedStoragePut.mockResolvedValue({
+      key: "generated-videos/test.mp4",
+      url: "/uploads/generated-videos/test.mp4",
+    });
   });
 
-  it('should validate API key format', () => {
-    const apiKey = process.env.GOOGLE_VEO_API_KEY;
-    expect(apiKey).toMatch(/^AIza[a-zA-Z0-9_-]+$/);
+  afterEach(() => {
+    process.env = originalEnv;
+    vi.unstubAllGlobals();
+    vi.clearAllMocks();
   });
 
-  it('should throw error when API key is missing', async () => {
-    const originalKey = process.env.GOOGLE_VEO_API_KEY;
-    delete process.env.GOOGLE_VEO_API_KEY;
+  it("throws when the Replicate token is missing", async () => {
+    delete process.env.REPLICATE_API_TOKEN;
 
     await expect(
-      generateVeo3Video({ prompt: 'Test video' })
-    ).rejects.toThrow('GOOGLE_VEO_API_KEY is not configured');
-
-    process.env.GOOGLE_VEO_API_KEY = originalKey;
+      generateVeo3Video({ prompt: "Test video" }),
+    ).rejects.toThrow("REPLICATE_API_TOKEN is not configured");
   });
 
-  it('should accept valid generation request parameters', () => {
-    const request = {
-      prompt: 'A beautiful sunset over the ocean',
-      duration: 5,
-      aspectRatio: '16:9' as const,
-    };
+  it("creates a Veo 3 prediction with optimized Replicate inputs", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            id: "prediction-1",
+            status: "succeeded",
+            output: "https://replicate.delivery/video.mp4",
+          }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => "video/mp4" },
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+    vi.stubGlobal("fetch", fetchMock);
 
-    expect(request.prompt).toBeTruthy();
-    expect(request.duration).toBeGreaterThan(0);
-    expect(['16:9', '9:16', '1:1']).toContain(request.aspectRatio);
-  });
+    const result = await generateVeo3Video({
+      prompt: "A calm mountain sunrise",
+      duration: 10,
+      aspectRatio: "16:9",
+      sourceImageUrl: "https://example.com/source.png",
+      seed: 1234,
+    });
 
-  it('should use default parameters when not specified', () => {
-    const request = {
-      prompt: 'Test video',
-    };
+    expect(result).toEqual({
+      videoUrl: "/uploads/generated-videos/test.mp4",
+      status: "completed",
+      taskId: "prediction-1",
+      error: undefined,
+    });
 
-    const duration = request.duration || 5;
-    const aspectRatio = request.aspectRatio || '16:9';
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.replicate.com/v1/models/google/veo-3/predictions",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          Authorization: "Bearer r8-test-token",
+          Prefer: "wait=10",
+        }),
+      }),
+    );
 
-    expect(duration).toBe(5);
-    expect(aspectRatio).toBe('16:9');
+    const createBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(createBody.input).toMatchObject({
+      prompt: "A calm mountain sunrise",
+      aspect_ratio: "16:9",
+      duration: 8,
+      resolution: "720p",
+      generate_audio: false,
+      image: "https://example.com/source.png",
+      seed: 1234,
+    });
+    expect(createBody.input.negative_prompt).toContain("watermarks");
   });
 });

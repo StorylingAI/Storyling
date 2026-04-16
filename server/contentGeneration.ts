@@ -43,6 +43,32 @@ interface FilmGenerationParams extends StoryGenerationParams {
   sceneBeats?: string[]; // Precomputed story beats to map one beat per clip
 }
 
+type FilmGenerationResult = {
+  videoUrl: string;
+  transcript: string;
+  clipCount?: number;
+  totalDuration?: number;
+  thumbnailUrl?: string;
+};
+
+type FilmSubtitleCue = {
+  startTime: number;
+  endTime: number;
+  text: string;
+};
+
+type ElevenLabsAlignment = {
+  characters?: string[];
+  character_start_times_seconds?: number[];
+  character_end_times_seconds?: number[];
+};
+
+type ElevenLabsTimestampResponse = {
+  audio_base64?: string;
+  alignment?: ElevenLabsAlignment;
+  normalized_alignment?: ElevenLabsAlignment;
+};
+
 export interface GeneratedStory {
   title: string;
   titleTranslation?: string; // Title in user's translation language
@@ -949,10 +975,25 @@ const FILM_LANDSCAPE_STABILITY_GUIDANCE =
   "stable environment, no people, no text, no morphing or drifting objects, gentle natural motion";
 
 const FILM_CLIP_TRANSIENT_RETRIES = 1;
-const DEFAULT_FILM_CLIP_DURATION_SECONDS = 10;
+const DEFAULT_REPLICATE_FILM_CLIP_DURATION_SECONDS = 8;
+const DEFAULT_HIGGSFIELD_FILM_CLIP_DURATION_SECONDS = 10;
+type FilmClipDuration = 4 | 5 | 6 | 8 | 10 | 15;
 
-function resolveFilmClipDuration(targetVideoDuration: number): 5 | 10 | 15 {
+function resolveFilmClipDuration(
+  targetVideoDuration: number,
+  videoProvider: "replicate" | "higgsfield",
+): FilmClipDuration {
   const envDuration = Number(process.env.FILM_CLIP_DURATION_SECONDS);
+
+  if (videoProvider === "replicate") {
+    if ([4, 6, 8].includes(envDuration)) {
+      return envDuration as 4 | 6 | 8;
+    }
+    if (targetVideoDuration <= 4) return 4;
+    if (targetVideoDuration <= 6) return 6;
+    return DEFAULT_REPLICATE_FILM_CLIP_DURATION_SECONDS;
+  }
+
   if ([5, 10, 15].includes(envDuration)) {
     return envDuration as 5 | 10 | 15;
   }
@@ -961,7 +1002,7 @@ function resolveFilmClipDuration(targetVideoDuration: number): 5 | 10 | 15 {
     return 5;
   }
 
-  return DEFAULT_FILM_CLIP_DURATION_SECONDS;
+  return DEFAULT_HIGGSFIELD_FILM_CLIP_DURATION_SECONDS;
 }
 
 function resolveFilmVideoModel(): "standard" | "pro" {
@@ -1048,6 +1089,90 @@ function buildNarrationSubtitleLines(text: string, fallbackScenes: string[]): st
 
   const lines = sentenceLines.flatMap((line) => splitLongSubtitleLine(line));
   return lines.length > 0 ? lines : fallbackScenes;
+}
+
+function sanitizeNarrationText(text: string): string {
+  return text
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/_(.+?)_/g, '$1')
+    .replace(/~~(.+?)~~/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildNarrationTextFromSubtitleLines(subtitleTexts: string[]): string {
+  return subtitleTexts
+    .map((text) => text.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function compactSubtitleMatchText(text: string): string {
+  return text.replace(/\s+/g, "").toLowerCase();
+}
+
+function buildSubtitleCuesFromAlignment(
+  subtitleTexts: string[],
+  alignment?: ElevenLabsAlignment,
+): FilmSubtitleCue[] | undefined {
+  const characters = alignment?.characters;
+  const starts = alignment?.character_start_times_seconds;
+  const ends = alignment?.character_end_times_seconds;
+
+  if (!characters?.length || !starts?.length || !ends?.length) {
+    return undefined;
+  }
+
+  const compactToAlignmentIndex: number[] = [];
+  let compactAlignmentText = "";
+
+  characters.forEach((character, index) => {
+    if (!/\s/.test(character)) {
+      compactAlignmentText += character.toLowerCase();
+      compactToAlignmentIndex.push(index);
+    }
+  });
+
+  if (!compactAlignmentText) {
+    return undefined;
+  }
+
+  const cues: FilmSubtitleCue[] = [];
+  let compactCursor = 0;
+
+  for (const rawSubtitleText of subtitleTexts) {
+    const text = rawSubtitleText.trim();
+    const compactSubtitleText = compactSubtitleMatchText(text);
+
+    if (!text || !compactSubtitleText) {
+      continue;
+    }
+
+    const compactStartIndex = compactAlignmentText.indexOf(compactSubtitleText, compactCursor);
+    if (compactStartIndex === -1) {
+      return undefined;
+    }
+
+    const compactEndIndex = compactStartIndex + compactSubtitleText.length - 1;
+    const startAlignmentIndex = compactToAlignmentIndex[compactStartIndex];
+    const endAlignmentIndex = compactToAlignmentIndex[compactEndIndex];
+    const rawStartTime = starts[startAlignmentIndex];
+    const rawEndTime = ends[endAlignmentIndex];
+
+    if (!Number.isFinite(rawStartTime) || !Number.isFinite(rawEndTime)) {
+      return undefined;
+    }
+
+    const previousEndTime = cues[cues.length - 1]?.endTime ?? 0;
+    const startTime = Math.max(previousEndTime, rawStartTime);
+    const endTime = Math.max(startTime + 0.2, rawEndTime);
+
+    cues.push({ startTime, endTime, text });
+    compactCursor = compactEndIndex + 1;
+  }
+
+  return cues.length > 0 ? cues : undefined;
 }
 
 function formatGenerationError(error: unknown): string {
@@ -1343,7 +1468,7 @@ Respond with ONLY the visual description. No explanations, no markdown, no quote
 }
 
 /**
- * Generate a film (video) using Higgsfield API with multi-clip stitching
+ * Generate a film (video) using the configured video provider with multi-clip stitching
  *
  * This function creates longer videos by:
  * 1. Splitting the story into multiple scenes
@@ -1354,7 +1479,7 @@ export async function generateFilm(
   params: FilmGenerationParams,
   storyText: string,
   onProgress?: (stage: string, progress: number) => void
-): Promise<{ videoUrl: string; transcript: string; clipCount?: number; totalDuration?: number }> {
+): Promise<FilmGenerationResult> {
   const { 
     cinematicStyle, 
     theme, 
@@ -1370,18 +1495,21 @@ export async function generateFilm(
   } = params;
 
   // Import required modules
-  const { generateHiggsfieldVideo } = await import("./higgsfield");
+  const { generateVideo, resolveVideoProvider } = await import("./_core/videoGeneration");
   const { fitSceneTextsToClipCount, splitStoryIntoScenes, stitchVideos } = await import("./videoStitching");
   let narrationAudioPath: string | undefined;
+  let narrationDuration: number | undefined;
+  let subtitleEntries: FilmSubtitleCue[] | undefined;
 
   try {
-    const clipDuration = resolveFilmClipDuration(targetVideoDuration);
+    const videoProvider = resolveVideoProvider();
+    const clipDuration = resolveFilmClipDuration(targetVideoDuration, videoProvider);
     const clipCount = Math.max(1, Math.ceil(targetVideoDuration / clipDuration));
     const plannedVideoDuration = clipCount * clipDuration;
     const videoModel = resolveFilmVideoModel();
 
     console.log(
-      `[Film Generation] Creating ${clipCount} high-quality ${clipDuration}s clips for target ${plannedVideoDuration}s using ${videoModel} model`,
+      `[Film Generation] Creating ${clipCount} high-quality ${clipDuration}s clips for target ${plannedVideoDuration}s using ${videoProvider} ${videoModel} model`,
     );
 
     if (onProgress) onProgress('Planning scenes...', 5);
@@ -1413,12 +1541,9 @@ export async function generateFilm(
         );
       }
 
-      const cleanText = narrationSourceText
-        .replace(/\*\*(.+?)\*\*/g, '$1')
-        .replace(/\*(.+?)\*/g, '$1')
-        .replace(/_(.+?)_/g, '$1')
-        .replace(/~~(.+?)~~/g, '$1');
+      const cleanText = sanitizeNarrationText(narrationSourceText);
       subtitleTexts = buildNarrationSubtitleLines(cleanText, scenes);
+      const narrationText = buildNarrationTextFromSubtitleLines(subtitleTexts);
 
       try {
         let audioData: Buffer | null = null;
@@ -1426,33 +1551,68 @@ export async function generateFilm(
         if (isSpanishLanguage(params.targetLanguage)) {
           const { synthesizeSpeechGoogleCloud } = await import("./googleCloudTTS");
           audioData = await synthesizeSpeechGoogleCloud(
-            cleanText,
+            narrationText,
             params.targetLanguage,
             gender
           );
         } else {
-          const ttsResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+          const elevenLabsRequestBody = {
+            text: narrationText,
+            model_id: 'eleven_multilingual_v2',
+            voice_settings: {
+              stability: voiceSettings.stability,
+              similarity_boost: voiceSettings.similarity_boost,
+              style: voiceSettings.style,
+              use_speaker_boost: true,
+            },
+          };
+
+          try {
+            const timestampResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '/with-timestamps', {
+              method: 'POST',
+              headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+                'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
+              },
+              body: JSON.stringify(elevenLabsRequestBody),
+            });
+
+            if (timestampResponse.ok) {
+              const timestampResult = await timestampResponse.json() as ElevenLabsTimestampResponse;
+              if (timestampResult.audio_base64) {
+                audioData = Buffer.from(timestampResult.audio_base64, 'base64');
+                subtitleEntries = buildSubtitleCuesFromAlignment(
+                  subtitleTexts,
+                  timestampResult.normalized_alignment || timestampResult.alignment,
+                );
+
+                if (!subtitleEntries) {
+                  console.warn('[Film Generation] ElevenLabs timestamps did not match subtitle lines; using weighted subtitle timing fallback');
+                }
+              } else {
+                console.warn('[Film Generation] ElevenLabs timestamp response did not include audio data; using plain TTS fallback');
+              }
+            } else {
+              console.warn('[Film Generation] ElevenLabs timestamp TTS failed:', timestampResponse.statusText);
+            }
+          } catch (timestampError) {
+            console.warn('[Film Generation] ElevenLabs timestamp TTS failed, using plain TTS fallback:', timestampError);
+          }
+
+          const ttsResponse = audioData ? undefined : await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
             method: 'POST',
             headers: {
               Accept: 'audio/mpeg',
               'Content-Type': 'application/json',
               'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
             },
-            body: JSON.stringify({
-              text: cleanText,
-              model_id: 'eleven_multilingual_v2',
-              voice_settings: {
-                stability: voiceSettings.stability,
-                similarity_boost: voiceSettings.similarity_boost,
-                style: voiceSettings.style,
-                use_speaker_boost: true,
-              },
-            }),
+            body: JSON.stringify(elevenLabsRequestBody),
           });
 
-          if (!ttsResponse.ok) {
+          if (ttsResponse && !ttsResponse.ok) {
             console.error('[Film Generation] TTS failed:', ttsResponse.statusText);
-          } else {
+          } else if (ttsResponse) {
             const audioBuffer = await ttsResponse.arrayBuffer();
             audioData = Buffer.from(audioBuffer);
           }
@@ -1471,8 +1631,11 @@ export async function generateFilm(
             const { promisify } = await import('util');
             const execAsync = promisify(exec);
             const { stdout } = await execAsync(`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${narrationAudioPath}"`);
-            const narrationDuration = Math.ceil(parseFloat(stdout.trim()));
-            console.log(`[Film Generation] Narration duration: ${narrationDuration}s (target video: ${plannedVideoDuration}s)`);
+            const measuredNarrationDuration = parseFloat(stdout.trim());
+            if (Number.isFinite(measuredNarrationDuration) && measuredNarrationDuration > 0) {
+              narrationDuration = measuredNarrationDuration;
+              console.log(`[Film Generation] Narration duration: ${narrationDuration.toFixed(2)}s (planned video: ${plannedVideoDuration}s)`);
+            }
           } catch (e) {
             console.warn('[Film Generation] Could not measure narration duration');
           }
@@ -1498,6 +1661,7 @@ export async function generateFilm(
     let previousVisualPrompt: string | undefined;
     let previousSceneImageUrl: string | undefined;
     let identityReferenceImageUrl: string | undefined;
+    let firstSceneThumbnailUrl: string | undefined;
 
     for (let i = 0; i < scenes.length; i++) {
       const sceneText = scenes[i];
@@ -1530,7 +1694,7 @@ export async function generateFilm(
       });
       let videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
 
-      let result: Awaited<ReturnType<typeof generateHiggsfieldVideo>> | undefined;
+      let result: Awaited<ReturnType<typeof generateVideo>> | undefined;
       let clipAttempt = 0;
       let lastFailureMessage = '';
 
@@ -1540,7 +1704,7 @@ export async function generateFilm(
 
         do {
           try {
-            result = await generateHiggsfieldVideo({
+            result = await generateVideo({
               prompt: videoPrompt,
               duration: clipDuration,
               aspectRatio: "16:9",
@@ -1548,6 +1712,7 @@ export async function generateFilm(
               seed: consistentSeed,
               persistToStorage: false,
               sourceImageUrl: sceneImageUrl,
+              generateAudio: false,
             });
           } catch (clipError: any) {
             lastFailureMessage = clipError?.message || `Clip ${i + 1} generation failed`;
@@ -1656,6 +1821,10 @@ export async function generateFilm(
         throw new Error(lastFailureMessage || `Clip ${i + 1} generation failed`);
       }
 
+      if (i === 0 && sceneImageUrl) {
+        firstSceneThumbnailUrl = sceneImageUrl;
+      }
+
       clips.push({
         url: result.videoUrl,
         order: i,
@@ -1683,6 +1852,7 @@ export async function generateFilm(
         transcript: storyText,
         clipCount: 1,
         totalDuration: clipDuration,
+        thumbnailUrl: firstSceneThumbnailUrl,
       };
     }
 
@@ -1707,6 +1877,7 @@ export async function generateFilm(
       clipDuration,
       targetDuration: plannedVideoDuration,
       narrationAudioPath,
+      subtitleEntries,
     });
 
     if (onProgress) onProgress('Video generation complete', 100);
@@ -1717,6 +1888,7 @@ export async function generateFilm(
       transcript: storyText,
       clipCount: stitchResult.clipCount,
       totalDuration: stitchResult.duration,
+      thumbnailUrl: firstSceneThumbnailUrl,
     };
 
   } catch (error) {

@@ -43,6 +43,7 @@ export interface StitchingOptions {
   targetDuration?: number; // Requested final video duration in seconds
   narrationAudioUrl?: string; // URL to narration audio file (MP3) to overlay on video
   narrationAudioPath?: string; // Local path to narration audio file to overlay on video
+  subtitleEntries?: Array<{ startTime: number; endTime: number; text: string }>;
 }
 
 interface StitchingResult {
@@ -81,14 +82,15 @@ async function getVideoDuration(videoPath: string): Promise<number> {
     const { stdout } = await execAsync(
       `ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${videoPath}"`
     );
-    return parseFloat(stdout.trim());
+    const duration = parseFloat(stdout.trim());
+    return Number.isFinite(duration) ? duration : 0;
   } catch (error) {
     console.error(`[VideoStitching] Error getting duration for ${videoPath}:`, error);
     return 0;
   }
 }
 
-async function stretchVideoToTargetDuration(
+async function normalizeVideoToTargetDuration(
   videoPath: string,
   targetDuration: number | undefined,
   tempDir: string,
@@ -100,32 +102,36 @@ async function stretchVideoToTargetDuration(
   }
 
   const currentDuration = await getVideoDuration(videoPath);
-  if (!currentDuration || currentDuration >= targetDuration * 0.95) {
+  if (!currentDuration) {
     return videoPath;
   }
 
-  const stretchFactor = targetDuration / currentDuration;
   const outputPath = path.join(tempDir, `duration-normalized.${outputFormat}`);
-  const command = `ffmpeg -y -i "${videoPath}" -filter:v "setpts=${stretchFactor.toFixed(6)}*PTS,fps=${fps}" -an -c:v libx264 -preset veryfast -crf 23 -movflags +faststart "${outputPath}"`;
 
-  console.log(
-    `[VideoStitching] Extending video duration from ${currentDuration.toFixed(2)}s to ${targetDuration}s using ${stretchFactor.toFixed(2)}x timing`,
-  );
-  await execAsync(command, { maxBuffer: 50 * 1024 * 1024 });
+  if (currentDuration < targetDuration * 0.95) {
+    const stretchFactor = targetDuration / currentDuration;
+    const command = `ffmpeg -y -i "${videoPath}" -filter:v "setpts=${stretchFactor.toFixed(6)}*PTS,fps=${fps}" -an -c:v libx264 -preset veryfast -crf 23 -movflags +faststart "${outputPath}"`;
 
-  return outputPath;
-}
-
-async function hasAudioStream(videoPath: string): Promise<boolean> {
-  try {
-    const { stdout } = await execAsync(
-      `ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "${videoPath}"`,
+    console.log(
+      `[VideoStitching] Extending video duration from ${currentDuration.toFixed(2)}s to ${targetDuration.toFixed(2)}s using ${stretchFactor.toFixed(2)}x timing`,
     );
-    return stdout.trim().length > 0;
-  } catch (error) {
-    console.warn(`[VideoStitching] Could not inspect audio streams for ${videoPath}:`, error);
-    return false;
+    await execAsync(command, { maxBuffer: 50 * 1024 * 1024 });
+
+    return outputPath;
   }
+
+  if (currentDuration > targetDuration * 1.05) {
+    const command = `ffmpeg -y -i "${videoPath}" -t ${targetDuration.toFixed(3)} -map 0:v:0 -map 0:a? -vf "fps=${fps}" -c:v libx264 -preset veryfast -crf 23 -c:a aac -b:a 128k -movflags +faststart "${outputPath}"`;
+
+    console.log(
+      `[VideoStitching] Trimming video duration from ${currentDuration.toFixed(2)}s to ${targetDuration.toFixed(2)}s`,
+    );
+    await execAsync(command, { maxBuffer: 50 * 1024 * 1024 });
+
+    return outputPath;
+  }
+
+  return videoPath;
 }
 
 /**
@@ -261,7 +267,7 @@ export async function stitchVideos(
     } else {
       // Simple concatenation without transitions (faster)
       ffmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatFilePath}" \
-        -vf "scale=${dimensions}:force_original_aspect_ratio=decrease,pad=${dimensions}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=${fps}" \
+        -vf "scale=${dimensions}:force_original_aspect_ratio=increase,crop=${dimensions},setsar=1,fps=${fps}" \
         -c:v libx264 -preset medium -crf 23 \
         -c:a aac -b:a 128k \
         -movflags +faststart \
@@ -288,19 +294,12 @@ export async function stitchVideos(
 
     // Post-processing
     let finalVideoPath = outputPath;
+    let narrationPath: string | undefined;
+    let narrationDuration: number | undefined;
 
-    finalVideoPath = await stretchVideoToTargetDuration(
-      finalVideoPath,
-      options.targetDuration,
-      tempDir,
-      outputFormat,
-      fps,
-    );
-
-    // Add narration audio if provided
+    // Download narration before duration normalization so the video can match the voice.
     if (options.narrationAudioUrl || options.narrationAudioPath) {
-      console.log('[VideoStitching] Adding narration audio...');
-      const narrationPath = options.narrationAudioPath || path.join(tempDir, 'narration.mp3');
+      narrationPath = options.narrationAudioPath || path.join(tempDir, 'narration.mp3');
 
       if (!options.narrationAudioPath && options.narrationAudioUrl) {
         const narrationResponse = await axios.get(options.narrationAudioUrl, {
@@ -312,13 +311,35 @@ export async function stitchVideos(
         console.log(`[VideoStitching] Narration audio downloaded: ${narrationSizeKB}KB`);
       }
 
-      const sourceHasAudio = await hasAudioStream(finalVideoPath);
-      const narrationOutput = path.join(tempDir, 'video-with-narration.mp4');
-      const narrationCommand = sourceHasAudio
-        ? `ffmpeg -i "${finalVideoPath}" -i "${narrationPath}" -filter_complex "[0:a]volume=0.35[base];[1:a]volume=1.0[narration];[base][narration]amix=inputs=2:duration=first:dropout_transition=2[aout]" -map 0:v -map "[aout]" -c:v copy -c:a aac -b:a 192k -y "${narrationOutput}"`
-        : `ffmpeg -i "${finalVideoPath}" -i "${narrationPath}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -y "${narrationOutput}"`;
+      const measuredNarrationDuration = await getVideoDuration(narrationPath);
+      if (measuredNarrationDuration > 0) {
+        narrationDuration = measuredNarrationDuration;
+        console.log(`[VideoStitching] Narration duration: ${narrationDuration.toFixed(2)}s`);
+      }
+    }
 
-      console.log('[VideoStitching] Mixing narration audio with video...');
+    const currentVideoDuration = await getVideoDuration(finalVideoPath);
+    const syncTargetDuration = options.targetDuration
+      ? Math.max(options.targetDuration, narrationDuration || 0)
+      : narrationDuration && narrationDuration > currentVideoDuration * 1.05
+        ? narrationDuration
+        : undefined;
+
+    finalVideoPath = await normalizeVideoToTargetDuration(
+      finalVideoPath,
+      syncTargetDuration,
+      tempDir,
+      outputFormat,
+      fps,
+    );
+
+    // Add narration audio if provided
+    if (narrationPath) {
+      console.log('[VideoStitching] Replacing generated clip audio with narration audio...');
+      const narrationOutput = path.join(tempDir, 'video-with-narration.mp4');
+      const narrationCommand = `ffmpeg -i "${finalVideoPath}" -i "${narrationPath}" -map 0:v -map 1:a -c:v copy -c:a aac -b:a 192k -y "${narrationOutput}"`;
+
+      console.log('[VideoStitching] Applying narration as the only speech track...');
       await execAsync(narrationCommand, { maxBuffer: 50 * 1024 * 1024 });
       finalVideoPath = narrationOutput;
       console.log('[VideoStitching] Narration audio added successfully');
@@ -354,7 +375,10 @@ export async function stitchVideos(
         options.clipDuration || 5,
         options.subtitleStyle || subtitleStyle,
         undefined,
-        { totalDuration: await getVideoDuration(finalVideoPath) },
+        {
+          totalDuration: narrationDuration || await getVideoDuration(finalVideoPath),
+          entries: options.subtitleEntries,
+        },
       );
       finalVideoPath = videoWithSubs;
     }

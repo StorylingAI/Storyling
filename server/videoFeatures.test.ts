@@ -120,6 +120,28 @@ describe('Subtitle Generation Module', () => {
     await fs.unlink(srtPath).catch(() => {});
   });
 
+  it('should use explicit subtitle timing entries when provided', async () => {
+    const outputPath = path.join('/tmp', `test-explicit-timing-${Date.now()}.srt`);
+
+    const srtPath = await generateSubtitleFile(['Fallback text'], clipDuration, outputPath, {
+      entries: [
+        { startTime: 0.42, endTime: 1.8, text: 'First spoken line.' },
+        { startTime: 2.15, endTime: 3.4, text: 'Second spoken line.' },
+      ],
+    });
+    const entries = await parseSRTFile(srtPath);
+
+    expect(entries).toHaveLength(2);
+    expect(entries[0].startTime).toBeCloseTo(0.42, 2);
+    expect(entries[0].endTime).toBeCloseTo(1.8, 2);
+    expect(entries[0].text).toBe('First spoken line.');
+    expect(entries[1].startTime).toBeCloseTo(2.15, 2);
+    expect(entries[1].endTime).toBeCloseTo(3.4, 2);
+    expect(entries[1].text).toBe('Second spoken line.');
+
+    await fs.unlink(srtPath).catch(() => {});
+  });
+
   it('should handle empty scenes array', async () => {
     const outputPath = path.join('/tmp', `test-empty-${Date.now()}.srt`);
     

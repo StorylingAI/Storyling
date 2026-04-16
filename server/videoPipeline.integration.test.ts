@@ -3,16 +3,17 @@ import fs from "fs/promises";
 import http from "http";
 import os from "os";
 import path from "path";
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { describe, expect, it } from "vitest";
 import { stitchVideos } from "./videoStitching";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
-async function createColorClip(filePath: string, color: string, duration: number) {
+async function createColorClip(filePath: string, color: string, duration: number, size = "320x240") {
   await execAsync(
-    `ffmpeg -loglevel error -y -f lavfi -i color=c=${color}:s=320x240:d=${duration} -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac "${filePath}"`,
+    `ffmpeg -loglevel error -y -f lavfi -i color=c=${color}:s=${size}:d=${duration} -f lavfi -i anullsrc=r=44100:cl=stereo -shortest -c:v libx264 -pix_fmt yuv420p -c:a aac "${filePath}"`,
   );
 }
 
@@ -34,6 +35,38 @@ async function hasAudioStream(filePath: string): Promise<boolean> {
     `ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "${filePath}"`,
   );
   return stdout.trim().length > 0;
+}
+
+async function getVideoDimensions(filePath: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await execAsync(
+    `ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=s=x:p=0 "${filePath}"`,
+  );
+  const [width, height] = stdout.trim().split("x").map(Number);
+  return { width, height };
+}
+
+async function sampleRgbPixel(filePath: string, x: number, y: number): Promise<[number, number, number]> {
+  const { stdout } = await execFileAsync(
+    "ffmpeg",
+    [
+      "-loglevel",
+      "error",
+      "-ss",
+      "0.1",
+      "-i",
+      filePath,
+      "-frames:v",
+      "1",
+      "-vf",
+      `crop=1:1:${x}:${y},format=rgb24`,
+      "-f",
+      "rawvideo",
+      "-",
+    ],
+    { encoding: "buffer", maxBuffer: 1024 },
+  ) as { stdout: Buffer };
+
+  return [stdout[0], stdout[1], stdout[2]];
 }
 
 function toUploadedFilePath(videoUrl: string): string {
@@ -165,6 +198,57 @@ describe("Video pipeline integration", () => {
       const duration = await getDuration(uploadedPath);
       expect(duration).toBeGreaterThan(1.8);
       expect(duration).toBeLessThan(2.2);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      if (uploadedPath) {
+        await fs.unlink(uploadedPath).catch(() => {});
+      }
+      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    }
+  }, 60000);
+
+  it("should fill a 16:9 frame from square clips without pillarbox padding", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "video-square-pipeline-"));
+    const clip = path.join(tempDir, "clip.mp4");
+
+    await createColorClip(clip, "green", 1, "320x320");
+
+    const server = http.createServer((req, res) => {
+      if (req.url !== "/clip.mp4") {
+        res.statusCode = 404;
+        res.end("not found");
+        return;
+      }
+
+      createReadStream(clip).pipe(res);
+    });
+
+    await new Promise<void>((resolve) => server.listen(32127, "127.0.0.1", () => resolve()));
+
+    let uploadedPath: string | undefined;
+
+    try {
+      const result = await stitchVideos(
+        [{ url: "http://127.0.0.1:32127/clip.mp4", order: 0, duration: 1 }],
+        {
+          outputFormat: "mp4",
+          resolution: "720p",
+          fps: 30,
+          addSubtitles: true,
+          sceneTexts: ["Landscape frame."],
+          clipDuration: 1,
+          targetDuration: 1,
+        },
+      );
+
+      uploadedPath = toUploadedFilePath(result.videoUrl);
+      const dimensions = await getVideoDimensions(uploadedPath);
+      const leftEdgePixel = await sampleRgbPixel(uploadedPath, 10, Math.floor(dimensions.height / 2));
+
+      expect(dimensions).toEqual({ width: 1280, height: 720 });
+      expect(leftEdgePixel[0]).toBeLessThan(40);
+      expect(leftEdgePixel[1]).toBeGreaterThan(80);
+      expect(leftEdgePixel[2]).toBeLessThan(40);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       if (uploadedPath) {

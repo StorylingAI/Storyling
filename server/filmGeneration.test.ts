@@ -3,7 +3,7 @@
  * Tests convertToVisualPrompt and NSFW retry logic
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock invokeLLM before importing
 vi.mock('./_core/llm', () => ({
@@ -14,6 +14,11 @@ vi.mock('./_core/llm', () => ({
 vi.mock('./higgsfield', () => ({
   generateHiggsfieldImage: vi.fn(),
   generateHiggsfieldVideo: vi.fn(),
+}));
+
+vi.mock('./_core/videoGeneration', () => ({
+  generateVideo: vi.fn(),
+  resolveVideoProvider: vi.fn(() => 'replicate'),
 }));
 
 vi.mock('./_core/imageGeneration', () => ({
@@ -29,7 +34,8 @@ vi.mock('./videoStitching', () => ({
 
 import { convertToVisualPrompt, generateCharacterSheet, generateFilm } from './contentGeneration';
 import { invokeLLM } from './_core/llm';
-import { generateHiggsfieldImage, generateHiggsfieldVideo } from './higgsfield';
+import { generateHiggsfieldImage } from './higgsfield';
+import { generateVideo } from './_core/videoGeneration';
 import { generateImage } from './_core/imageGeneration';
 import { stitchVideos } from './videoStitching';
 import {
@@ -40,7 +46,7 @@ import {
 
 const mockedInvokeLLM = vi.mocked(invokeLLM);
 const mockedGenerateImage = vi.mocked(generateHiggsfieldImage);
-const mockedGenerateVideo = vi.mocked(generateHiggsfieldVideo);
+const mockedGenerateVideo = vi.mocked(generateVideo);
 const mockedGenerateStillImage = vi.mocked(generateImage);
 const mockedStitchVideos = vi.mocked(stitchVideos);
 
@@ -229,6 +235,10 @@ describe('generateFilm NSFW retry', () => {
     mockedGenerateStillImage.mockImplementation(async () => ({
       url: `https://example.com/generated-scene-${++imageIndex}.png`,
     }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('should retry with higher abstraction level when NSFW detected', async () => {
@@ -469,6 +479,7 @@ describe('generateFilm NSFW retry', () => {
     );
 
     expect(result.videoUrl).toBe('https://example.com/final-film.mp4');
+    expect(result.thumbnailUrl).toBe('https://example.com/generated-scene-1.png');
     expect(mockedGenerateImage).not.toHaveBeenCalled();
     expect(mockedGenerateStillImage).toHaveBeenCalledTimes(2);
     expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
@@ -506,6 +517,76 @@ describe('generateFilm NSFW retry', () => {
     );
     expect(mockedGenerateVideo.mock.calls[1]?.[0]?.prompt).toContain('Direct continuation of the previous shot');
     expect(mockedGenerateVideo.mock.calls[1]?.[0]?.prompt).toContain('snowy alpine forest near a rustic chalet');
+  });
+
+  it('should generate narration from the exact subtitle lines passed to stitching', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A traveler walks calmly toward a station.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/clip-with-narration.mp4',
+      status: 'completed',
+      requestId: 'clip-tts',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/final-with-narration.mp4',
+      duration: 8,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        statusText: 'timestamps unavailable',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateFilm(
+      {
+        targetLanguage: 'French',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['gare'],
+        theme: 'Adventure',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Bonjour **Marie**. Elle marche vers la gare avec son sac.',
+    );
+
+    const expectedSubtitleLines = [
+      'Bonjour Marie.',
+      'Elle marche vers la gare avec son sac.',
+    ];
+    const expectedNarrationText = expectedSubtitleLines.join(' ');
+    const timestampBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    const plainTtsBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+
+    expect(timestampBody.text).toBe(expectedNarrationText);
+    expect(plainTtsBody.text).toBe(expectedNarrationText);
+    expect(mockedStitchVideos).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sceneTexts: expectedSubtitleLines,
+        narrationAudioPath: expect.any(String),
+      }),
+    );
   });
 });
 

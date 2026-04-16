@@ -61,6 +61,11 @@ export interface SubtitleEntry {
 
 export interface SubtitleTimingOptions {
   totalDuration?: number;
+  entries?: Array<{
+    startTime: number;
+    endTime: number;
+    text: string;
+  }>;
 }
 
 function estimateSubtitleWeight(text: string): number {
@@ -77,6 +82,15 @@ function buildSubtitleEntries(
   clipDuration: number,
   timingOptions?: SubtitleTimingOptions,
 ): SubtitleEntry[] {
+  if (timingOptions?.entries?.length) {
+    return timingOptions.entries.map((entry, index) => ({
+      index: index + 1,
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      text: entry.text.trim(),
+    }));
+  }
+
   if (scenes.length === 0) {
     return [];
   }

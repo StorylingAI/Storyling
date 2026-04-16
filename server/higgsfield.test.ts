@@ -6,19 +6,23 @@ import { describe, it, expect } from 'vitest';
 import axios from 'axios';
 
 const HIGGSFIELD_API_BASE = 'https://api.higgsfield.ai/v1';
+const hasHiggsfieldCredentials = Boolean(
+  process.env.HIGGSFIELD_API_KEY_ID && process.env.HIGGSFIELD_API_KEY_SECRET,
+);
+const credentialsIt = hasHiggsfieldCredentials ? it : it.skip;
 
 describe('Higgsfield API Integration', () => {
-  it('should have HIGGSFIELD_API_KEY_ID configured', () => {
+  credentialsIt('should have HIGGSFIELD_API_KEY_ID configured', () => {
     expect(process.env.HIGGSFIELD_API_KEY_ID).toBeDefined();
     expect(process.env.HIGGSFIELD_API_KEY_ID).not.toBe('');
   });
 
-  it('should have HIGGSFIELD_API_KEY_SECRET configured', () => {
+  credentialsIt('should have HIGGSFIELD_API_KEY_SECRET configured', () => {
     expect(process.env.HIGGSFIELD_API_KEY_SECRET).toBeDefined();
     expect(process.env.HIGGSFIELD_API_KEY_SECRET).not.toBe('');
   });
 
-  it('should validate API credentials format', () => {
+  credentialsIt('should validate API credentials format', () => {
     const apiKeyId = process.env.HIGGSFIELD_API_KEY_ID;
     const apiKeySecret = process.env.HIGGSFIELD_API_KEY_SECRET;
 
@@ -29,7 +33,7 @@ describe('Higgsfield API Integration', () => {
     expect(apiKeySecret).toMatch(/^[a-f0-9]{64,}$/);
   });
 
-  it('should successfully authenticate with Higgsfield API', async () => {
+  credentialsIt('should successfully authenticate with Higgsfield API', async () => {
     const apiKeyId = process.env.HIGGSFIELD_API_KEY_ID;
     const apiKeySecret = process.env.HIGGSFIELD_API_KEY_SECRET;
 

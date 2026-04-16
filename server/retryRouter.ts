@@ -99,6 +99,7 @@ async function retryStoryGeneration(contentId: number) {
     let audioUrl: string | undefined;
     let videoUrl: string | undefined;
     let transcript: string | undefined;
+    let thumbnailUrl = content.thumbnailUrl || undefined;
 
     if (content.mode === "podcast" && content.voiceType) {
       const podcast = await generatePodcast(
@@ -135,6 +136,7 @@ async function retryStoryGeneration(contentId: number) {
       );
       videoUrl = film.videoUrl;
       transcript = film.transcript;
+      thumbnailUrl = film.thumbnailUrl || thumbnailUrl;
     }
 
     // Update content with success
@@ -146,6 +148,7 @@ async function retryStoryGeneration(contentId: number) {
         vocabularyTranslations: story.vocabularyTranslations as any,
         audioUrl,
         videoUrl,
+        thumbnailUrl,
         transcript,
         status: "completed",
         failureReason: null,
