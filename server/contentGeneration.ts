@@ -1163,8 +1163,55 @@ function buildNarrationTextFromSubtitleLines(subtitleTexts: string[]): string {
     .join(' ');
 }
 
+function buildFilmTranscript(storyText: string, subtitleEntries?: FilmSubtitleCue[]): string {
+  if (!subtitleEntries?.length) {
+    return storyText;
+  }
+
+  return JSON.stringify({
+    text: storyText,
+    segments: subtitleEntries.map((entry) => ({
+      startTime: entry.startTime,
+      endTime: entry.endTime,
+      text: entry.text,
+    })),
+  });
+}
+
+function isSubtitleTextCharacter(character: string): boolean {
+  if (/[0-9A-Za-z]/.test(character)) {
+    return true;
+  }
+
+  if (character.toLowerCase() !== character.toUpperCase()) {
+    return true;
+  }
+
+  const codePoint = character.codePointAt(0);
+  if (codePoint === undefined) {
+    return false;
+  }
+
+  return (
+    (codePoint >= 0x0590 && codePoint <= 0x05ff) || // Hebrew
+    (codePoint >= 0x0600 && codePoint <= 0x06ff) || // Arabic
+    (codePoint >= 0x0e00 && codePoint <= 0x0e7f) || // Thai
+    (codePoint >= 0x3040 && codePoint <= 0x30ff) || // Hiragana/Katakana
+    (codePoint >= 0x3400 && codePoint <= 0x9fff) || // CJK
+    (codePoint >= 0xac00 && codePoint <= 0xd7af) // Hangul
+  );
+}
+
+function normalizeSubtitleMatchCharacter(character: string): string {
+  return Array.from(character.normalize("NFKC").toLowerCase())
+    .filter(isSubtitleTextCharacter)
+    .join("");
+}
+
 function compactSubtitleMatchText(text: string): string {
-  return text.replace(/\s+/g, "").toLowerCase();
+  return Array.from(text)
+    .map(normalizeSubtitleMatchCharacter)
+    .join("");
 }
 
 function buildSubtitleCuesFromAlignment(
@@ -1183,9 +1230,12 @@ function buildSubtitleCuesFromAlignment(
   let compactAlignmentText = "";
 
   characters.forEach((character, index) => {
-    if (!/\s/.test(character)) {
-      compactAlignmentText += character.toLowerCase();
-      compactToAlignmentIndex.push(index);
+    const normalizedCharacter = normalizeSubtitleMatchCharacter(character);
+    if (normalizedCharacter) {
+      for (const part of Array.from(normalizedCharacter)) {
+        compactAlignmentText += part;
+        compactToAlignmentIndex.push(index);
+      }
     }
   });
 
@@ -1915,7 +1965,7 @@ export async function generateFilm(
       console.log('[Film Generation] Single clip, no stitching needed');
       return {
         videoUrl: clips[0].url,
-        transcript: storyText,
+        transcript: buildFilmTranscript(storyText, subtitleEntries),
         clipCount: 1,
         totalDuration: clipDuration,
         thumbnailUrl: firstSceneThumbnailUrl,
@@ -1951,7 +2001,7 @@ export async function generateFilm(
 
     return {
       videoUrl: stitchResult.videoUrl,
-      transcript: storyText,
+      transcript: buildFilmTranscript(storyText, subtitleEntries),
       clipCount: stitchResult.clipCount,
       totalDuration: stitchResult.duration,
       thumbnailUrl: firstSceneThumbnailUrl,

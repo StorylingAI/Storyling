@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -23,7 +23,6 @@ import {
   Edit2,
   Check,
   X,
-  Settings,
   FileText,
   Film,
   Video,
@@ -70,58 +69,12 @@ import { StoryDisplay } from "@/components/StoryDisplay";
 import { SentenceDisplay } from "@/components/SentenceDisplay";
 import { VocabularyTable } from "@/components/VocabularyTable";
 import Breadcrumb from "@/components/Breadcrumb";
-import { SubtitleCustomizationModal, SubtitleSettings } from "@/components/SubtitleCustomizationModal";
 import { PaywallModal } from "@/components/upgrade/PaywallModal";
 import { useUpgradeFlow } from "@/hooks/useUpgradeFlow";
 import { MobileNav } from "@/components/MobileNav";
 import { ShareStoryModal } from "@/components/ShareStoryModal";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { Crown, Lock } from "lucide-react";
-
-function splitVideoSubtitleLine(line: string, maxChars = 84): string[] {
-  if (line.length <= maxChars) {
-    return [line];
-  }
-
-  const words = line.split(/\s+/).filter(Boolean);
-  const chunks: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const next = current ? `${current} ${word}` : word;
-    if (next.length <= maxChars) {
-      current = next;
-      continue;
-    }
-
-    if (current) chunks.push(current);
-    current = word;
-  }
-
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-function buildVideoSubtitleLines(text?: string | null): string[] {
-  const cleanText = (text || "")
-    .replace(/\*\*(.+?)\*\*/g, "$1")
-    .replace(/\*(.+?)\*/g, "$1")
-    .replace(/_(.+?)_/g, "$1")
-    .replace(/~~(.+?)~~/g, "$1")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleanText) {
-    return [];
-  }
-
-  const sentenceLines = cleanText
-    .match(/[^.!?]+[.!?]?/g)
-    ?.map((line) => line.trim())
-    .filter(Boolean) ?? [cleanText];
-
-  return sentenceLines.flatMap((line) => splitVideoSubtitleLine(line));
-}
 
 export default function Content() {
   const [, params] = useRoute("/content/:id");
@@ -150,18 +103,6 @@ export default function Content() {
   const [progressLoaded, setProgressLoaded] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState("");
-  const [showSubtitleSettings, setShowSubtitleSettings] = useState(false);
-  const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => {
-    const saved = localStorage.getItem('subtitleSettings');
-    return saved ? JSON.parse(saved) : {
-      fontSize: 24,
-      position: "bottom" as const,
-      color: "#FFFFFF",
-      fontFamily: "Arial, sans-serif",
-      outlineThickness: 2,
-      backgroundOpacity: 0.7,
-    };
-  });
   const [videoQuality, setVideoQuality] = useState<'720p' | '1080p' | '4K'>(() => {
     const saved = localStorage.getItem('videoQuality');
     return (saved as '720p' | '1080p' | '4K') || '1080p';
@@ -178,6 +119,19 @@ export default function Content() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const qualityMenuRef = useRef<HTMLDivElement>(null);
   const autoThumbnailRequestedRef = useRef<number | null>(null);
+  const hasPlayedThisSessionRef = useRef(false);
+  const completionHandledForContentRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setShowCompletion(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setCurrentSentence(0);
+    setProgressLoaded(false);
+    setIsPlaying(false);
+    hasPlayedThisSessionRef.current = false;
+    completionHandledForContentRef.current = null;
+  }, [contentId]);
   
   // Close quality menu on outside click
   useEffect(() => {
@@ -200,33 +154,12 @@ export default function Content() {
   );
   
   const saveProgressMutation = trpc.storyProgress.saveProgress.useMutation();
-  const markCompletedMutation = trpc.storyProgress.markCompleted.useMutation();
   const recordWatchMutation = trpc.watchHistory.recordWatch.useMutation();
 
   const { data: content, isLoading } = trpc.content.getById.useQuery(
     { id: contentId },
     { enabled: isAuthenticated && contentId > 0 }
   );
-
-  const videoSubtitleLines = useMemo(() => {
-    if (content?.mode !== "film") {
-      return [];
-    }
-    return buildVideoSubtitleLines(content.transcript || content.storyText);
-  }, [content?.mode, content?.storyText, content?.transcript]);
-
-  const currentVideoSubtitle = useMemo(() => {
-    if (videoSubtitleLines.length === 0 || duration <= 0) {
-      return "";
-    }
-
-    const segmentDuration = duration / videoSubtitleLines.length;
-    const index = Math.min(
-      videoSubtitleLines.length - 1,
-      Math.max(0, Math.floor(currentTime / Math.max(segmentDuration, 0.1))),
-    );
-    return videoSubtitleLines[index] || "";
-  }, [currentTime, duration, videoSubtitleLines]);
 
   const { data: favorites } = trpc.content.getFavorites.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -472,39 +405,84 @@ export default function Content() {
     localStorage.setItem('playbackSpeed', speed.toString());
   };
 
+  const handleMediaPlay = () => {
+    hasPlayedThisSessionRef.current = true;
+    setIsPlaying(true);
+  };
+
+  const handlePlaybackCompleted = (media: HTMLAudioElement | HTMLVideoElement) => {
+    if (completionHandledForContentRef.current === contentId) {
+      return;
+    }
+
+    completionHandledForContentRef.current = contentId;
+    setShowCompletion(true);
+
+    saveProgressMutation.mutate({
+      contentId,
+      currentSentence,
+      currentTime: Number.isFinite(media.duration) ? media.duration : media.currentTime,
+      totalDuration: Number.isFinite(media.duration) ? media.duration : media.currentTime,
+      completed: true,
+    });
+
+    // Check if this is the first completed story for free users (upgrade trigger #1)
+    if (!isPremium) {
+      const shownKey = "storyling_upgrade_triggers";
+      try {
+        const shown = JSON.parse(localStorage.getItem(shownKey) || "{}");
+        if (!shown["first_story_completed"]) {
+          // Delay the upgrade modal to show after the completion celebration
+          setTimeout(() => {
+            setShowFirstStoryUpgrade(true);
+            shown["first_story_completed"] = true;
+            localStorage.setItem(shownKey, JSON.stringify(shown));
+          }, 3000);
+        }
+      } catch {}
+    }
+
+    recordWatchMutation.mutate({
+      contentId,
+      duration: media.currentTime,
+      completed: true,
+      progressPercentage: 100,
+    });
+  };
+
   const handleTimeUpdate = () => {
     const media = content?.mode === "podcast" ? audioRef.current : videoRef.current;
     if (!media) return;
     setCurrentTime(media.currentTime);
-    
-    // Check if completed (within 1 second of end)
-    if (media.duration - media.currentTime < 1 && !showCompletion) {
-      setShowCompletion(true);
-      // Mark as completed
-      markCompletedMutation.mutate({ contentId });
-      // Check if this is the first completed story for free users (upgrade trigger #1)
-      if (!isPremium) {
-        const shownKey = "storyling_upgrade_triggers";
-        try {
-          const shown = JSON.parse(localStorage.getItem(shownKey) || "{}");
-          if (!shown["first_story_completed"]) {
-            // Delay the upgrade modal to show after the completion celebration
-            setTimeout(() => {
-              setShowFirstStoryUpgrade(true);
-              shown["first_story_completed"] = true;
-              localStorage.setItem(shownKey, JSON.stringify(shown));
-            }, 3000);
-          }
-        } catch {}
-      }
-      // Record watch history
-      recordWatchMutation.mutate({
-        contentId,
-        duration: media.currentTime,
-        completed: true,
-        progressPercentage: 100,
-      });
+
+    const hasValidDuration = Number.isFinite(media.duration) && media.duration > 0;
+    const isNearEnd = hasValidDuration && media.duration - media.currentTime < 0.75;
+
+    if (isNearEnd && hasPlayedThisSessionRef.current) {
+      handlePlaybackCompleted(media);
     }
+  };
+
+  const handleMediaEnded = () => {
+    const media = content?.mode === "podcast" ? audioRef.current : videoRef.current;
+    setIsPlaying(false);
+    if (media && hasPlayedThisSessionRef.current) {
+      handlePlaybackCompleted(media);
+    }
+  };
+
+  const replayCurrentStory = () => {
+    const media = content?.mode === "podcast" ? audioRef.current : videoRef.current;
+    if (!media) return;
+
+    completionHandledForContentRef.current = null;
+    hasPlayedThisSessionRef.current = true;
+    setShowCompletion(false);
+    media.currentTime = 0;
+    setCurrentTime(0);
+    media.play().catch(() => {
+      setIsPlaying(false);
+    });
   };
   
   // Auto-save progress every 5 seconds during playback
@@ -514,6 +492,7 @@ export default function Content() {
     const interval = setInterval(() => {
       const media = content.mode === "podcast" ? audioRef.current : videoRef.current;
       if (!media) return;
+      if (completionHandledForContentRef.current === contentId) return;
       
       saveProgressMutation.mutate({
         contentId,
@@ -535,15 +514,33 @@ export default function Content() {
     // Apply saved playback speed
     media.playbackRate = playbackSpeed;
     
-    // Auto-resume from saved progress
+    // Auto-resume from saved progress, except completed stories: those should reopen ready to replay.
     if (savedProgress && !progressLoaded && savedProgress.currentTime > 0) {
-      media.currentTime = savedProgress.currentTime;
+      const savedTime = Number(savedProgress.currentTime) || 0;
+      const isSavedAtEnd =
+        Number.isFinite(media.duration) &&
+        media.duration > 0 &&
+        media.duration - savedTime < 1;
+
+      if (savedProgress.completed || isSavedAtEnd) {
+        media.currentTime = 0;
+        setCurrentTime(0);
+        setCurrentSentence(0);
+        setProgressLoaded(true);
+        return;
+      }
+
+      const resumeTime =
+        Number.isFinite(media.duration) && media.duration > 0
+          ? Math.min(savedTime, Math.max(0, media.duration - 1))
+          : savedTime;
+      media.currentTime = resumeTime;
       setCurrentSentence(savedProgress.currentSentence);
       setProgressLoaded(true);
-      
+
       // Show resume toast
-      const minutes = Math.floor(savedProgress.currentTime / 60);
-      const seconds = Math.floor(savedProgress.currentTime % 60);
+      const minutes = Math.floor(savedTime / 60);
+      const seconds = Math.floor(savedTime % 60);
       toast.info(`Resuming from ${minutes}:${seconds.toString().padStart(2, '0')}`);
     }
   };
@@ -832,6 +829,13 @@ export default function Content() {
 
             <CardContent className="pt-0 pb-6 space-y-2">
               <Button
+                onClick={replayCurrentStory}
+                className="w-full rounded-button gradient-primary text-white border-0 h-10 text-sm font-semibold"
+              >
+                <Play className="mr-2 h-4 w-4" />
+                Replay Story
+              </Button>
+              <Button
                 onClick={() => { setShowCompletion(false); setLocation("/create"); }}
                 className="w-full rounded-button text-muted-foreground hover:text-foreground transition-all h-10 text-sm"
                 variant="ghost"
@@ -985,11 +989,11 @@ export default function Content() {
                 <audio
                   ref={audioRef}
                   src={content.audioUrl}
-                  onPlay={() => setIsPlaying(true)}
+                  onPlay={handleMediaPlay}
                   onPause={() => setIsPlaying(false)}
                   onTimeUpdate={handleTimeUpdate}
                   onLoadedMetadata={handleLoadedMetadata}
-                  onEnded={() => setIsPlaying(false)}
+                  onEnded={handleMediaEnded}
                 />
               )}
             </>
@@ -1001,35 +1005,12 @@ export default function Content() {
                     ref={videoRef}
                     src={content.videoUrl}
                     className="w-full h-full"
-                    onPlay={() => setIsPlaying(true)}
+                    onPlay={handleMediaPlay}
                     onPause={() => setIsPlaying(false)}
                     onTimeUpdate={handleTimeUpdate}
                     onLoadedMetadata={handleLoadedMetadata}
-                    onEnded={() => setIsPlaying(false)}
+                    onEnded={handleMediaEnded}
                   />
-                )}
-                {currentVideoSubtitle && (
-                  <div
-                    className="pointer-events-none absolute left-4 right-4 z-20 flex justify-center text-center"
-                    style={{
-                      top: subtitleSettings.position === "top" ? "4.5rem" : undefined,
-                      bottom: subtitleSettings.position === "bottom" ? "2.75rem" : undefined,
-                    }}
-                  >
-                    <span
-                      className="max-w-[92%] rounded-md px-3 py-1.5 font-bold leading-snug"
-                      style={{
-                        color: subtitleSettings.color,
-                        fontFamily: subtitleSettings.fontFamily,
-                        fontSize: `clamp(16px, ${subtitleSettings.fontSize}px, 34px)`,
-                        whiteSpace: "pre-line",
-                        backgroundColor: `rgba(0, 0, 0, ${Math.min(1, Math.max(0, subtitleSettings.backgroundOpacity))})`,
-                        textShadow: `0 0 ${subtitleSettings.outlineThickness}px #000, 0 1px ${subtitleSettings.outlineThickness + 1}px #000`,
-                      }}
-                    >
-                      {currentVideoSubtitle}
-                    </span>
-                  </div>
                 )}
                 {/* Video Controls Overlay */}
                 <div className="absolute top-4 right-4 flex gap-2">
@@ -1059,9 +1040,6 @@ export default function Content() {
                   )}
                   <Button variant="ghost" size="icon" onClick={handleExportSubtitle} className="bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm" title="Download Subtitles (.srt)" disabled={exportSubtitleMutation.isPending}>
                     {exportSubtitleMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <FileText className="h-5 w-5" />}
-                  </Button>
-                  <Button variant="ghost" size="icon" onClick={() => setShowSubtitleSettings(true)} className="bg-black/50 hover:bg-black/70 text-white rounded-full backdrop-blur-sm" title="Subtitle Settings">
-                    <Settings className="h-5 w-5" />
                   </Button>
                 </div>
               </div>
@@ -1515,18 +1493,6 @@ export default function Content() {
           <ChevronUp className="h-4 w-4" />
         </button>
       )}
-
-      {/* Subtitle Customization Modal */}
-      <SubtitleCustomizationModal
-        isOpen={showSubtitleSettings}
-        onClose={() => setShowSubtitleSettings(false)}
-        settings={subtitleSettings}
-        onSettingsChange={(newSettings) => {
-          setSubtitleSettings(newSettings);
-          localStorage.setItem('subtitleSettings', JSON.stringify(newSettings));
-          toast.success("Subtitle settings updated!");
-        }}
-      />
 
       {/* Convert to Film Modal */}
       <Dialog open={showConvertToFilm} onOpenChange={setShowConvertToFilm}>

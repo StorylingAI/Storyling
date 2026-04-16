@@ -77,6 +77,21 @@ function estimateSubtitleWeight(text: string): number {
   return Math.max(1, words.length + sentenceBreaks * 2 + commas * 0.5 + characters / 20);
 }
 
+function estimateSubtitleGapAfter(text: string, totalDuration: number, sceneCount: number): number {
+  if (sceneCount <= 1) {
+    return 0;
+  }
+
+  const maxGap = Math.min(0.35, totalDuration / Math.max(sceneCount, 1) * 0.14);
+  if (/[.!?]["')\]]?\s*$/.test(text)) {
+    return Math.min(maxGap, 0.28);
+  }
+  if (/[,;:]["')\]]?\s*$/.test(text)) {
+    return Math.min(maxGap, 0.16);
+  }
+  return Math.min(maxGap, 0.08);
+}
+
 function buildSubtitleEntries(
   scenes: string[],
   clipDuration: number,
@@ -106,25 +121,41 @@ function buildSubtitleEntries(
     }));
   }
 
-  const weights = scenes.map(scene => estimateSubtitleWeight(scene.trim()));
+  const cleanScenes = scenes.map(scene => scene.trim());
+  const weights = cleanScenes.map(scene => estimateSubtitleWeight(scene));
   const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  const leadIn = Math.min(0.2, totalDuration * 0.01);
+  const rawGaps = cleanScenes.map((scene, index) =>
+    index === cleanScenes.length - 1
+      ? 0
+      : estimateSubtitleGapAfter(scene, totalDuration, cleanScenes.length),
+  );
+  const rawTotalGap = rawGaps.reduce((sum, gap) => sum + gap, 0);
+  const minReadableDuration = cleanScenes.length * 0.45;
+  const availableForGaps = Math.max(0, totalDuration - leadIn - minReadableDuration);
+  const gapScale = rawTotalGap > availableForGaps && rawTotalGap > 0
+    ? availableForGaps / rawTotalGap
+    : 1;
+  const gaps = rawGaps.map(gap => gap * gapScale);
+  const totalGap = gaps.reduce((sum, gap) => sum + gap, 0);
+  const spokenDuration = Math.max(0.1, totalDuration - leadIn - totalGap);
   const entries: SubtitleEntry[] = [];
-  let currentTime = 0;
+  let currentTime = leadIn;
 
-  scenes.forEach((scene, index) => {
+  cleanScenes.forEach((scene, index) => {
     const duration = index === scenes.length - 1
       ? Math.max(0, totalDuration - currentTime)
-      : (weights[index] / totalWeight) * totalDuration;
+      : (weights[index] / totalWeight) * spokenDuration;
     const endTime = index === scenes.length - 1 ? totalDuration : currentTime + duration;
 
     entries.push({
       index: index + 1,
       startTime: currentTime,
       endTime,
-      text: scene.trim(),
+      text: scene,
     });
 
-    currentTime = endTime;
+    currentTime = endTime + gaps[index];
   });
 
   return entries;
