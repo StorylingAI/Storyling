@@ -14,15 +14,27 @@ interface AudioAlignment {
   character_end_times_seconds: number[];
 }
 
+type StoryMediaRef =
+  | React.RefObject<HTMLAudioElement | null>
+  | React.RefObject<HTMLVideoElement | null>
+  | React.RefObject<HTMLMediaElement | null>;
+
+interface TimedSubtitleSegment {
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
 interface SentenceDisplayProps {
   storyText: string;
   vocabularyWords?: string[];
   storyLanguage?: string;
   lineTranslations?: Array<{ original: string; english: string; pinyin?: string }>;
-  audioRef?: React.RefObject<HTMLAudioElement | null>;
+  audioRef?: StoryMediaRef;
   isPlaying?: boolean;
   onSentenceChange?: (sentenceIndex: number) => void;
   audioAlignment?: AudioAlignment | null;
+  subtitleSegments?: TimedSubtitleSegment[];
 }
 
 export function SentenceDisplay({
@@ -34,6 +46,7 @@ export function SentenceDisplay({
   isPlaying,
   onSentenceChange,
   audioAlignment,
+  subtitleSegments,
 }: SentenceDisplayProps) {
   
   const { data: user } = trpc.auth.me.useQuery();
@@ -64,6 +77,23 @@ export function SentenceDisplay({
   const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const wordAudioRef = useRef<HTMLAudioElement | null>(null);
   const characterAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const timedSubtitleSegments = useMemo(() => {
+    return (subtitleSegments || [])
+      .map((segment) => ({
+        startTime: Number(segment.startTime),
+        endTime: Number(segment.endTime),
+        text: segment.text.replace(/\s+/g, ' ').trim(),
+      }))
+      .filter(
+        (segment) =>
+          Number.isFinite(segment.startTime) &&
+          Number.isFinite(segment.endTime) &&
+          segment.endTime > segment.startTime &&
+          segment.text.length > 0,
+      )
+      .sort((a, b) => a.startTime - b.startTime);
+  }, [subtitleSegments]);
   
   // Track audio duration changes
   useEffect(() => {
@@ -85,6 +115,10 @@ export function SentenceDisplay({
 
   // Split story into sentences
   const sentences = useMemo(() => {
+    if (timedSubtitleSegments.length > 0) {
+      return timedSubtitleSegments.map((segment) => segment.text);
+    }
+
     // Split by sentence boundaries (English: . ! ? and Chinese: 。！？)
     const sentenceArray = storyText
       .split(/([.!?。！？]+)/)
@@ -98,16 +132,20 @@ export function SentenceDisplay({
       .filter((s) => s.length > 0);
     
     return sentenceArray.length > 0 ? sentenceArray : [storyText];
-  }, [storyText]);
+  }, [storyText, timedSubtitleSegments]);
 
   // Build a clean text version that matches what ElevenLabs received
   const cleanStoryText = useMemo(() => {
-    return storyText
+    const timingText = timedSubtitleSegments.length > 0
+      ? timedSubtitleSegments.map((segment) => segment.text).join(' ')
+      : storyText;
+
+    return timingText
       .replace(/\*\*(.+?)\*\*/g, '$1')
       .replace(/\*(.+?)\*/g, '$1')
       .replace(/_(.+?)_/g, '$1')
       .replace(/~~(.+?)~~/g, '$1');
-  }, [storyText]);
+  }, [storyText, timedSubtitleSegments]);
 
   const safeAudioAlignment = useMemo(() => {
     if (
@@ -142,7 +180,19 @@ export function SentenceDisplay({
 
   // Calculate sentence timestamps using real alignment data or improved weighted fallback
   const sentenceTimestamps = useMemo(() => {
-    if (!audioDuration || !sentences.length) {
+    if (!sentences.length) {
+      return [];
+    }
+
+    if (timedSubtitleSegments.length > 0) {
+      return timedSubtitleSegments.map((segment) => ({
+        sentence: segment.text,
+        startTime: segment.startTime,
+        endTime: segment.endTime,
+      }));
+    }
+
+    if (!audioDuration) {
       return [];
     }
 
@@ -257,7 +307,7 @@ export function SentenceDisplay({
     });
     
     return timestamps;
-  }, [sentences, storyText, cleanStoryText, audioDuration, safeAudioAlignment]);
+  }, [sentences, storyText, cleanStoryText, audioDuration, safeAudioAlignment, timedSubtitleSegments]);
 
 
   // Update current sentence based on audio time
@@ -351,7 +401,7 @@ export function SentenceDisplay({
 
   // Calculate word timestamps within current sentence
   const wordTimestamps = useMemo(() => {
-    if (!audioRef?.current?.duration || !sentenceTimestamps[currentSentenceIndex]) {
+    if (!sentenceTimestamps[currentSentenceIndex]) {
       return [];
     }
 

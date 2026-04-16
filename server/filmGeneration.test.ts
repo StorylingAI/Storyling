@@ -623,6 +623,80 @@ describe('generateFilm NSFW retry', () => {
       }),
     );
   });
+
+  it('should return timestamped transcript and audio alignment for film narration', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A traveler walks calmly toward a station.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/clip-with-timestamps.mp4',
+      status: 'completed',
+      requestId: 'clip-timestamps',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/final-with-timestamps.mp4',
+      duration: 8,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    const expectedSubtitleLines = [
+      'Bonjour Marie.',
+      'Elle marche vers la gare avec son sac.',
+    ];
+    const narrationText = expectedSubtitleLines.join(' ');
+    const normalizedAlignment = {
+      characters: Array.from(narrationText),
+      character_start_times_seconds: Array.from(narrationText).map((_, index) => index * 0.05),
+      character_end_times_seconds: Array.from(narrationText).map((_, index) => index * 0.05 + 0.04),
+    };
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        audio_base64: Buffer.from([1, 2, 3]).toString('base64'),
+        normalized_alignment: normalizedAlignment,
+      }),
+    }));
+
+    const result = await generateFilm(
+      {
+        targetLanguage: 'French',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['gare'],
+        theme: 'Adventure',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Bonjour **Marie**. Elle marche vers la gare avec son sac.',
+    );
+
+    const transcript = JSON.parse(result.transcript);
+
+    expect(result.audioAlignment).toEqual(normalizedAlignment);
+    expect(transcript.segments).toHaveLength(2);
+    expect(transcript.segments.map((segment: any) => segment.text)).toEqual(expectedSubtitleLines);
+    expect(mockedStitchVideos).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        subtitleEntries: expect.arrayContaining([
+          expect.objectContaining({ text: expectedSubtitleLines[0] }),
+          expect.objectContaining({ text: expectedSubtitleLines[1] }),
+        ]),
+      }),
+    );
+  });
 });
 
 describe('generateCharacterSheet', () => {

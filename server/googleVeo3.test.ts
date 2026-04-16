@@ -69,7 +69,7 @@ describe("Google Veo 3 via Replicate", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://api.replicate.com/v1/models/google/veo-3/predictions",
+      "https://api.replicate.com/v1/models/google/veo-3-fast/predictions",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({

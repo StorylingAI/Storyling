@@ -1,7 +1,7 @@
 import { storagePut } from "server/storage";
 
 const REPLICATE_API_BASE = "https://api.replicate.com/v1";
-const DEFAULT_VEO3_MODEL = "google/veo-3";
+const DEFAULT_VEO3_MODEL = "google/veo-3-fast";
 const DEFAULT_NANO_BANANA_2_MODEL = "google/nano-banana-2";
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const DEFAULT_SYNC_WAIT_SECONDS = 10;

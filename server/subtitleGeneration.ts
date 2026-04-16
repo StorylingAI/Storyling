@@ -92,7 +92,7 @@ function estimateSubtitleGapAfter(text: string, totalDuration: number, sceneCoun
   return Math.min(maxGap, 0.08);
 }
 
-function buildSubtitleEntries(
+export function buildSubtitleEntries(
   scenes: string[],
   clipDuration: number,
   timingOptions?: SubtitleTimingOptions,

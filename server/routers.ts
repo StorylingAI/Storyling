@@ -820,6 +820,9 @@ export const appRouter = router({
               );
               videoUrl = film.videoUrl;
               transcript = film.transcript;
+              if (film.audioAlignment) {
+                audioAlignment = film.audioAlignment;
+              }
               thumbnailUrl = film.thumbnailUrl || thumbnailUrl;
               if (!thumbnailUrl) {
                 try {
@@ -2317,6 +2320,7 @@ Return a JSON array where each element has:
               videoUrl: film.videoUrl,
               thumbnailUrl: film.thumbnailUrl || sourceContent.thumbnailUrl,
               transcript: film.transcript,
+              audioAlignment: film.audioAlignment || null,
               status: "completed",
               progress: 100,
               progressStage: "Completed",

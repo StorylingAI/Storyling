@@ -8,6 +8,7 @@ import {
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
+import { buildSubtitleEntries } from "./subtitleGeneration";
 
 interface StoryGenerationParams {
   targetLanguage: string;
@@ -49,6 +50,7 @@ type FilmGenerationResult = {
   clipCount?: number;
   totalDuration?: number;
   thumbnailUrl?: string;
+  audioAlignment?: ElevenLabsAlignment;
 };
 
 type FilmSubtitleCue = {
@@ -1280,6 +1282,24 @@ function buildSubtitleCuesFromAlignment(
   return cues.length > 0 ? cues : undefined;
 }
 
+function buildEstimatedSubtitleCues(
+  subtitleTexts: string[],
+  clipDuration: number,
+  totalDuration: number,
+): FilmSubtitleCue[] | undefined {
+  const entries = buildSubtitleEntries(subtitleTexts, clipDuration, { totalDuration });
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  return entries.map((entry) => ({
+    startTime: entry.startTime,
+    endTime: entry.endTime,
+    text: entry.text,
+  }));
+}
+
 function formatGenerationError(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -1611,6 +1631,7 @@ export async function generateFilm(
   let narrationAudioPath: string | undefined;
   let narrationDuration: number | undefined;
   let subtitleEntries: FilmSubtitleCue[] | undefined;
+  let narrationAudioAlignment: ElevenLabsAlignment | undefined;
   let videoProvider: "replicate" | "higgsfield" = "replicate";
 
   try {
@@ -1696,9 +1717,10 @@ export async function generateFilm(
               const timestampResult = await timestampResponse.json() as ElevenLabsTimestampResponse;
               if (timestampResult.audio_base64) {
                 audioData = Buffer.from(timestampResult.audio_base64, 'base64');
+                narrationAudioAlignment = timestampResult.normalized_alignment || timestampResult.alignment;
                 subtitleEntries = buildSubtitleCuesFromAlignment(
                   subtitleTexts,
-                  timestampResult.normalized_alignment || timestampResult.alignment,
+                  narrationAudioAlignment,
                 );
 
                 if (!subtitleEntries) {
@@ -1757,6 +1779,14 @@ export async function generateFilm(
       } catch (ttsError) {
         console.error('[Film Generation] TTS generation failed, continuing without narration:', ttsError);
       }
+    }
+
+    if (!subtitleEntries && subtitleTexts.length > 0) {
+      subtitleEntries = buildEstimatedSubtitleCues(
+        subtitleTexts,
+        clipDuration,
+        narrationDuration || plannedVideoDuration,
+      );
     }
 
     // Step 2: Generate character sheet for visual consistency
@@ -1969,6 +1999,7 @@ export async function generateFilm(
         clipCount: 1,
         totalDuration: clipDuration,
         thumbnailUrl: firstSceneThumbnailUrl,
+        audioAlignment: narrationAudioAlignment,
       };
     }
 
@@ -2005,6 +2036,7 @@ export async function generateFilm(
       clipCount: stitchResult.clipCount,
       totalDuration: stitchResult.duration,
       thumbnailUrl: firstSceneThumbnailUrl,
+      audioAlignment: narrationAudioAlignment,
     };
 
   } catch (error) {

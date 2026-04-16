@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -75,6 +75,46 @@ import { MobileNav } from "@/components/MobileNav";
 import { ShareStoryModal } from "@/components/ShareStoryModal";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { Crown, Lock } from "lucide-react";
+
+type FilmSubtitleSegment = {
+  startTime: number;
+  endTime: number;
+  text: string;
+};
+
+function parseFilmSubtitleSegments(transcript?: string | null): FilmSubtitleSegment[] {
+  if (!transcript) return [];
+
+  try {
+    const parsed = JSON.parse(transcript) as {
+      segments?: Array<{
+        startTime?: unknown;
+        endTime?: unknown;
+        text?: unknown;
+      }>;
+    };
+
+    if (!Array.isArray(parsed.segments)) {
+      return [];
+    }
+
+    return parsed.segments
+      .map((segment) => ({
+        startTime: Number(segment.startTime),
+        endTime: Number(segment.endTime),
+        text: typeof segment.text === "string" ? segment.text.trim() : "",
+      }))
+      .filter(
+        (segment) =>
+          Number.isFinite(segment.startTime) &&
+          Number.isFinite(segment.endTime) &&
+          segment.endTime > segment.startTime &&
+          segment.text.length > 0,
+      );
+  } catch {
+    return [];
+  }
+}
 
 export default function Content() {
   const [, params] = useRoute("/content/:id");
@@ -159,6 +199,11 @@ export default function Content() {
   const { data: content, isLoading } = trpc.content.getById.useQuery(
     { id: contentId },
     { enabled: isAuthenticated && contentId > 0 }
+  );
+
+  const filmSubtitleSegments = useMemo(
+    () => (content?.mode === "film" ? parseFilmSubtitleSegments(content.transcript) : []),
+    [content?.mode, content?.transcript],
   );
 
   const { data: favorites } = trpc.content.getFavorites.useQuery(undefined, {
@@ -1097,19 +1142,21 @@ export default function Content() {
       {/* ===== V2 BODY SECTION ===== */}
       <div className="max-w-5xl mx-auto px-4 sm:px-8 pt-8 pb-32">
         {/* Sentence Display Card */}
-        {content.mode === "podcast" && (
+        {(content.mode === "podcast" || content.mode === "film") && (
           <div className="mb-4">
             <Card className="rounded-2xl shadow-lg border-0 bg-gradient-to-br from-purple-50/80 to-pink-50/80 overflow-hidden">
               <CardContent className="p-0">
                 <SentenceDisplay
+                  key={`${content.id}-${content.mode}`}
                   storyText={content.storyText}
                   vocabularyWords={content.vocabularyWords || []}
                   storyLanguage={content.targetLanguage}
                   lineTranslations={content.lineTranslations as any}
-                  audioRef={audioRef}
+                  audioRef={content.mode === "podcast" ? audioRef : videoRef}
                   isPlaying={isPlaying}
                   onSentenceChange={setCurrentSentence}
                   audioAlignment={content.audioAlignment as any}
+                  subtitleSegments={content.mode === "film" ? filmSubtitleSegments : undefined}
                 />
               </CardContent>
             </Card>
