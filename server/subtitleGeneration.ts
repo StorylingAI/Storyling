@@ -116,6 +116,26 @@ function buildSubtitleEntries(
   return entries;
 }
 
+function wrapSubtitleText(text: string, maxLineChars = 42): string {
+  const words = text.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxLineChars) {
+      current = next;
+      continue;
+    }
+
+    if (current) lines.push(current);
+    current = word;
+  }
+
+  if (current) lines.push(current);
+  return lines.join('\n');
+}
+
 /**
  * Generate SRT subtitle file from scene text and timestamps
  * 
@@ -141,7 +161,7 @@ export async function generateSubtitleFile(
     const startTime = formatSRTTime(entry.startTime);
     const endTime = formatSRTTime(entry.endTime);
     
-    return `${entry.index}\n${startTime} --> ${endTime}\n${entry.text}\n`;
+    return `${entry.index}\n${startTime} --> ${endTime}\n${wrapSubtitleText(entry.text)}\n`;
   }).join('\n');
 
   // Write to file

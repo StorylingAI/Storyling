@@ -28,7 +28,13 @@ export function UserAvatar({
 }: UserAvatarProps) {
   return (
     <Avatar className={cn("border", className)}>
-      {avatarUrl ? <AvatarImage src={avatarUrl} alt={name || "User avatar"} className="object-cover" /> : null}
+      {avatarUrl ? (
+        <AvatarImage
+          src={avatarUrl}
+          alt={name || "User avatar"}
+          className="bg-white object-contain p-0.5"
+        />
+      ) : null}
       <AvatarFallback
         className={cn(
           "bg-gradient-to-br from-purple-400 via-pink-400 to-orange-400 text-white font-semibold",

@@ -120,10 +120,10 @@ function buildSubtitleStyle(
   position: 'top' | 'bottom',
   color: 'white' | 'yellow' | 'cyan'
 ): SubtitleStyle {
-  const fontSizeMap = { small: 18, medium: 24, large: 32 };
+  const fontSizeMap = { small: 34, medium: 42, large: 54 };
   const colorMap = { white: '&H00FFFFFF', yellow: '&H0000FFFF', cyan: '&H00FFFF00' };
   const alignmentMap = { top: 8, bottom: 2 };
-  const marginMap = { top: 20, bottom: 20 };
+  const marginMap = { top: 64, bottom: 72 };
 
   return {
     fontName: 'Arial',
@@ -134,8 +134,8 @@ function buildSubtitleStyle(
     bold: true,
     italic: false,
     borderStyle: 1,
-    outline: 2,
-    shadow: 0,
+    outline: 3,
+    shadow: 1,
     alignment: alignmentMap[position],
     marginV: marginMap[position],
     backgroundOpacity: 0,

@@ -4,6 +4,10 @@ import { getDb } from './db';
 import { chatConversations, chatMessages } from '../drizzle/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import OpenAI from 'openai';
+import {
+  getSpanishDialectInstruction,
+  normalizeLearningLanguage,
+} from '@shared/languagePreferences';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -32,13 +36,15 @@ function buildSystemPrompt(context: {
   page?: string;
 }): string {
   let prompt = BOOKI_PERSONA + '\n\n';
+  const practiceLanguage = normalizeLearningLanguage(context.language);
+  const dialectInstruction = getSpanishDialectInstruction(practiceLanguage);
 
   // Add page/context awareness
   if (context.storyTitle) {
     prompt += `CURRENT STORY CONTEXT:
 - Story title: "${context.storyTitle}"${context.storyTranslation ? ` (${context.storyTranslation})` : ''}
 - Theme: ${context.storyTheme || 'General'}
-- Language: ${context.language || 'Unknown'}
+- Language: ${practiceLanguage || 'Unknown'}
 - User's level: ${context.level || 'Intermediate'}
 ${context.currentSentence ? `- Current sentence: "${context.currentSentence}"` : ''}
 ${context.currentSentenceTranslation ? `- Translation: "${context.currentSentenceTranslation}"` : ''}
@@ -46,7 +52,7 @@ ${context.vocabularyWords && context.vocabularyWords.length > 0 ? `- Key vocabul
 
 You can help the user:
 1. Understand vocabulary and grammar from the story
-2. Practice speaking/writing in ${context.language || 'the target language'}
+2. Practice speaking/writing in ${practiceLanguage || 'the target language'}
 3. Answer questions about the story content
 4. Explain cultural context related to the story
 5. Quiz them on vocabulary they've learned
@@ -81,13 +87,15 @@ You can help the user:
   // Mode-specific instructions
   if (context.mode === 'languagePractice' && context.language) {
     prompt += `LANGUAGE PRACTICE MODE:
-You are helping the user practice ${context.language} at ${context.level || 'intermediate'} level.
-- Engage in natural conversation in ${context.language}
+You are helping the user practice ${practiceLanguage} at ${context.level || 'intermediate'} level.
+- Engage in natural conversation in ${practiceLanguage}
+- Your main reply language must be ${practiceLanguage}; do not default to English.
+- Use English only for short corrections, translations, or explanations when it helps.
+- If the user writes in English, answer first in ${practiceLanguage}, then add a brief English gloss.
+${dialectInstruction ? `- Dialect: ${dialectInstruction}` : ''}
 - Gently correct grammar and vocabulary mistakes
 - Adjust complexity to match their level (${context.level || 'intermediate'})
-- Provide English explanations when needed
 - Celebrate their progress and encourage them
-- If they write in English, respond in both ${context.language} and English to model the language
 
 `;
   } else if (context.mode === 'support') {
@@ -133,6 +141,7 @@ export const chatbotRouter = router({
     .query(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new Error('Database unavailable');
+      const language = normalizeLearningLanguage(input.language || 'English');
       
       const existing = await db
         .select()
@@ -141,7 +150,7 @@ export const chatbotRouter = router({
           and(
             eq(chatConversations.userId, ctx.user.id),
             eq(chatConversations.mode, input.mode),
-            input.language ? eq(chatConversations.language, input.language) : undefined
+            eq(chatConversations.language, language)
           )
         )
         .orderBy(desc(chatConversations.updatedAt))
@@ -166,7 +175,7 @@ export const chatbotRouter = router({
         .values({
           userId: ctx.user.id,
           mode: input.mode,
-          language: input.language || 'English',
+          language,
           level: input.level || 'intermediate',
         });
       

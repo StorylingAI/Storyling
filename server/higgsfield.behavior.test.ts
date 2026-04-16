@@ -22,6 +22,7 @@ describe("generateHiggsfieldVideo storage behavior", () => {
     vi.useFakeTimers();
     process.env.HIGGSFIELD_API_KEY_ID = "123e4567-e89b-12d3-a456-426614174000";
     process.env.HIGGSFIELD_API_KEY_SECRET = "a".repeat(64);
+    delete process.env.HIGGSFIELD_IMAGE_REFERENCE_FIELD;
   });
 
   afterEach(() => {
@@ -64,6 +65,15 @@ describe("generateHiggsfieldVideo storage behavior", () => {
     });
     expect(storagePutMock).not.toHaveBeenCalled();
     expect(axiosGet).toHaveBeenCalledTimes(2);
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("/bytedance/seedream/v4/text-to-image"),
+      expect.objectContaining({
+        resolution: "2K",
+        camera_fixed: false,
+      }),
+      expect.any(Object),
+    );
   });
 
   it("should ignore extra character reference images because DoP accepts a single input image", async () => {
@@ -109,6 +119,278 @@ describe("generateHiggsfieldVideo storage behavior", () => {
             { type: "image_url", image_url: "https://cloud.example.com/generated-image.png" },
           ],
         }),
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("should fall back when a configured image model is not exposed by the Higgsfield API", async () => {
+    process.env.HIGGSFIELD_IMAGE_REFERENCE_FIELD = "image_urls";
+
+    axiosPost
+      .mockRejectedValueOnce({
+        response: {
+          status: 404,
+          data: { detail: "Model not found" },
+        },
+      })
+      .mockResolvedValueOnce({ data: { request_id: "image-req" } });
+    axiosGet.mockResolvedValueOnce({
+      data: {
+        status: "completed",
+        images: [{ url: "https://cloud.example.com/fallback-image.png" }],
+      },
+    });
+
+    const { generateHiggsfieldImage } = await import("./higgsfield");
+
+    const resultPromise = generateHiggsfieldImage({
+      prompt: "Pixar-like young fox character in a meadow",
+      modelId: "/nano-banana-2",
+      fallbackModelIds: ["bytedance/seedream/v4/edit"],
+      resolution: "2K",
+      aspectRatio: "16:9",
+      referenceImageUrls: [
+        "https://cloud.example.com/character-ref.png",
+        "https://cloud.example.com/previous-scene.png",
+      ],
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result).toEqual({
+      imageUrl: "https://cloud.example.com/fallback-image.png",
+      requestId: "image-req",
+    });
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      1,
+      "https://platform.higgsfield.ai/nano-banana-2",
+      expect.any(Object),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      2,
+      "https://platform.higgsfield.ai/bytedance/seedream/v4/edit",
+      expect.objectContaining({
+        prompt: "Pixar-like young fox character in a meadow",
+        aspect_ratio: "16:9",
+        resolution: "2K",
+        camera_fixed: false,
+        image_urls: [
+          "https://cloud.example.com/character-ref.png",
+          "https://cloud.example.com/previous-scene.png",
+        ],
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("should try the next image model when a model rejects its payload", async () => {
+    axiosPost
+      .mockRejectedValueOnce({
+        response: {
+          status: 422,
+          statusText: "Unprocessable Entity",
+          data: { detail: "Invalid request parameters" },
+        },
+      })
+      .mockResolvedValueOnce({ data: { request_id: "fallback-image-req" } });
+    axiosGet.mockResolvedValueOnce({
+      data: {
+        status: "completed",
+        images: [{ url: "https://cloud.example.com/reve-image.png" }],
+      },
+    });
+
+    const { generateHiggsfieldImage } = await import("./higgsfield");
+
+    const resultPromise = generateHiggsfieldImage({
+      prompt: "A warm animated forest path",
+      modelId: "bytedance/seedream/v4/text-to-image",
+      fallbackModelIds: ["reve/text-to-image"],
+      resolution: "2K",
+      aspectRatio: "16:9",
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.imageUrl).toBe("https://cloud.example.com/reve-image.png");
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      1,
+      "https://platform.higgsfield.ai/bytedance/seedream/v4/text-to-image",
+      expect.objectContaining({
+        prompt: "A warm animated forest path",
+        camera_fixed: false,
+      }),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      2,
+      "https://platform.higgsfield.ai/reve/text-to-image",
+      expect.objectContaining({
+        prompt: "A warm animated forest path",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("should try the next accepted image model when a submitted image job fails", async () => {
+    axiosPost
+      .mockResolvedValueOnce({ data: { request_id: "reve-image-req" } })
+      .mockResolvedValueOnce({ data: { request_id: "soul-image-req" } });
+
+    axiosGet.mockImplementation(async (url: string) => {
+      if (url.includes("/requests/reve-image-req/status")) {
+        return {
+          data: {
+            status: "failed",
+            error: "Generation failed",
+          },
+        };
+      }
+
+      if (url.includes("/requests/soul-image-req/status")) {
+        return {
+          data: {
+            status: "completed",
+            images: [{ url: "https://cloud.example.com/soul-image.png" }],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    const { generateHiggsfieldImage } = await import("./higgsfield");
+
+    const resultPromise = generateHiggsfieldImage({
+      prompt: "A cheerful animated woodland picnic",
+      modelId: "reve/text-to-image",
+      fallbackModelIds: ["higgsfield-ai/soul/standard"],
+      resolution: "2K",
+      aspectRatio: "16:9",
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result).toEqual({
+      imageUrl: "https://cloud.example.com/soul-image.png",
+      requestId: "soul-image-req",
+    });
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      1,
+      "https://platform.higgsfield.ai/reve/text-to-image",
+      expect.objectContaining({
+        resolution: "2K",
+      }),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      2,
+      "https://platform.higgsfield.ai/higgsfield-ai/soul/standard",
+      expect.objectContaining({
+        resolution: "1080p",
+      }),
+      expect.any(Object),
+    );
+  });
+
+  it("should not retry request-rejected image models after an accepted model fails", async () => {
+    axiosPost
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          statusText: "Bad Request",
+          data: { detail: "resolution: '1K' is not one of ['2K', '4K']" },
+        },
+      })
+      .mockRejectedValueOnce({
+        response: {
+          status: 400,
+          statusText: "Bad Request",
+          data: { detail: "resolution: '1K' is not one of ['2K', '4K']" },
+        },
+      })
+      .mockResolvedValueOnce({ data: { request_id: "reve-image-req" } })
+      .mockResolvedValueOnce({ data: { request_id: "soul-image-req" } });
+
+    axiosGet.mockImplementation(async (url: string) => {
+      if (url.includes("/requests/reve-image-req/status")) {
+        return {
+          data: {
+            status: "failed",
+            error: "Generation failed",
+          },
+        };
+      }
+
+      if (url.includes("/requests/soul-image-req/status")) {
+        return {
+          data: {
+            status: "completed",
+            images: [{ url: "https://cloud.example.com/soul-image.png" }],
+          },
+        };
+      }
+
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    const { generateHiggsfieldImage } = await import("./higgsfield");
+
+    const resultPromise = generateHiggsfieldImage({
+      prompt: "A finished animation keyframe in a tranquil forest",
+      modelId: "bytedance/seedream/v4/edit",
+      fallbackModelIds: [
+        "bytedance/seedream/v4/text-to-image",
+        "reve/text-to-image",
+        "higgsfield-ai/soul/standard",
+      ],
+      resolution: "1K",
+      aspectRatio: "16:9",
+      referenceImageUrls: [
+        "https://cloud.example.com/character-ref.png",
+        "https://cloud.example.com/previous-scene.png",
+      ],
+    });
+
+    await vi.runAllTimersAsync();
+    const result = await resultPromise;
+
+    expect(result.imageUrl).toBe("https://cloud.example.com/soul-image.png");
+    expect(axiosPost).toHaveBeenCalledTimes(4);
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      1,
+      "https://platform.higgsfield.ai/bytedance/seedream/v4/edit",
+      expect.objectContaining({
+        resolution: "2K",
+      }),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      2,
+      "https://platform.higgsfield.ai/bytedance/seedream/v4/text-to-image",
+      expect.objectContaining({
+        resolution: "2K",
+      }),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      3,
+      "https://platform.higgsfield.ai/reve/text-to-image",
+      expect.objectContaining({
+        resolution: "2K",
+      }),
+      expect.any(Object),
+    );
+    expect(axiosPost).toHaveBeenNthCalledWith(
+      4,
+      "https://platform.higgsfield.ai/higgsfield-ai/soul/standard",
+      expect.objectContaining({
+        resolution: "1080p",
       }),
       expect.any(Object),
     );
@@ -167,13 +449,13 @@ describe("generateHiggsfieldVideo storage behavior", () => {
     expect(firstImagePollCount).toBeGreaterThanOrEqual(75);
     expect(axiosPost).toHaveBeenNthCalledWith(
       1,
-      expect.stringContaining("/higgsfield-ai/soul/standard"),
+      expect.stringContaining("/bytedance/seedream/v4/text-to-image"),
       expect.any(Object),
       expect.any(Object),
     );
     expect(axiosPost).toHaveBeenNthCalledWith(
       2,
-      expect.stringContaining("/higgsfield-ai/soul/standard"),
+      expect.stringContaining("/bytedance/seedream/v4/text-to-image"),
       expect.any(Object),
       expect.any(Object),
     );

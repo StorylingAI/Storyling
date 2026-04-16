@@ -65,9 +65,9 @@ describe('Subtitle Generation Module', () => {
     expect(content).toContain('1\n00:00:00,000 --> 00:00:05,000');
     expect(content).toContain('This is the first scene of our story.');
     expect(content).toContain('2\n00:00:05,000 --> 00:00:10,000');
-    expect(content).toContain('Here comes the second scene with more action.');
+    expect(content).toContain('Here comes the second scene with more\naction.');
     expect(content).toContain('3\n00:00:10,000 --> 00:00:15,000');
-    expect(content).toContain('Finally, the third scene brings everything together.');
+    expect(content).toContain('Finally, the third scene brings everything\ntogether.');
     
     // Cleanup
     await fs.unlink(srtPath).catch(() => {});

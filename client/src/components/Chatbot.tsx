@@ -7,6 +7,11 @@ import {
   Star, ArrowRight, LogIn
 } from 'lucide-react';
 import { getLoginUrl, getSignUpUrl } from '@/const';
+import {
+  LATAM_SPANISH_LABEL,
+  normalizeLearningLanguage,
+  SPAIN_SPANISH_LABEL,
+} from '@shared/languagePreferences';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +94,26 @@ const QUICK_CHIPS: Record<string, string[]> = {
     "Translate this for me",
   ],
 };
+
+const PRACTICE_LANGUAGES = [
+  SPAIN_SPANISH_LABEL,
+  LATAM_SPANISH_LABEL,
+  "French",
+  "German",
+  "Italian",
+  "Portuguese",
+  "Chinese (Mandarin)",
+  "Japanese",
+  "Korean",
+  "Arabic",
+  "Hebrew",
+  "Russian",
+  "Hindi",
+  "Persian (Farsi)",
+  "Turkish",
+  "Dutch",
+  "English",
+];
 
 function getGuestReply(question: string, mode: GuestChatMode): string {
   const normalized = question.toLowerCase();
@@ -190,9 +215,20 @@ export function Chatbot({ context }: ChatbotProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   const isAuthenticated = context?.isAuthenticated ?? false;
+  const { data: userData } = trpc.auth.me.useQuery(undefined, {
+    enabled: isAuthenticated,
+  });
 
   // Default mode depends on auth state
   const [mode, setMode] = useState<ChatMode>(isAuthenticated ? 'general' : 'support');
+  const [practiceLanguage, setPracticeLanguage] = useState(() =>
+    normalizeLearningLanguage(context?.storyLanguage || "es")
+  );
+
+  const conversationLanguage =
+    mode === 'languagePractice'
+      ? practiceLanguage
+      : context?.storyLanguage || 'English';
 
   // Keep mode in sync when auth state changes
   useEffect(() => {
@@ -206,6 +242,23 @@ export function Chatbot({ context }: ChatbotProps) {
       setConversationId(null);
     }
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const nextLanguage = normalizeLearningLanguage(
+      context?.storyLanguage || userData?.preferredLanguage || "es"
+    );
+    setPracticeLanguage((current) => {
+      if (context?.storyLanguage) return nextLanguage;
+      if (
+        userData?.preferredLanguage &&
+        nextLanguage !== "English" &&
+        current === SPAIN_SPANISH_LABEL
+      ) {
+        return nextLanguage;
+      }
+      return current || nextLanguage;
+    });
+  }, [context?.storyLanguage, userData?.preferredLanguage]);
 
   const utils = trpc.useUtils();
 
@@ -225,7 +278,7 @@ export function Chatbot({ context }: ChatbotProps) {
   const { data: conversationData, isLoading: loadingConversation } = trpc.chatbot.getConversation.useQuery(
     {
       mode: (mode === 'faq' || mode === 'demo') ? 'support' : (mode as AppChatMode),
-      language: context?.storyLanguage || 'English',
+      language: conversationLanguage,
       level: context?.userLevel || 'intermediate',
     },
     { enabled: isAuthenticated && isOpen && !shouldHide }
@@ -286,11 +339,19 @@ export function Chatbot({ context }: ChatbotProps) {
     sendMessageMutation.mutate({
       conversationId,
       message: msgText,
-      context: context || { page: location },
+      context: {
+        ...(context || {}),
+        page: context?.page || location,
+        storyLanguage:
+          mode === 'languagePractice'
+            ? practiceLanguage
+            : context?.storyLanguage,
+        userLevel: context?.userLevel || 'intermediate',
+      },
     });
 
     setMessage('');
-  }, [conversationId, sendMessageMutation, context, location]);
+  }, [conversationId, sendMessageMutation, context, location, mode, practiceLanguage]);
 
   const sendGuestMessage = useCallback((msgText: string) => {
     const userMessage: Message = {
@@ -366,6 +427,14 @@ export function Chatbot({ context }: ChatbotProps) {
     setQueuedMessage(null);
   };
 
+  const handlePracticeLanguageChange = (newLanguage: string) => {
+    setPracticeLanguage(newLanguage);
+    setMessages([]);
+    setConversationId(null);
+    setQueuedMessage(null);
+    utils.chatbot.getConversation.invalidate();
+  };
+
   // ─── Tab configs ───────────────────────────────────────────────────────────
 
   const guestTabs: { mode: GuestChatMode; label: string; icon: React.ReactNode }[] = [
@@ -388,7 +457,7 @@ export function Chatbot({ context }: ChatbotProps) {
       if (mode === 'demo') return "Let me show you how Storyling.ai works — ask me anything about the features!";
       return "Hi! I'm Booki 👋 Ask me anything about Storyling.ai — how it works, pricing, languages, or how to get started!";
     }
-    if (mode === 'languagePractice') return "Let's practice your language skills! I can help with conversations, grammar, and vocabulary.";
+    if (mode === 'languagePractice') return `Let's practice ${practiceLanguage}. I can help with conversation, grammar, and vocabulary.`;
     if (mode === 'support') return "I'm here to help you get the most out of Storyling.ai. Ask me anything!";
     if (context?.storyTitle) return `I'm here to help you understand "${context.storyTitle}". Ask me about vocabulary, grammar, or the story!`;
     return "I'm your story companion! I can help with language practice, vocabulary, grammar, or anything about the app.";
@@ -488,6 +557,26 @@ export function Chatbot({ context }: ChatbotProps) {
                   </button>
                 ))}
               </div>
+
+              {isAuthenticated && mode === 'languagePractice' && (
+                <div className="flex items-center gap-2 border-b border-gray-100 bg-white px-3 py-2 flex-shrink-0">
+                  <label className="text-xs font-medium text-gray-500" htmlFor="booki-practice-language">
+                    Practice
+                  </label>
+                  <select
+                    id="booki-practice-language"
+                    value={practiceLanguage}
+                    onChange={(event) => handlePracticeLanguageChange(event.target.value)}
+                    className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-gray-50 px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none focus:border-purple-300 focus:ring-2 focus:ring-purple-100"
+                  >
+                    {PRACTICE_LANGUAGES.map((language) => (
+                      <option key={language} value={language}>
+                        {language}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Context Banner (when on a story page) */}
               {context?.storyTitle && (
@@ -603,7 +692,13 @@ export function Chatbot({ context }: ChatbotProps) {
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                    placeholder={isAuthenticated ? "Ask Booki anything..." : "Ask a question..."}
+                    placeholder={
+                      isAuthenticated && mode === 'languagePractice'
+                        ? `Practice ${practiceLanguage}...`
+                        : isAuthenticated
+                        ? "Ask Booki anything..."
+                        : "Ask a question..."
+                    }
                     className="flex-1 px-3.5 py-2.5 bg-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-400 focus:bg-white text-sm transition-all placeholder-gray-400"
                     disabled={sendMessageMutation.isPending || queuedMessage !== null}
                   />

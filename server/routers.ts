@@ -3,6 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { randomBytes } from "crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { resolveFilmNarrationSettings } from "@shared/filmDefaults";
+import { normalizeLearningLanguage } from "@shared/languagePreferences";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
@@ -117,6 +118,17 @@ const AVATAR_UPLOAD_SCHEMA = z
   );
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+
+function buildCuteStoryThumbnailPrompt(theme?: string | null, title?: string | null): string {
+  const safeTheme = theme?.toLowerCase() || "adventure";
+  const safeTitle = title || "Untitled Story";
+
+  return [
+    `A cute, warm, family-friendly Pixar-like 3D animated storybook cover for a ${safeTheme} language-learning story titled "${safeTitle}".`,
+    "Use friendly expressive characters, soft rounded shapes, bright inviting color, clean coherent faces and hands, cinematic warm light, and a whimsical non-scary mood.",
+    "No horror, no distorted faces, no glitch artifacts, no extra limbs, no creepy expressions, no text, no written words, no logo.",
+  ].join(" ");
+}
 
 export const appRouter = router({
   // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -345,7 +357,12 @@ export const appRouter = router({
           .update(users)
           .set({ name: input.name })
           .where(eq(users.id, ctx.user.id));
-        return { success: true };
+        const [updatedUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+        return { success: true, user: updatedUser };
       }),
     uploadAvatar: protectedProcedure
       .input(
@@ -398,7 +415,13 @@ export const appRouter = router({
           .set({ avatarUrl: url })
           .where(eq(users.id, ctx.user.id));
 
-        return { success: true, avatarUrl: url };
+        const [updatedUser] = await db
+          .select()
+          .from(users)
+          .where(eq(users.id, ctx.user.id))
+          .limit(1);
+
+        return { success: true, avatarUrl: url, user: updatedUser };
       }),
     removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
       const db = await getDb();
@@ -413,7 +436,13 @@ export const appRouter = router({
         .set({ avatarUrl: null })
         .where(eq(users.id, ctx.user.id));
 
-      return { success: true };
+      const [updatedUser] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, ctx.user.id))
+        .limit(1);
+
+      return { success: true, user: updatedUser };
     }),
     completePremiumOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
       const db = await getDb();
@@ -514,7 +543,7 @@ export const appRouter = router({
             .optional(),
           musicVolume: z.number().min(0).max(100).optional().default(20),
           selectedMusicTrack: z.string().optional(),
-          addSubtitles: z.boolean().optional(),
+          addSubtitles: z.boolean().optional().default(true),
           subtitleFontSize: z.enum(["small", "medium", "large"]).optional(),
           subtitlePosition: z.enum(["top", "bottom"]).optional(),
           subtitleColor: z.enum(["white", "yellow", "cyan"]).optional(),
@@ -606,10 +635,11 @@ export const appRouter = router({
             const { updateContentProgress } = await import("./db");
 
             // Get translation language from input or user preference
-            const translationLanguage =
+            const translationLanguage = normalizeLearningLanguage(
               input.translationLanguage ||
               ctx.user.preferredTranslationLanguage ||
-              "English";
+              "English"
+            );
 
             // Stage 1: Story Generation (0-40%)
             await updateContentProgress(content.id, 10, "Generating story...");
@@ -625,7 +655,7 @@ export const appRouter = router({
               mode: input.mode,
               targetSceneCount:
                 input.mode === "film"
-                  ? Math.max(1, Math.ceil((input.videoDuration ?? 30) / 5))
+                  ? Math.max(1, Math.ceil((input.videoDuration ?? 30) / 10))
                   : undefined,
               targetVideoDuration:
                 input.mode === "film" ? input.videoDuration : undefined,
@@ -661,7 +691,10 @@ export const appRouter = router({
               );
               const { generateImage } = await import("./_core/imageGeneration");
 
-              const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${input.theme.toLowerCase()} story titled "${finalTitle}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+              const thumbnailPrompt = buildCuteStoryThumbnailPrompt(
+                input.theme,
+                finalTitle
+              );
 
               const { url } = await generateImage({ prompt: thumbnailPrompt });
               thumbnailUrl = url;
@@ -1261,7 +1294,10 @@ export const appRouter = router({
             const batch = storiesNeedingThumbnails.slice(0, 20);
             for (const story of batch) {
               try {
-                const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || "adventure"} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+                const thumbnailPrompt = buildCuteStoryThumbnailPrompt(
+                  story.theme,
+                  story.title
+                );
                 const { url } = await generateImage({
                   prompt: thumbnailPrompt,
                 });
@@ -1443,7 +1479,10 @@ export const appRouter = router({
           // Generate style-specific prompts
           let thumbnailPrompt: string;
           if (thumbnailStyle === "pixar") {
-            thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+            thumbnailPrompt = buildCuteStoryThumbnailPrompt(
+              content.theme,
+              content.title
+            );
           } else if (thumbnailStyle === "realistic") {
             thumbnailPrompt = `A photorealistic, cinematic image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should be visually stunning, emotionally engaging, and capture the essence of the story. Style: realistic photography, professional lighting, high detail. No text or words in the image.`;
           } else if (thumbnailStyle === "illustrated") {
@@ -1568,7 +1607,10 @@ export const appRouter = router({
             // Generate style-specific prompt
             let thumbnailPrompt: string;
             if (input.style === "pixar") {
-              thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+              thumbnailPrompt = buildCuteStoryThumbnailPrompt(
+                content.theme,
+                content.title
+              );
             } else if (input.style === "realistic") {
               thumbnailPrompt = `A photorealistic, cinematic image representing a ${content.theme.toLowerCase()} story titled "${content.title}". The scene should be visually stunning, emotionally engaging, and capture the essence of the story. Style: realistic photography, professional lighting, high detail. No text or words in the image.`;
             } else if (input.style === "illustrated") {
@@ -1624,7 +1666,10 @@ export const appRouter = router({
           const { generateImage } = await import("./_core/imageGeneration");
           for (const story of completedStories) {
             try {
-              const thumbnailPrompt = `A Pixar/Disney-inspired semi-realistic animated illustration for a ${story.theme?.toLowerCase() || "adventure"} story titled "${story.title}". The scene should feature expressive characters with slightly idealized proportions, cinematic warm lighting, rich atmospheric color grading, and painterly detailed textures. Style: Pixar-quality 3D render look, emotionally engaging, vibrant and immersive like a scene from a Disney animated film. No text or words in the image.`;
+              const thumbnailPrompt = buildCuteStoryThumbnailPrompt(
+                story.theme,
+                story.title
+              );
               const { url } = await generateImage({ prompt: thumbnailPrompt });
               if (url) {
                 await updateGeneratedContent(story.id, {
@@ -2104,7 +2149,7 @@ Return a JSON array where each element has:
             .default("none"),
           musicVolume: z.number().min(0).max(100).optional().default(20),
           selectedMusicTrack: z.string().optional(),
-          addSubtitles: z.boolean().optional().default(false),
+          addSubtitles: z.boolean().optional().default(true),
           subtitleFontSize: z
             .enum(["small", "medium", "large"])
             .optional()

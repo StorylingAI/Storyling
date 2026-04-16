@@ -78,7 +78,7 @@ function BulkImport() {
   const languages = [
     { value: "en", label: "English" },
     { value: "zh", label: "中文 (Chinese)" },
-    { value: "es", label: "Español (Spanish)" },
+    { value: "es", label: "Spanish (Spain)" },
     { value: "fr", label: "Français (French)" },
     { value: "de", label: "Deutsch (German)" },
     { value: "ja", label: "日本語 (Japanese)" },
@@ -211,7 +211,7 @@ function VoicePreview() {
   const languages = [
     { value: "en", label: "English" },
     { value: "zh", label: "中文 (Chinese)" },
-    { value: "es", label: "Español (Spanish)" },
+    { value: "es", label: "Spanish (Spain)" },
     { value: "fr", label: "Français (French)" },
     { value: "de", label: "Deutsch (German)" },
   ];
@@ -245,7 +245,7 @@ function VoicePreview() {
     const languageMap: Record<string, string> = {
       en: "English",
       zh: "Chinese (Mandarin)",
-      es: "Spanish",
+      es: "Spanish (Spain / Castellano)",
       fr: "French",
       de: "German",
     };
@@ -391,7 +391,7 @@ function LanguagePreference() {
   const languages = [
     { value: "en", label: "English" },
     { value: "zh", label: "中文 (Chinese)" },
-    { value: "es", label: "Español (Spanish)" },
+    { value: "es", label: "Spanish (Spain)" },
     { value: "fr", label: "Français (French)" },
     { value: "de", label: "Deutsch (German)" },
     { value: "ja", label: "日本語 (Japanese)" },
@@ -510,14 +510,22 @@ function AccountProfileSettings() {
     ]);
   };
 
+  const applyUpdatedUser = (updatedUser: unknown) => {
+    if (updatedUser && typeof updatedUser === "object" && "id" in updatedUser) {
+      utils.auth.me.setData(undefined, updatedUser as NonNullable<typeof user>);
+    }
+  };
+
   const updateProfile = trpc.auth.updateProfile.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      applyUpdatedUser(data.user);
       await refreshIdentity();
     },
   });
 
   const uploadAvatar = trpc.auth.uploadAvatar.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      applyUpdatedUser(data.user);
       setPendingAvatarDataUrl(null);
       setAvatarError(null);
       if (avatarInputRef.current) {
@@ -528,7 +536,8 @@ function AccountProfileSettings() {
   });
 
   const removeAvatar = trpc.auth.removeAvatar.useMutation({
-    onSuccess: async () => {
+    onSuccess: async (data) => {
+      applyUpdatedUser(data.user);
       setPendingAvatarDataUrl(null);
       setAvatarError(null);
       if (avatarInputRef.current) {

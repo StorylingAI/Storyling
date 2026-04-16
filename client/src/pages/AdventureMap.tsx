@@ -1117,14 +1117,14 @@ export default function AdventureMap() {
                       <img
                         src={user.avatarUrl}
                         alt={displayName}
-                        className="h-full w-full rounded-full object-cover"
+                        className="h-full w-full rounded-full bg-white object-contain p-1"
                       />
                     ) : (
                       initials
                     )}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate whitespace-nowrap text-[1.48rem] font-semibold leading-none text-[#241436] sm:text-[1.8rem] xl:text-[2.25rem] 2xl:text-[2.65rem]">
+                    <p className="break-words text-[1.48rem] font-semibold leading-tight text-[#241436] [overflow-wrap:anywhere] sm:text-[1.8rem] xl:text-[2.25rem] 2xl:text-[2.65rem]">
                       Hey {displayName}!
                     </p>
                   </div>

@@ -4,6 +4,7 @@
  */
 
 import { storagePut } from "./storage";
+import { isSpanishLanguage } from "@shared/languagePreferences";
 
 // Sample texts for different languages (short, neutral phrases)
 const PREVIEW_TEXTS: Record<string, string> = {
@@ -568,9 +569,15 @@ export async function generateVoicePreview(
   voiceType: string,
   gender: "male" | "female"
 ): Promise<string> {
+  const previewText = getPreviewText(targetLanguage);
+
+  if (isSpanishLanguage(targetLanguage)) {
+    const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
+    return generateSpeechGoogleCloud(previewText, targetLanguage, gender);
+  }
+
   const voiceId = getNativeVoiceId(targetLanguage, voiceType, gender);
   const voiceSettings = getVoiceSettings(voiceType);
-  const previewText = getPreviewText(targetLanguage);
 
   console.log("[Voice Preview] Generating preview:", {
     targetLanguage,

@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, ArrowRight, Sparkles, BookOpen, Headphones, Film, ArrowLeft, FileText, X, Volume2, Camera, Check } from "lucide-react";
 import { APP_TITLE, APP_LOGO, getLoginUrl } from "@/const";
 import { DEFAULT_FILM_NARRATOR_GENDER, DEFAULT_FILM_VOICE_TYPE } from "@shared/filmDefaults";
+import { LATAM_SPANISH_LABEL, SPAIN_SPANISH_LABEL } from "@shared/languagePreferences";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { VoicePreviewButtonEnhanced } from "@/components/VoicePreviewButtonEnhanced";
@@ -235,7 +236,7 @@ export default function CreateStory() {
   const [backgroundMusic, setBackgroundMusic] = useState<string>("none");
   const [musicVolume, setMusicVolume] = useState<number>(20);
   const [selectedMusicTrack, setSelectedMusicTrack] = useState<string>("");
-  const [addSubtitles, setAddSubtitles] = useState<boolean>(false);
+  const [addSubtitles, setAddSubtitles] = useState<boolean>(true);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [paywallHeadline, setPaywallHeadline] = useState<PaywallHeadline>("keep_going");
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
@@ -282,7 +283,7 @@ export default function CreateStory() {
   // Compute the effective language string with dialect for Spanish
   const effectiveLanguage = useMemo(() => {
     if (targetLanguage === "Spanish" && spanishDialect) {
-      return spanishDialect === "spain" ? "Spanish (Spain / Castellano)" : "Spanish (Latin America)";
+      return spanishDialect === "spain" ? SPAIN_SPANISH_LABEL : LATAM_SPANISH_LABEL;
     }
     return targetLanguage;
   }, [targetLanguage, spanishDialect]);
@@ -1302,7 +1303,7 @@ export default function CreateStory() {
                         ))}
                       </div>
                       <p className="text-xs text-gray-400">
-                        Longer videos take more time to generate (~{Math.ceil(videoDuration / 5)} clips)
+                        Longer videos take more time to generate (~{Math.ceil(videoDuration / 10)} clips)
                       </p>
                     </div>
                   ) : (

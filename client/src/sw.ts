@@ -97,7 +97,7 @@ setCatchHandler(async ({ request }) => {
 self.addEventListener('push', (event: PushEvent) => {
   if (event.data) {
     const data = event.data.json();
-    const options: NotificationOptions = {
+    const options: NotificationOptions & { vibrate?: number[] } = {
       body: data.body || 'Keep your learning streak alive!',
       icon: '/flip-mascot.png',
       badge: '/flip-mascot.png',

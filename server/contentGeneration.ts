@@ -1,5 +1,10 @@
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
+import {
+  getSpanishDialectInstruction,
+  isSpanishLanguage,
+  normalizeLearningLanguage,
+} from "@shared/languagePreferences";
 import fs from "fs/promises";
 import os from "os";
 import path from "path";
@@ -143,7 +148,7 @@ function buildStoryResponseFormatInstructions(
  */
 export async function generateStory(params: StoryGenerationParams): Promise<GeneratedStory> {
   const {
-    targetLanguage,
+    targetLanguage: requestedTargetLanguage,
     proficiencyLevel,
     vocabularyWords,
     theme,
@@ -154,6 +159,8 @@ export async function generateStory(params: StoryGenerationParams): Promise<Gene
     targetSceneCount,
     targetVideoDuration,
   } = params;
+  const targetLanguage = normalizeLearningLanguage(requestedTargetLanguage);
+  const dialectInstruction = getSpanishDialectInstruction(targetLanguage);
 
   const targetWordCount = getTargetWordCount(mode, storyLength, targetVideoDuration);
   const storyInstructions = buildStoryGenerationInstructions(
@@ -173,6 +180,7 @@ Requirements:
 - Theme: ${theme}
 - Vocabulary to include: ${vocabularyWords.join(", ")}
 ${topicPrompt ? `- Story topic: ${topicPrompt}` : ""}
+${dialectInstruction ? `- Dialect requirement: ${dialectInstruction}` : ""}
 
 The story should:
 ${storyInstructions}
@@ -204,8 +212,8 @@ EXAMPLE vocabularyTranslations structure:
         role: "user",
         content:
           mode === "film"
-            ? `Generate a film-friendly ${theme.toLowerCase()} story that teaches these vocabulary words: ${vocabularyWords.join(", ")}. Keep the visuals simple and consistent, keep the full narration close to ${targetVideoDuration ?? 30} seconds, include exactly ${targetSceneCount ?? 6} visual beats in story order, and make each beat feel like the next shot of the same short film. Include line-by-line translations${isChinese ? " with pinyin" : ""}.`
-            : `Generate a ${theme.toLowerCase()} story that teaches these vocabulary words: ${vocabularyWords.join(", ")}. Include line-by-line translations${isChinese ? " with pinyin" : ""}.`,
+            ? `Generate a film-friendly ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Keep the visuals simple and consistent, keep the full narration close to ${targetVideoDuration ?? 30} seconds, include exactly ${targetSceneCount ?? 6} visual beats in story order, and make each beat feel like the next shot of the same short film. Include line-by-line translations${isChinese ? " with pinyin" : ""}.`
+            : `Generate a ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Include line-by-line translations${isChinese ? " with pinyin" : ""}.`,
       },
     ],
     response_format: {
@@ -805,8 +813,6 @@ export async function generatePodcast(
   storyText: string
 ): Promise<{ audioUrl: string; transcript: string }> {
   const gender = params.narratorGender || "female";
-  const voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
-  const voiceSettings = getVoiceSettings(params.voiceType);
 
   // Strip markdown formatting (bold, italic, etc.) from story text for clean TTS
   // This prevents glitches when ElevenLabs encounters markdown syntax like **word**
@@ -817,6 +823,20 @@ export async function generatePodcast(
     .replace(/~~(.+?)~~/g, '$1');     // Remove strikethrough: ~~text~~ -> text
 
   try {
+    if (isSpanishLanguage(params.targetLanguage)) {
+      const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
+      const audioUrl = await generateSpeechGoogleCloud(
+        cleanText,
+        params.targetLanguage,
+        gender
+      );
+
+      return { audioUrl, transcript: storyText };
+    }
+
+    const voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
+    const voiceSettings = getVoiceSettings(params.voiceType);
+
     const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + voiceId, {
       method: "POST",
       headers: {
@@ -876,7 +896,7 @@ Analyze the story and produce a CHARACTER & SETTING SHEET.
 
 Respond in this EXACT format:
 VISUAL STYLE: [One line describing overall visual style, color palette, lighting, mood matching "${cinematicStyle}" style and "${theme}" theme]
-PRIMARY SUBJECT LOCK: [One single sentence for the main recurring adult with immutable details: age impression, hair, face shape, exact jacket/top, exact pants/bottom, exact shoes, exact backpack/essential prop]
+PRIMARY SUBJECT LOCK: [One single sentence for the main recurring adult with immutable details: age impression, hair, face shape, exact jacket/top, exact pants/bottom, exact shoes, and exact carried prop including whether it is worn on the back, slung over the shoulder, or held by hand]
 
 CHARACTERS:
 - [Role/Name]: [Detailed physical description: approximate age as adult, hair color/style, clothing, distinguishing features]
@@ -889,7 +909,8 @@ IMPORTANT:
 - Describe ALL characters as adults. No children or minors.
 - Keep descriptions visual only — no dialogue, no names from the story.
 - Limit recurring cast to 1-2 primary adults whenever possible.
-- Lock clothing, hair, silhouette, and one essential carried prop per recurring character.
+- Lock clothing, hair, silhouette, and one essential carried prop per recurring character, including the prop placement on the body.
+- Do not mix incompatible carried props. If the subject has a backpack, keep a backpack in every scene; if the subject has a satchel, keep the same satchel in the same position in every scene.
 - The PRIMARY SUBJECT LOCK must be specific and reusable verbatim in every scene prompt.
 - Emphasize physically plausible anatomy, grounded props, and clean separation between bodies and background objects.
 - Mention continuity constraints that prevent wardrobe drift, floating objects, or extra limbs.`;
@@ -922,12 +943,212 @@ IMPORTANT:
 }
 
 const FILM_SUBJECT_STABILITY_GUIDANCE =
-  "one primary adult subject, one simple grounded action, stable anatomy, consistent clothing and props, no floating or detached objects, no crowds, gentle camera motion";
+  "one primary adult subject, one simple grounded action, stable anatomy, identical face, identical hairstyle, identical outfit, identical carried prop, no floating or detached objects, no crowds, gentle camera motion, no visual morphing";
 
 const FILM_LANDSCAPE_STABILITY_GUIDANCE =
   "stable environment, no people, no text, no morphing or drifting objects, gentle natural motion";
 
 const FILM_CLIP_TRANSIENT_RETRIES = 1;
+const DEFAULT_FILM_CLIP_DURATION_SECONDS = 10;
+
+function resolveFilmClipDuration(targetVideoDuration: number): 5 | 10 | 15 {
+  const envDuration = Number(process.env.FILM_CLIP_DURATION_SECONDS);
+  if ([5, 10, 15].includes(envDuration)) {
+    return envDuration as 5 | 10 | 15;
+  }
+
+  if (targetVideoDuration <= 15) {
+    return 5;
+  }
+
+  return DEFAULT_FILM_CLIP_DURATION_SECONDS;
+}
+
+function resolveFilmVideoModel(): "standard" | "pro" {
+  return process.env.FILM_VIDEO_MODEL?.toLowerCase() === "standard"
+    ? "standard"
+    : "pro";
+}
+
+function buildFilmCharacterReferencePrompt(
+  characterSheet: string,
+  cinematicStyle: string,
+  theme: string,
+): string {
+  const characterLock = extractCharacterLock(characterSheet);
+  const visualStyleLock = extractSheetField(characterSheet, "VISUAL STYLE");
+
+  return [
+    `Create a polished 16:9 animation character reference keyframe for a short language-learning story film in ${cinematicStyle} style and ${theme.toLowerCase()} mood.`,
+    visualStyleLock ? `Visual style lock: ${visualStyleLock}.` : "",
+    characterLock
+      ? `Main recurring subject: ${characterLock}. Preserve this exact face, hairstyle, outfit, body proportions, shoes, and essential prop in all future scenes.`
+      : "Main recurring subject: one friendly adult language learner with a simple outfit and one small backpack.",
+    "Show one full-body adult only, centered, clean three-quarter view, neutral standing pose, friendly non-scary expression, simple neutral background, soft cinematic lighting.",
+    "This is the canonical identity anchor, not a character variation sheet: do not create alternate outfits, alternate bags, alternate hairstyles, or alternate art styles.",
+    "No text, no subtitles, no logo, no watermark, no extra limbs, no distorted hands, no duplicate people, no scary or glitchy details.",
+  ].filter(Boolean).join(" ");
+}
+
+function buildFilmSceneStillPrompt(
+  visualPrompt: string,
+  characterSheet: string,
+  sceneIndex: number,
+  totalScenes: number,
+  hasPreviousSceneReference: boolean,
+): string {
+  const characterLock = extractCharacterLock(characterSheet);
+  const visualStyleLock = extractSheetField(characterSheet, "VISUAL STYLE");
+  const settingLock =
+    extractSheetField(characterSheet, "SETTING LOCK") ||
+    extractSheetField(characterSheet, "SETTING");
+
+  return [
+    `Create a finished 16:9 cinematic animation keyframe for scene ${sceneIndex + 1}/${totalScenes}.`,
+    "Use the first provided reference image as the canonical identity anchor. Copy the exact same adult face, hairstyle, body proportions, outerwear, bottoms, shoes, and carried prop from that anchor.",
+    hasPreviousSceneReference
+      ? "Use the previous scene reference only for location continuity, camera language, and palette. Do not let the previous scene alter the canonical identity anchor."
+      : "",
+    visualStyleLock ? `Visual style lock: ${visualStyleLock}.` : "",
+    characterLock ? `Character lock: ${characterLock}.` : "",
+    settingLock ? `Setting continuity: ${settingLock}.` : "",
+    `Scene action: ${visualPrompt}`,
+    "Do not swap a backpack into a satchel or a satchel into a backpack. Do not change jacket cut, pants length, boot color, hair volume, facial structure, age impression, or illustration style between scenes.",
+    "Frame like a clean educational story video, with one clear subject and one simple action. Avoid chaotic motion, crowds, complex hand poses, object juggling, warped faces, extra limbs, duplicated bodies, glitches, horror mood, text, captions, logos, and watermarks.",
+  ].filter(Boolean).join(" ");
+}
+
+function buildFilmMotionPrompt(visualPrompt: string): string {
+  return [
+    visualPrompt,
+    "Animate the provided keyframe as a polished short language-learning story clip.",
+    "Preserve exact character identity, outfit, face, hairstyle, body proportions, background layout, and scene composition from the source image.",
+    "Do not redesign the person, change the bag or backpack, change clothing, change facial structure, switch art style, or introduce a different character.",
+    "Use subtle natural motion, gentle camera push-in or pan, clean stable anatomy, no morphing, no new characters, no text, no subtitles, no logo.",
+  ].join(" ");
+}
+
+function splitLongSubtitleLine(line: string, maxChars = 86): string[] {
+  if (line.length <= maxChars) {
+    return [line];
+  }
+
+  const words = line.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+
+    if (current) chunks.push(current);
+    current = word;
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function buildNarrationSubtitleLines(text: string, fallbackScenes: string[]): string[] {
+  const cleanText = text.replace(/\s+/g, " ").trim();
+  if (!cleanText) {
+    return fallbackScenes;
+  }
+
+  const sentenceLines = cleanText
+    .match(/[^.!?]+[.!?]?/g)
+    ?.map((line) => line.trim())
+    .filter(Boolean) ?? [cleanText];
+
+  const lines = sentenceLines.flatMap((line) => splitLongSubtitleLine(line));
+  return lines.length > 0 ? lines : fallbackScenes;
+}
+
+function formatGenerationError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return "Unknown generation error";
+}
+
+async function generateFilmReferenceImage(
+  characterSheet: string,
+  cinematicStyle: string,
+  theme: string,
+  seed: number,
+): Promise<string | undefined> {
+  if (!characterSheet.trim()) {
+    return undefined;
+  }
+
+  try {
+    const { generateImage } = await import("./_core/imageGeneration");
+    const result = await generateImage({
+      prompt: buildFilmCharacterReferencePrompt(characterSheet, cinematicStyle, theme),
+      aspectRatio: "16:9",
+      imageSize: "1K",
+      seed,
+    });
+    return result.url;
+  } catch (error) {
+    console.warn(
+      "[Film Generation] Character reference image failed; falling back to text-only continuity:",
+      formatGenerationError(error),
+    );
+    return undefined;
+  }
+}
+
+async function generateFilmSceneStill(params: {
+  visualPrompt: string;
+  characterSheet: string;
+  characterReferenceImageUrl?: string;
+  identityReferenceImageUrl?: string;
+  previousSceneImageUrl?: string;
+  sceneIndex: number;
+  totalScenes: number;
+  seed: number;
+}): Promise<string | undefined> {
+  try {
+    const { generateImage } = await import("./_core/imageGeneration");
+    const originalImages = [
+      params.identityReferenceImageUrl || params.characterReferenceImageUrl,
+      params.previousSceneImageUrl,
+    ]
+      .filter((url): url is string => Boolean(url))
+      .filter((url, index, urls) => urls.indexOf(url) === index)
+      .slice(0, 2)
+      .map(url => ({ url }));
+
+    const result = await generateImage({
+      prompt: buildFilmSceneStillPrompt(
+        params.visualPrompt,
+        params.characterSheet,
+        params.sceneIndex,
+        params.totalScenes,
+        Boolean(params.previousSceneImageUrl),
+      ),
+      aspectRatio: "16:9",
+      imageSize: "1K",
+      seed: params.seed,
+      originalImages,
+    });
+
+    return result.url;
+  } catch (error) {
+    console.warn(
+      `[Film Generation] Scene still ${params.sceneIndex + 1} failed; falling back to provider text-to-image:`,
+      formatGenerationError(error),
+    );
+    return undefined;
+  }
+}
 
 function buildFallbackVisualPrompt(
   cinematicStyle: string,
@@ -968,7 +1189,7 @@ function finalizeVisualPrompt(
       : "";
   const recurringSubjectLock =
     characterLock && retryLevel < 2
-      ? `Same recurring adult in every human scene, with unchanged face, hairstyle, outerwear, bottoms, shoes, and backpack: ${characterLock.replace(/[.\s]+$/g, "")}. `
+      ? `Same recurring adult in every human scene, with unchanged face, hairstyle, outerwear, bottoms, footwear, and essential carried prop: ${characterLock.replace(/[.\s]+$/g, "")}. `
       : "";
   const settingDirective =
     settingLock
@@ -1061,8 +1282,8 @@ export async function convertToVisualPrompt(
 - Describe ONLY what the camera sees: actions, settings, lighting, colors, camera angles
 - NO dialogue, NO character names, NO quoted speech
 - Show ONE simple action beat only, with at most 1-2 adults in frame
-- If the reference sheet defines a PRIMARY SUBJECT LOCK, preserve that exact adult identity, outfit, backpack/prop, hair, and silhouette
-- Do not change jacket color, clothing type, pants vs shorts, backpack size, or hairstyle between scenes
+- If the reference sheet defines a PRIMARY SUBJECT LOCK, preserve that exact adult identity, outfit, carried prop, hair, and silhouette
+- Do not change jacket color, clothing type, pants vs shorts, carried prop type or placement, or hairstyle between scenes
 - Keep anatomy physically plausible and fully coherent
 - Keep clothing, hair, and carried props consistent with the reference sheet
 - If a prop is held, it must stay naturally attached to the body
@@ -1081,7 +1302,7 @@ export async function convertToVisualPrompt(
 - NO dialogue, NO character names, NO quoted speech
 - Describe characters as adults only. Use "young adults", "couple", "travelers"
 - If the reference sheet defines a PRIMARY SUBJECT LOCK, preserve that same adult identity and outfit exactly
-- Do not swap outerwear, backpack, hairstyle, or body proportions between clips
+- Do not swap outerwear, carried prop type or placement, hairstyle, or body proportions between clips
 - Use only one distant adult or a pair at most
 - Focus 75% on environment/atmosphere, 25% on human presence
 - Keep human action minimal and physically plausible
@@ -1187,7 +1408,7 @@ export async function generateFilm(
     backgroundMusic = 'none',
     musicVolume = 20,
     selectedMusicTrack,
-    addSubtitles = false,
+    addSubtitles = true,
     subtitleFontSize = 'medium',
     subtitlePosition = 'bottom',
     subtitleColor = 'white'
@@ -1199,18 +1420,20 @@ export async function generateFilm(
   let narrationAudioPath: string | undefined;
 
   try {
-    const clipDuration = 5;
+    const clipDuration = resolveFilmClipDuration(targetVideoDuration);
     const clipCount = Math.max(1, Math.ceil(targetVideoDuration / clipDuration));
     const plannedVideoDuration = clipCount * clipDuration;
+    const videoModel = resolveFilmVideoModel();
 
     console.log(
-      `[Film Generation] Creating ${clipCount} clips for target ${plannedVideoDuration}s (duration-driven)`,
+      `[Film Generation] Creating ${clipCount} high-quality ${clipDuration}s clips for target ${plannedVideoDuration}s using ${videoModel} model`,
     );
 
     if (onProgress) onProgress('Planning scenes...', 5);
     const scenes = params.sceneBeats?.length
       ? fitSceneTextsToClipCount(params.sceneBeats, clipCount)
       : splitStoryIntoScenes(storyText, plannedVideoDuration, clipDuration);
+    let subtitleTexts = buildNarrationSubtitleLines(storyText, scenes);
     console.log(
       `[Film Generation] Split into ${scenes.length} scenes (${params.sceneBeats?.length ? "story beats" : "story text"})`,
     );
@@ -1240,32 +1463,47 @@ export async function generateFilm(
         .replace(/\*(.+?)\*/g, '$1')
         .replace(/_(.+?)_/g, '$1')
         .replace(/~~(.+?)~~/g, '$1');
+      subtitleTexts = buildNarrationSubtitleLines(cleanText, scenes);
 
       try {
-        const ttsResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
-          method: 'POST',
-          headers: {
-            Accept: 'audio/mpeg',
-            'Content-Type': 'application/json',
-            'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
-          },
-          body: JSON.stringify({
-            text: cleanText,
-            model_id: 'eleven_multilingual_v2',
-            voice_settings: {
-              stability: voiceSettings.stability,
-              similarity_boost: voiceSettings.similarity_boost,
-              style: voiceSettings.style,
-              use_speaker_boost: true,
-            },
-          }),
-        });
+        let audioData: Buffer | null = null;
 
-        if (!ttsResponse.ok) {
-          console.error('[Film Generation] TTS failed:', ttsResponse.statusText);
+        if (isSpanishLanguage(params.targetLanguage)) {
+          const { synthesizeSpeechGoogleCloud } = await import("./googleCloudTTS");
+          audioData = await synthesizeSpeechGoogleCloud(
+            cleanText,
+            params.targetLanguage,
+            gender
+          );
         } else {
-          const audioBuffer = await ttsResponse.arrayBuffer();
-          const audioData = Buffer.from(audioBuffer);
+          const ttsResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+            method: 'POST',
+            headers: {
+              Accept: 'audio/mpeg',
+              'Content-Type': 'application/json',
+              'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
+            },
+            body: JSON.stringify({
+              text: cleanText,
+              model_id: 'eleven_multilingual_v2',
+              voice_settings: {
+                stability: voiceSettings.stability,
+                similarity_boost: voiceSettings.similarity_boost,
+                style: voiceSettings.style,
+                use_speaker_boost: true,
+              },
+            }),
+          });
+
+          if (!ttsResponse.ok) {
+            console.error('[Film Generation] TTS failed:', ttsResponse.statusText);
+          } else {
+            const audioBuffer = await ttsResponse.arrayBuffer();
+            audioData = Buffer.from(audioBuffer);
+          }
+        }
+
+        if (audioData) {
           narrationAudioPath = path.join(
             os.tmpdir(),
             `film-narration-${Date.now()}-${Math.random().toString(36).slice(2)}.mp3`,
@@ -1300,9 +1538,19 @@ export async function generateFilm(
     const consistentSeed = Math.abs(storySeed) % 10000;
     console.log('[Film Generation] Using consistent seed:', consistentSeed);
 
+    if (onProgress) onProgress('Creating character reference...', 18);
+    const characterReferenceImageUrl = await generateFilmReferenceImage(
+      characterSheet,
+      cinematicStyle,
+      theme,
+      consistentSeed,
+    );
+
     // Step 5: Generate video clips with character sheet + consistent seed
     const clips: Array<{ url: string; order: number; duration: number }> = [];
     let previousVisualPrompt: string | undefined;
+    let previousSceneImageUrl: string | undefined;
+    let identityReferenceImageUrl: string | undefined;
 
     for (let i = 0; i < scenes.length; i++) {
       const sceneText = scenes[i];
@@ -1324,6 +1572,17 @@ export async function generateFilm(
       );
 
       console.log(`[Film Generation] Generating clip ${i + 1}/${scenes.length}:`, visualPrompt.substring(0, 80) + '...');
+      let sceneImageUrl = await generateFilmSceneStill({
+        visualPrompt,
+        characterSheet,
+        characterReferenceImageUrl,
+        identityReferenceImageUrl,
+        previousSceneImageUrl,
+        sceneIndex: i,
+        totalScenes: scenes.length,
+        seed: consistentSeed,
+      });
+      let videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
 
       let result: Awaited<ReturnType<typeof generateHiggsfieldVideo>> | undefined;
       let clipAttempt = 0;
@@ -1336,12 +1595,14 @@ export async function generateFilm(
         do {
           try {
             result = await generateHiggsfieldVideo({
-              prompt: visualPrompt,
+              prompt: videoPrompt,
               duration: clipDuration,
               aspectRatio: "16:9",
-              model: "standard",
+              model: videoModel,
               seed: consistentSeed,
               persistToStorage: false,
+              sourceImageUrl: sceneImageUrl,
+              referenceImageUrls: characterReferenceImageUrl ? [characterReferenceImageUrl] : [],
             });
           } catch (clipError: any) {
             lastFailureMessage = clipError?.message || `Clip ${i + 1} generation failed`;
@@ -1359,6 +1620,17 @@ export async function generateFilm(
                 characterSheet,
                 previousVisualPrompt,
               );
+              sceneImageUrl = await generateFilmSceneStill({
+                visualPrompt,
+                characterSheet,
+                characterReferenceImageUrl,
+                identityReferenceImageUrl,
+                previousSceneImageUrl,
+                sceneIndex: i,
+                totalScenes: scenes.length,
+                seed: consistentSeed,
+              });
+              videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
               continue;
             }
 
@@ -1383,6 +1655,17 @@ export async function generateFilm(
               characterSheet,
               previousVisualPrompt,
             );
+            sceneImageUrl = await generateFilmSceneStill({
+              visualPrompt,
+              characterSheet,
+              characterReferenceImageUrl,
+              identityReferenceImageUrl,
+              previousSceneImageUrl,
+              sceneIndex: i,
+              totalScenes: scenes.length,
+              seed: consistentSeed,
+            });
+            videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
           } else {
             break;
           }
@@ -1435,13 +1718,22 @@ export async function generateFilm(
         order: i,
         duration: clipDuration,
       });
+      if (!identityReferenceImageUrl && sceneImageUrl) {
+        identityReferenceImageUrl = sceneImageUrl;
+      }
+      previousSceneImageUrl = sceneImageUrl || previousSceneImageUrl;
       previousVisualPrompt = visualPrompt;
 
       console.log(`[Film Generation] Clip ${i + 1}/${scenes.length} complete:`, result.videoUrl);
     }
 
-    // Single clip without narration — return directly
-    if (clips.length === 1 && !narrationAudioPath) {
+    // Single clip can bypass FFmpeg only when no post-processing is requested.
+    if (
+      clips.length === 1 &&
+      !narrationAudioPath &&
+      !addSubtitles &&
+      (!backgroundMusic || backgroundMusic === 'none')
+    ) {
       console.log('[Film Generation] Single clip, no stitching needed');
       return {
         videoUrl: clips[0].url,
@@ -1457,7 +1749,7 @@ export async function generateFilm(
 
     const stitchResult = await stitchVideos(clips, {
       outputFormat: 'mp4',
-      resolution: '720p',
+      resolution: '1080p',
       fps: 30,
       addTransitions: enableTransitions,
       transitionDuration: 0.5,
@@ -1468,7 +1760,7 @@ export async function generateFilm(
       subtitleFontSize,
       subtitlePosition,
       subtitleColor,
-      sceneTexts: scenes,
+      sceneTexts: subtitleTexts,
       clipDuration,
       narrationAudioPath,
     });

@@ -1,7 +1,141 @@
 import { storagePut } from "./storage";
+import { isSpainSpanishLanguage } from "@shared/languagePreferences";
 
 // Google Cloud TTS REST API endpoint
 const GOOGLE_TTS_API_URL = "https://texttospeech.googleapis.com/v1/text:synthesize";
+const GOOGLE_TTS_MAX_CHARS = 4400;
+
+function resolveGoogleCloudApiKey(): string {
+  const apiKey =
+    process.env.GOOGLE_CLOUD_API_KEY ||
+    process.env.GEMINI_API_KEY ||
+    process.env.GOOGLE_VEO_API_KEY;
+  if (!apiKey) {
+    throw new Error("GOOGLE_CLOUD_API_KEY environment variable is not set");
+  }
+  return apiKey;
+}
+
+function resolveGoogleTtsLanguageCode(targetLanguage: string): string {
+  const languageKey = targetLanguage.toLowerCase().split(" ")[0];
+
+  if (targetLanguage.toLowerCase().includes("spanish") || languageKey === "es") {
+    return isSpainSpanishLanguage(targetLanguage) ? "es-ES" : "es-US";
+  }
+
+  const languageCodeMap: Record<string, string> = {
+    chinese: "cmn-CN",
+    mandarin: "cmn-CN",
+    french: "fr-FR",
+    german: "de-DE",
+    japanese: "ja-JP",
+    korean: "ko-KR",
+    portuguese: "pt-PT",
+    italian: "it-IT",
+    russian: "ru-RU",
+    dutch: "nl-NL",
+    arabic: "ar-XA",
+    english: "en-US",
+  };
+
+  return languageCodeMap[languageKey] || "en-US";
+}
+
+function splitTextForTts(text: string): string[] {
+  const cleanText = text.replace(/\s+/g, " ").trim();
+  if (cleanText.length <= GOOGLE_TTS_MAX_CHARS) return [cleanText];
+
+  const sentences = cleanText.match(/[^.!?]+[.!?]?/g) ?? [cleanText];
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const sentence of sentences) {
+    const next = `${current} ${sentence.trim()}`.trim();
+    if (next.length <= GOOGLE_TTS_MAX_CHARS) {
+      current = next;
+      continue;
+    }
+
+    if (current) chunks.push(current);
+    current = sentence.trim();
+  }
+
+  if (current) chunks.push(current);
+  return chunks.filter(Boolean);
+}
+
+async function synthesizeGoogleCloudChunk(
+  text: string,
+  targetLanguage: string,
+  gender: "male" | "female" = "female"
+): Promise<Buffer> {
+  const apiKey = resolveGoogleCloudApiKey();
+  const languageCode = resolveGoogleTtsLanguageCode(targetLanguage);
+
+  const requestBody = {
+    input: { text },
+    voice: {
+      languageCode,
+      ssmlGender: gender.toUpperCase(),
+    },
+    audioConfig: {
+      audioEncoding: "MP3",
+      speakingRate: 0.95,
+      pitch: 0,
+    },
+  };
+
+  const response = await fetch(`${GOOGLE_TTS_API_URL}?key=${apiKey}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(requestBody),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error("Google Cloud TTS API error:", response.status, errorText);
+    throw new Error(`Google Cloud TTS API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (!data.audioContent) {
+    throw new Error("No audio content received from Google Cloud TTS");
+  }
+
+  return Buffer.from(data.audioContent, "base64");
+}
+
+export async function synthesizeSpeechGoogleCloud(
+  text: string,
+  targetLanguage: string,
+  gender: "male" | "female" = "female"
+): Promise<Buffer> {
+  const chunks = splitTextForTts(text);
+  const buffers: Buffer[] = [];
+
+  for (const chunk of chunks) {
+    buffers.push(await synthesizeGoogleCloudChunk(chunk, targetLanguage, gender));
+  }
+
+  return Buffer.concat(buffers);
+}
+
+export async function generateSpeechGoogleCloud(
+  text: string,
+  targetLanguage: string,
+  gender: "male" | "female" = "female"
+): Promise<string> {
+  const audioBuffer = await synthesizeSpeechGoogleCloud(text, targetLanguage, gender);
+  const timestamp = Date.now();
+  const randomSuffix = Math.random().toString(36).substring(7);
+  const safeLanguage = targetLanguage.replace(/[^a-zA-Z0-9]/g, "_");
+  const fileKey = `speech-google/${safeLanguage}-${timestamp}-${randomSuffix}.mp3`;
+
+  const { url: audioUrl } = await storagePut(fileKey, audioBuffer, "audio/mpeg");
+  return audioUrl;
+}
 
 /**
  * Generate audio for Chinese character with accurate tone using Google Cloud TTS
@@ -12,10 +146,7 @@ export async function generateChineseToneAudioGoogleCloud(
   pinyin: string
 ): Promise<string> {
   try {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
-    if (!apiKey) {
-      throw new Error("GOOGLE_CLOUD_API_KEY environment variable is not set");
-    }
+    const apiKey = resolveGoogleCloudApiKey();
 
     // Use WaveNet voice for best tone accuracy
     // cmn-CN-Wavenet-A is a female voice with excellent tone reproduction
@@ -78,23 +209,8 @@ export async function generateWordAudioGoogleCloud(
   targetLanguage: string
 ): Promise<string> {
   try {
-    const apiKey = process.env.GOOGLE_CLOUD_API_KEY;
-    if (!apiKey) {
-      throw new Error("GOOGLE_CLOUD_API_KEY environment variable is not set");
-    }
-
-    // Map target language to Google Cloud language codes
-    const languageCodeMap: Record<string, string> = {
-      chinese: "cmn-CN",
-      spanish: "es-ES",
-      french: "fr-FR",
-      german: "de-DE",
-      japanese: "ja-JP",
-      korean: "ko-KR",
-    };
-
-    const languageKey = targetLanguage.toLowerCase().split(" ")[0];
-    const languageCode = languageCodeMap[languageKey] || "en-US";
+    const apiKey = resolveGoogleCloudApiKey();
+    const languageCode = resolveGoogleTtsLanguageCode(targetLanguage);
 
     const requestBody = {
       input: { text: word },

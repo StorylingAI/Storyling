@@ -1,4 +1,5 @@
 import { storagePut } from "./storage";
+import { isSpanishLanguage } from "@shared/languagePreferences";
 
 /**
  * Generate audio for Chinese character with tone using ElevenLabs Turbo v2.5
@@ -71,7 +72,11 @@ export async function generateWordAudio(
   const languageKey = targetLanguage.toLowerCase().split(" ")[0];
   
   // Use Google Cloud TTS for Chinese to ensure accurate tone pronunciation
-  if (languageKey === "chinese" || languageKey === "mandarin") {
+  if (
+    languageKey === "chinese" ||
+    languageKey === "mandarin" ||
+    isSpanishLanguage(targetLanguage)
+  ) {
     const { generateWordAudioGoogleCloud } = await import("./googleCloudTTS");
     return generateWordAudioGoogleCloud(word, targetLanguage);
   }

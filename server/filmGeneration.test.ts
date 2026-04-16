@@ -16,6 +16,10 @@ vi.mock('./higgsfield', () => ({
   generateHiggsfieldVideo: vi.fn(),
 }));
 
+vi.mock('./_core/imageGeneration', () => ({
+  generateImage: vi.fn(),
+}));
+
 // Mock videoStitching module
 vi.mock('./videoStitching', () => ({
   splitStoryIntoScenes: vi.fn((text: string) => [text]),
@@ -26,6 +30,7 @@ vi.mock('./videoStitching', () => ({
 import { convertToVisualPrompt, generateCharacterSheet, generateFilm } from './contentGeneration';
 import { invokeLLM } from './_core/llm';
 import { generateHiggsfieldImage, generateHiggsfieldVideo } from './higgsfield';
+import { generateImage } from './_core/imageGeneration';
 import { stitchVideos } from './videoStitching';
 import {
   DEFAULT_FILM_NARRATOR_GENDER,
@@ -36,6 +41,7 @@ import {
 const mockedInvokeLLM = vi.mocked(invokeLLM);
 const mockedGenerateImage = vi.mocked(generateHiggsfieldImage);
 const mockedGenerateVideo = vi.mocked(generateHiggsfieldVideo);
+const mockedGenerateStillImage = vi.mocked(generateImage);
 const mockedStitchVideos = vi.mocked(stitchVideos);
 
 describe('resolveFilmNarrationSettings', () => {
@@ -206,7 +212,7 @@ describe('convertToVisualPrompt', () => {
 
     expect(result).toContain('blue jacket');
     expect(result).toContain('Same recurring adult in every human scene');
-    expect(result).toContain('unchanged face, hairstyle, outerwear, bottoms, shoes, and backpack');
+    expect(result).toContain('unchanged face, hairstyle, outerwear, bottoms, footwear, and essential carried prop');
     expect(result).toContain('Keep the same recognizable setting family');
     const callArgs = mockedInvokeLLM.mock.calls[0][0];
     const systemMsg = callArgs.messages.find((m: any) => m.role === 'system');
@@ -219,6 +225,10 @@ describe('convertToVisualPrompt', () => {
 describe('generateFilm NSFW retry', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    let imageIndex = 0;
+    mockedGenerateStillImage.mockImplementation(async () => ({
+      url: `https://example.com/generated-scene-${++imageIndex}.png`,
+    }));
   });
 
   it('should retry with higher abstraction level when NSFW detected', async () => {
@@ -256,6 +266,7 @@ describe('generateFilm NSFW retry', () => {
         targetLanguage: 'French', proficiencyLevel: 'A2',
         vocabularyWords: ['plage'], theme: 'Adventure',
         cinematicStyle: 'Playful Animation', targetVideoDuration: 5,
+        addSubtitles: false,
       },
       'Les enfants vont à la plage.',
     );
@@ -337,6 +348,7 @@ describe('generateFilm NSFW retry', () => {
         targetLanguage: 'French', proficiencyLevel: 'A2',
         vocabularyWords: ['cabane'], theme: 'Adventure',
         cinematicStyle: 'Cinematic', targetVideoDuration: 5,
+        addSubtitles: false,
       },
       'Le randonneur approche de la cabane.',
     );
@@ -370,6 +382,7 @@ describe('generateFilm NSFW retry', () => {
         targetLanguage: 'French', proficiencyLevel: 'A2',
         vocabularyWords: ['neige'], theme: 'Adventure',
         cinematicStyle: 'Cinematic', targetVideoDuration: 5,
+        addSubtitles: false,
       },
       'Le voyageur marche dans la neige.',
     );
@@ -379,7 +392,7 @@ describe('generateFilm NSFW retry', () => {
     expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
   });
 
-  it('should keep the same textual subject lock across clips without generating a separate reference image', async () => {
+  it('should create reference stills and animate them with the same subject lock across clips', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test',
       created: Date.now(),
@@ -457,17 +470,43 @@ describe('generateFilm NSFW retry', () => {
 
     expect(result.videoUrl).toBe('https://example.com/final-film.mp4');
     expect(mockedGenerateImage).not.toHaveBeenCalled();
+    expect(mockedGenerateStillImage).toHaveBeenCalledTimes(3);
+    expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        prompt: expect.stringContaining('character reference keyframe'),
+        aspectRatio: '16:9',
+      }),
+    );
+    expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        prompt: expect.stringContaining('scene 1/2'),
+        originalImages: [{ url: 'https://example.com/generated-scene-1.png' }],
+      }),
+    );
+    expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
+      3,
+      expect.objectContaining({
+        prompt: expect.stringContaining('scene 2/2'),
+        originalImages: [{ url: 'https://example.com/generated-scene-2.png' }],
+      }),
+    );
     expect(mockedGenerateVideo).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
+        model: 'pro',
         persistToStorage: false,
+        sourceImageUrl: 'https://example.com/generated-scene-2.png',
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );
     expect(mockedGenerateVideo).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
+        model: 'pro',
         persistToStorage: false,
+        sourceImageUrl: 'https://example.com/generated-scene-3.png',
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );
