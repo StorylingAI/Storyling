@@ -470,26 +470,20 @@ describe('generateFilm NSFW retry', () => {
 
     expect(result.videoUrl).toBe('https://example.com/final-film.mp4');
     expect(mockedGenerateImage).not.toHaveBeenCalled();
-    expect(mockedGenerateStillImage).toHaveBeenCalledTimes(3);
+    expect(mockedGenerateStillImage).toHaveBeenCalledTimes(2);
     expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        prompt: expect.stringContaining('character reference keyframe'),
+        prompt: expect.stringContaining('scene 1/2'),
         aspectRatio: '16:9',
+        originalImages: [],
       }),
     );
     expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        prompt: expect.stringContaining('scene 1/2'),
-        originalImages: [{ url: 'https://example.com/generated-scene-1.png' }],
-      }),
-    );
-    expect(mockedGenerateStillImage).toHaveBeenNthCalledWith(
-      3,
-      expect.objectContaining({
         prompt: expect.stringContaining('scene 2/2'),
-        originalImages: [{ url: 'https://example.com/generated-scene-2.png' }],
+        originalImages: [{ url: 'https://example.com/generated-scene-1.png' }],
       }),
     );
     expect(mockedGenerateVideo).toHaveBeenNthCalledWith(
@@ -497,7 +491,7 @@ describe('generateFilm NSFW retry', () => {
       expect.objectContaining({
         model: 'pro',
         persistToStorage: false,
-        sourceImageUrl: 'https://example.com/generated-scene-2.png',
+        sourceImageUrl: 'https://example.com/generated-scene-1.png',
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );
@@ -506,7 +500,7 @@ describe('generateFilm NSFW retry', () => {
       expect.objectContaining({
         model: 'pro',
         persistToStorage: false,
-        sourceImageUrl: 'https://example.com/generated-scene-3.png',
+        sourceImageUrl: 'https://example.com/generated-scene-2.png',
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );

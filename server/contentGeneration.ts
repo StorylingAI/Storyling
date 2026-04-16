@@ -970,31 +970,12 @@ function resolveFilmVideoModel(): "standard" | "pro" {
     : "pro";
 }
 
-function buildFilmCharacterReferencePrompt(
-  characterSheet: string,
-  cinematicStyle: string,
-  theme: string,
-): string {
-  const characterLock = extractCharacterLock(characterSheet);
-  const visualStyleLock = extractSheetField(characterSheet, "VISUAL STYLE");
-
-  return [
-    `Create a polished 16:9 animation character reference keyframe for a short language-learning story film in ${cinematicStyle} style and ${theme.toLowerCase()} mood.`,
-    visualStyleLock ? `Visual style lock: ${visualStyleLock}.` : "",
-    characterLock
-      ? `Main recurring subject: ${characterLock}. Preserve this exact face, hairstyle, outfit, body proportions, shoes, and essential prop in all future scenes.`
-      : "Main recurring subject: one friendly adult language learner with a simple outfit and one small backpack.",
-    "Show one full-body adult only, centered, clean three-quarter view, neutral standing pose, friendly non-scary expression, simple neutral background, soft cinematic lighting.",
-    "This is the canonical identity anchor, not a character variation sheet: do not create alternate outfits, alternate bags, alternate hairstyles, or alternate art styles.",
-    "No text, no subtitles, no logo, no watermark, no extra limbs, no distorted hands, no duplicate people, no scary or glitchy details.",
-  ].filter(Boolean).join(" ");
-}
-
 function buildFilmSceneStillPrompt(
   visualPrompt: string,
   characterSheet: string,
   sceneIndex: number,
   totalScenes: number,
+  hasIdentityReference: boolean,
   hasPreviousSceneReference: boolean,
 ): string {
   const characterLock = extractCharacterLock(characterSheet);
@@ -1005,7 +986,9 @@ function buildFilmSceneStillPrompt(
 
   return [
     `Create a finished 16:9 cinematic animation keyframe for scene ${sceneIndex + 1}/${totalScenes}.`,
-    "Use the first provided reference image as the canonical identity anchor. Copy the exact same adult face, hairstyle, body proportions, outerwear, bottoms, shoes, and carried prop from that anchor.",
+    hasIdentityReference
+      ? "Use the first provided reference image as the canonical identity anchor. Copy the exact same adult face, hairstyle, body proportions, outerwear, bottoms, shoes, and carried prop from that anchor."
+      : "This first scene is the canonical identity anchor for the whole video. Create exactly one recurring adult from the character lock, with a clear face, hairstyle, outfit, shoes, and carried prop that can be reused unchanged in later scenes.",
     hasPreviousSceneReference
       ? "Use the previous scene reference only for location continuity, camera language, and palette. Do not let the previous scene alter the canonical identity anchor."
       : "",
@@ -1077,38 +1060,9 @@ function formatGenerationError(error: unknown): string {
   return "Unknown generation error";
 }
 
-async function generateFilmReferenceImage(
-  characterSheet: string,
-  cinematicStyle: string,
-  theme: string,
-  seed: number,
-): Promise<string | undefined> {
-  if (!characterSheet.trim()) {
-    return undefined;
-  }
-
-  try {
-    const { generateImage } = await import("./_core/imageGeneration");
-    const result = await generateImage({
-      prompt: buildFilmCharacterReferencePrompt(characterSheet, cinematicStyle, theme),
-      aspectRatio: "16:9",
-      imageSize: "1K",
-      seed,
-    });
-    return result.url;
-  } catch (error) {
-    console.warn(
-      "[Film Generation] Character reference image failed; falling back to text-only continuity:",
-      formatGenerationError(error),
-    );
-    return undefined;
-  }
-}
-
 async function generateFilmSceneStill(params: {
   visualPrompt: string;
   characterSheet: string;
-  characterReferenceImageUrl?: string;
   identityReferenceImageUrl?: string;
   previousSceneImageUrl?: string;
   sceneIndex: number;
@@ -1118,7 +1072,7 @@ async function generateFilmSceneStill(params: {
   try {
     const { generateImage } = await import("./_core/imageGeneration");
     const originalImages = [
-      params.identityReferenceImageUrl || params.characterReferenceImageUrl,
+      params.identityReferenceImageUrl,
       params.previousSceneImageUrl,
     ]
       .filter((url): url is string => Boolean(url))
@@ -1132,6 +1086,7 @@ async function generateFilmSceneStill(params: {
         params.characterSheet,
         params.sceneIndex,
         params.totalScenes,
+        Boolean(params.identityReferenceImageUrl),
         Boolean(params.previousSceneImageUrl),
       ),
       aspectRatio: "16:9",
@@ -1538,14 +1493,6 @@ export async function generateFilm(
     const consistentSeed = Math.abs(storySeed) % 10000;
     console.log('[Film Generation] Using consistent seed:', consistentSeed);
 
-    if (onProgress) onProgress('Creating character reference...', 18);
-    const characterReferenceImageUrl = await generateFilmReferenceImage(
-      characterSheet,
-      cinematicStyle,
-      theme,
-      consistentSeed,
-    );
-
     // Step 5: Generate video clips with character sheet + consistent seed
     const clips: Array<{ url: string; order: number; duration: number }> = [];
     let previousVisualPrompt: string | undefined;
@@ -1575,7 +1522,6 @@ export async function generateFilm(
       let sceneImageUrl = await generateFilmSceneStill({
         visualPrompt,
         characterSheet,
-        characterReferenceImageUrl,
         identityReferenceImageUrl,
         previousSceneImageUrl,
         sceneIndex: i,
@@ -1602,7 +1548,6 @@ export async function generateFilm(
               seed: consistentSeed,
               persistToStorage: false,
               sourceImageUrl: sceneImageUrl,
-              referenceImageUrls: characterReferenceImageUrl ? [characterReferenceImageUrl] : [],
             });
           } catch (clipError: any) {
             lastFailureMessage = clipError?.message || `Clip ${i + 1} generation failed`;
@@ -1623,7 +1568,6 @@ export async function generateFilm(
               sceneImageUrl = await generateFilmSceneStill({
                 visualPrompt,
                 characterSheet,
-                characterReferenceImageUrl,
                 identityReferenceImageUrl,
                 previousSceneImageUrl,
                 sceneIndex: i,
@@ -1658,7 +1602,6 @@ export async function generateFilm(
             sceneImageUrl = await generateFilmSceneStill({
               visualPrompt,
               characterSheet,
-              characterReferenceImageUrl,
               identityReferenceImageUrl,
               previousSceneImageUrl,
               sceneIndex: i,
@@ -1762,6 +1705,7 @@ export async function generateFilm(
       subtitleColor,
       sceneTexts: subtitleTexts,
       clipDuration,
+      targetDuration: plannedVideoDuration,
       narrationAudioPath,
     });
 

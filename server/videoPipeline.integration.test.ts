@@ -95,6 +95,7 @@ describe("Video pipeline integration", () => {
             "This second scene carries more words and should stay visible longer than the first one.",
           ],
           clipDuration: 2,
+          targetDuration: 6,
           narrationAudioUrl: "http://127.0.0.1:32125/narration.mp3",
         },
       );
@@ -104,8 +105,8 @@ describe("Video pipeline integration", () => {
       const duration = await getDuration(uploadedPath);
 
       expect(stats.size).toBeGreaterThan(0);
-      expect(duration).toBeGreaterThan(2.5);
-      expect(duration).toBeLessThan(3.6);
+      expect(duration).toBeGreaterThan(5.7);
+      expect(duration).toBeLessThan(6.4);
       expect(await hasAudioStream(uploadedPath)).toBe(true);
       expect(result.clipCount).toBe(2);
     } finally {
@@ -162,8 +163,8 @@ describe("Video pipeline integration", () => {
       expect(await hasAudioStream(uploadedPath)).toBe(true);
 
       const duration = await getDuration(uploadedPath);
-      expect(duration).toBeGreaterThan(1);
-      expect(duration).toBeLessThan(2);
+      expect(duration).toBeGreaterThan(1.8);
+      expect(duration).toBeLessThan(2.2);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       if (uploadedPath) {

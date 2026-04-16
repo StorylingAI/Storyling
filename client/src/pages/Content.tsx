@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -77,6 +77,51 @@ import { MobileNav } from "@/components/MobileNav";
 import { ShareStoryModal } from "@/components/ShareStoryModal";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { Crown, Lock } from "lucide-react";
+
+function splitVideoSubtitleLine(line: string, maxChars = 84): string[] {
+  if (line.length <= maxChars) {
+    return [line];
+  }
+
+  const words = line.split(/\s+/).filter(Boolean);
+  const chunks: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const next = current ? `${current} ${word}` : word;
+    if (next.length <= maxChars) {
+      current = next;
+      continue;
+    }
+
+    if (current) chunks.push(current);
+    current = word;
+  }
+
+  if (current) chunks.push(current);
+  return chunks;
+}
+
+function buildVideoSubtitleLines(text?: string | null): string[] {
+  const cleanText = (text || "")
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleanText) {
+    return [];
+  }
+
+  const sentenceLines = cleanText
+    .match(/[^.!?]+[.!?]?/g)
+    ?.map((line) => line.trim())
+    .filter(Boolean) ?? [cleanText];
+
+  return sentenceLines.flatMap((line) => splitVideoSubtitleLine(line));
+}
 
 export default function Content() {
   const [, params] = useRoute("/content/:id");
@@ -162,6 +207,26 @@ export default function Content() {
     { id: contentId },
     { enabled: isAuthenticated && contentId > 0 }
   );
+
+  const videoSubtitleLines = useMemo(() => {
+    if (content?.mode !== "film") {
+      return [];
+    }
+    return buildVideoSubtitleLines(content.transcript || content.storyText);
+  }, [content?.mode, content?.storyText, content?.transcript]);
+
+  const currentVideoSubtitle = useMemo(() => {
+    if (videoSubtitleLines.length === 0 || duration <= 0) {
+      return "";
+    }
+
+    const segmentDuration = duration / videoSubtitleLines.length;
+    const index = Math.min(
+      videoSubtitleLines.length - 1,
+      Math.max(0, Math.floor(currentTime / Math.max(segmentDuration, 0.1))),
+    );
+    return videoSubtitleLines[index] || "";
+  }, [currentTime, duration, videoSubtitleLines]);
 
   const { data: favorites } = trpc.content.getFavorites.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -942,6 +1007,29 @@ export default function Content() {
                     onLoadedMetadata={handleLoadedMetadata}
                     onEnded={() => setIsPlaying(false)}
                   />
+                )}
+                {currentVideoSubtitle && (
+                  <div
+                    className="pointer-events-none absolute left-4 right-4 z-20 flex justify-center text-center"
+                    style={{
+                      top: subtitleSettings.position === "top" ? "4.5rem" : undefined,
+                      bottom: subtitleSettings.position === "bottom" ? "2.75rem" : undefined,
+                    }}
+                  >
+                    <span
+                      className="max-w-[92%] rounded-md px-3 py-1.5 font-bold leading-snug"
+                      style={{
+                        color: subtitleSettings.color,
+                        fontFamily: subtitleSettings.fontFamily,
+                        fontSize: `clamp(16px, ${subtitleSettings.fontSize}px, 34px)`,
+                        whiteSpace: "pre-line",
+                        backgroundColor: `rgba(0, 0, 0, ${Math.min(1, Math.max(0, subtitleSettings.backgroundOpacity))})`,
+                        textShadow: `0 0 ${subtitleSettings.outlineThickness}px #000, 0 1px ${subtitleSettings.outlineThickness + 1}px #000`,
+                      }}
+                    >
+                      {currentVideoSubtitle}
+                    </span>
+                  </div>
                 )}
                 {/* Video Controls Overlay */}
                 <div className="absolute top-4 right-4 flex gap-2">
