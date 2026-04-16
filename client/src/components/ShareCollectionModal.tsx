@@ -25,12 +25,13 @@ export function ShareCollectionModal({
   const [isPublic, setIsPublic] = useState(initialIsPublic);
   const [shareToken, setShareToken] = useState(initialShareToken);
   const [copied, setCopied] = useState(false);
+  const utils = trpc.useUtils();
 
   const toggleSharingMutation = trpc.collections.togglePublicSharing.useMutation({
     onSuccess: (data) => {
       setShareToken(data.shareToken || null);
       // Invalidate collections to update UI
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
     },
   });
 
@@ -38,7 +39,7 @@ export function ShareCollectionModal({
     onSuccess: (data) => {
       setShareToken(data.shareToken);
       // Invalidate collections to update UI
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
     },
   });
 

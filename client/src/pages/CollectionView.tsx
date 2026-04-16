@@ -16,6 +16,7 @@ export default function CollectionView() {
   const [, setLocation] = useLocation();
   const params = useParams();
   const collectionId = parseInt(params.id || "0");
+  const utils = trpc.useUtils();
 
   const [isAddStoryOpen, setIsAddStoryOpen] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
@@ -32,20 +33,20 @@ export default function CollectionView() {
 
   const addToCollectionMutation = trpc.collections.addToCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
       setIsAddStoryOpen(false);
     },
   });
 
   const removeFromCollectionMutation = trpc.collections.removeFromCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
     },
   });
 
   const reorderMutation = trpc.collections.reorderCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
     },
   });
   

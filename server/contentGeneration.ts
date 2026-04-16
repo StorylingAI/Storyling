@@ -974,10 +974,65 @@ const FILM_SUBJECT_STABILITY_GUIDANCE =
 const FILM_LANDSCAPE_STABILITY_GUIDANCE =
   "stable environment, no people, no text, no morphing or drifting objects, gentle natural motion";
 
-const FILM_CLIP_TRANSIENT_RETRIES = 1;
+const DEFAULT_FILM_CLIP_TRANSIENT_RETRIES = 3;
+const MAX_FILM_CLIP_TRANSIENT_RETRIES = 6;
+const DEFAULT_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS = 15000;
+const MAX_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS = 120000;
 const DEFAULT_REPLICATE_FILM_CLIP_DURATION_SECONDS = 8;
 const DEFAULT_HIGGSFIELD_FILM_CLIP_DURATION_SECONDS = 10;
 type FilmClipDuration = 4 | 5 | 6 | 8 | 10 | 15;
+
+function resolveIntegerEnv(
+  name: string,
+  fallback: number,
+  options: { min: number; max: number },
+): number {
+  const parsed = Number(process.env[name]);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const rounded = Math.floor(parsed);
+  return Math.min(options.max, Math.max(options.min, rounded));
+}
+
+function resolveFilmClipTransientRetries(): number {
+  return resolveIntegerEnv(
+    "FILM_CLIP_TRANSIENT_RETRIES",
+    DEFAULT_FILM_CLIP_TRANSIENT_RETRIES,
+    { min: 0, max: MAX_FILM_CLIP_TRANSIENT_RETRIES },
+  );
+}
+
+function resolveFilmClipTransientRetryDelayMs(): number {
+  const testFallback =
+    process.env.NODE_ENV === "test" || process.env.VITEST
+      ? 0
+      : DEFAULT_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS;
+
+  return resolveIntegerEnv(
+    "FILM_CLIP_TRANSIENT_RETRY_DELAY_MS",
+    testFallback,
+    { min: 0, max: MAX_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS },
+  );
+}
+
+function getTransientRetryDelayMs(retryAttempt: number, baseDelayMs: number): number {
+  if (baseDelayMs <= 0) {
+    return 0;
+  }
+
+  const multiplier = 2 ** Math.max(0, retryAttempt - 1);
+  return Math.min(MAX_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS, baseDelayMs * multiplier);
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function resolveFilmClipDuration(
   targetVideoDuration: number,
@@ -1333,13 +1388,19 @@ function summarizePromptForContinuity(previousScenePrompt?: string): string {
 function isTransientClipFailure(message: string): boolean {
   const normalizedMessage = message.toLowerCase();
   return (
+    normalizedMessage.includes('e004') ||
     normalizedMessage.includes('timeout') ||
     normalizedMessage.includes('temporarily unavailable') ||
     normalizedMessage.includes('rate limit') ||
+    normalizedMessage.includes('too many requests') ||
     normalizedMessage.includes('server error') ||
     normalizedMessage.includes('connection') ||
     normalizedMessage.includes('network') ||
-    normalizedMessage.includes('service unavailable')
+    normalizedMessage.includes('service unavailable') ||
+    normalizedMessage.includes('try again later') ||
+    normalizedMessage.includes('overloaded') ||
+    normalizedMessage.includes('capacity') ||
+    /\b50[0-4]\b/.test(normalizedMessage)
   );
 }
 
@@ -1500,16 +1561,19 @@ export async function generateFilm(
   let narrationAudioPath: string | undefined;
   let narrationDuration: number | undefined;
   let subtitleEntries: FilmSubtitleCue[] | undefined;
+  let videoProvider: "replicate" | "higgsfield" = "replicate";
 
   try {
-    const videoProvider = resolveVideoProvider();
+    videoProvider = resolveVideoProvider();
     const clipDuration = resolveFilmClipDuration(targetVideoDuration, videoProvider);
     const clipCount = Math.max(1, Math.ceil(targetVideoDuration / clipDuration));
     const plannedVideoDuration = clipCount * clipDuration;
     const videoModel = resolveFilmVideoModel();
+    const transientRetryLimit = resolveFilmClipTransientRetries();
+    const transientRetryDelayMs = resolveFilmClipTransientRetryDelayMs();
 
     console.log(
-      `[Film Generation] Creating ${clipCount} high-quality ${clipDuration}s clips for target ${plannedVideoDuration}s using ${videoProvider} ${videoModel} model`,
+      `[Film Generation] Creating ${clipCount} high-quality ${clipDuration}s clips for target ${plannedVideoDuration}s using ${videoProvider} ${videoModel} model with ${transientRetryLimit} transient retries`,
     );
 
     if (onProgress) onProgress('Planning scenes...', 5);
@@ -1698,7 +1762,7 @@ export async function generateFilm(
       let clipAttempt = 0;
       let lastFailureMessage = '';
 
-      while (clipAttempt <= FILM_CLIP_TRANSIENT_RETRIES) {
+      while (clipAttempt <= transientRetryLimit) {
         let retryLevel = 0;
         let shouldRetryClip = false;
 
@@ -1743,7 +1807,7 @@ export async function generateFilm(
               continue;
             }
 
-            if (clipAttempt < FILM_CLIP_TRANSIENT_RETRIES && isTransientClipFailure(lastFailureMessage)) {
+            if (clipAttempt < transientRetryLimit && isTransientClipFailure(lastFailureMessage)) {
               shouldRetryClip = true;
               break;
             }
@@ -1790,19 +1854,21 @@ export async function generateFilm(
         if (result?.status === 'processing') {
           lastFailureMessage = result.error || `Clip ${i + 1} generation timeout`;
           shouldRetryClip =
-            clipAttempt < FILM_CLIP_TRANSIENT_RETRIES && isTransientClipFailure(lastFailureMessage);
+            clipAttempt < transientRetryLimit && isTransientClipFailure(lastFailureMessage);
         } else if (result?.status === 'failed') {
           lastFailureMessage = result.error || `Clip ${i + 1} generation failed`;
           shouldRetryClip =
-            clipAttempt < FILM_CLIP_TRANSIENT_RETRIES && isTransientClipFailure(lastFailureMessage);
+            clipAttempt < transientRetryLimit && isTransientClipFailure(lastFailureMessage);
         }
 
         if (shouldRetryClip) {
           clipAttempt++;
+          const retryDelayMs = getTransientRetryDelayMs(clipAttempt, transientRetryDelayMs);
           console.warn(
-            `[Film Generation] Retrying clip ${i + 1}/${scenes.length} after transient failure (${clipAttempt}/${FILM_CLIP_TRANSIENT_RETRIES}): ${lastFailureMessage}`,
+            `[Film Generation] Retrying clip ${i + 1}/${scenes.length} after transient failure (${clipAttempt}/${transientRetryLimit}) in ${Math.round(retryDelayMs / 1000)}s: ${lastFailureMessage}`,
           );
           result = undefined;
+          await sleep(retryDelayMs);
           continue;
         }
 
@@ -1896,10 +1962,15 @@ export async function generateFilm(
     
     // Provide helpful error messages
     if (error instanceof Error) {
+      const providerName = videoProvider === "replicate" ? "Replicate" : "Higgsfield";
       if (error.message.includes('authentication failed')) {
-        throw new Error("Higgsfield API authentication failed. Please check your API credentials.");
+        throw new Error(`${providerName} API authentication failed. Please check your API credentials.`);
       } else if (error.message.includes('rate limit')) {
-        throw new Error("Higgsfield API rate limit exceeded. Please try again later.");
+        throw new Error(`${providerName} API rate limit exceeded. Please try again later.`);
+      } else if (isTransientClipFailure(error.message)) {
+        throw new Error(
+          `${providerName} video service is temporarily unavailable after retries. Please try again later. Last error: ${error.message}`,
+        );
       }
     }
     

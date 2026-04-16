@@ -8,13 +8,14 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 
 export function WeeklyGoalSettings() {
+  const utils = trpc.useUtils();
   const { data: goalStatus, isLoading } = trpc.weeklyGoal.getWeeklyGoalStatus.useQuery();
   const [selectedGoal, setSelectedGoal] = useState<string>("");
   const [showSuccess, setShowSuccess] = useState(false);
 
   const updateGoalMutation = trpc.weeklyGoal.updateWeeklyGoal.useMutation({
     onSuccess: () => {
-      trpc.useUtils().weeklyGoal.getWeeklyGoalStatus.invalidate();
+      utils.weeklyGoal.getWeeklyGoalStatus.invalidate();
       setShowSuccess(true);
       toast.success("Weekly goal updated successfully!");
       setTimeout(() => setShowSuccess(false), 3000);

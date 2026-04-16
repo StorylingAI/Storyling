@@ -147,7 +147,7 @@ export default function Library() {
   const bulkAddMutation = trpc.collections.bulkAddToCollection.useMutation({
     onSuccess: (data) => {
       // Invalidate collections query to update counts
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
       
       // Show success toast
       const message = data.skipped > 0 
@@ -169,7 +169,7 @@ export default function Library() {
   // Quick-add to collection mutation
   const quickAddMutation = trpc.collections.addToCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
       toast.success('Added to collection!');
     },
     onError: (error) => {

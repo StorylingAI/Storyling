@@ -368,7 +368,7 @@ describe('generateFilm NSFW retry', () => {
     expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
   });
 
-  it('should retry the same clip once after a transient provider error', async () => {
+  it('should retry the same clip after a transient provider error', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test', created: Date.now(), model: 'gpt-4o-mini',
       choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
@@ -399,6 +399,41 @@ describe('generateFilm NSFW retry', () => {
 
     expect(result.videoUrl).toBe('https://example.com/recovered-after-error.mp4');
     expect(mockedGenerateVideo).toHaveBeenCalledTimes(2);
+    expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
+  });
+
+  it('should retry Replicate E004 failures multiple times before succeeding', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test', created: Date.now(), model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test', created: Date.now(), model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A surfer watches gentle waves at sunset.' }, finish_reason: 'stop' }],
+    });
+
+    mockedGenerateVideo
+      .mockRejectedValueOnce(new Error('Service is temporarily unavailable. Please try again later. (E004) (first)'))
+      .mockRejectedValueOnce(new Error('Service is temporarily unavailable. Please try again later. (E004) (second)'))
+      .mockResolvedValueOnce({
+        videoUrl: 'https://example.com/recovered-after-e004.mp4',
+        status: 'completed',
+        requestId: 'req-recovered-e004',
+      });
+
+    const result = await generateFilm(
+      {
+        targetLanguage: 'French', proficiencyLevel: 'A2',
+        vocabularyWords: ['vague'], theme: 'Adventure',
+        cinematicStyle: 'Playful Animation', targetVideoDuration: 5,
+        addSubtitles: false,
+      },
+      'Le surfeur regarde les vagues au coucher du soleil.',
+    );
+
+    expect(result.videoUrl).toBe('https://example.com/recovered-after-e004.mp4');
+    expect(mockedGenerateVideo).toHaveBeenCalledTimes(3);
     expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
   });
 

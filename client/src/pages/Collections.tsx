@@ -19,6 +19,7 @@ import { MobileNav } from "@/components/MobileNav";
 export default function Collections() {
   const { user, isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
+  const utils = trpc.useUtils();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [showCollectionsTutorial, setShowCollectionsTutorial] = useState(false);
@@ -57,7 +58,7 @@ export default function Collections() {
 
   const createMutation = trpc.collections.createCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
       setIsCreateOpen(false);
       setNewName("");
       setNewDescription("");
@@ -67,7 +68,7 @@ export default function Collections() {
 
   const deleteMutation = trpc.collections.deleteCollection.useMutation({
     onSuccess: () => {
-      trpc.useUtils().collections.getMyCollections.invalidate();
+      utils.collections.getMyCollections.invalidate();
     },
   });
 

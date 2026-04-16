@@ -785,7 +785,7 @@ export default function Content() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md rounded-card shadow-playful-lg border-2 animate-bounce-in overflow-hidden">
             <CardContent className="pt-6 text-center space-y-5 pb-2">
-              <img src="/flip-mascot.png" alt="Flip Celebrating" className="w-28 h-28 mx-auto animate-bounce animate-glow" />
+              <img src={APP_LOGO} alt="Storyling" className="w-28 h-28 mx-auto object-contain animate-bounce animate-glow" />
               <h3 className="text-3xl font-bold gradient-text-primary">Nice! You finished your story. 🎉</h3>
               <p className="text-lg text-muted-foreground">
                 {entitlements.isFree
