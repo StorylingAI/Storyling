@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { publicProcedure, router } from "./_core/trpc";
-import { getDb } from "./db";
+import { getDb, isConfiguredAdminIdentity } from "./db";
 import { users } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { sdk } from "./_core/sdk";
@@ -75,6 +75,7 @@ export const authRouter = router({
         email: input.email,
         name: input.name,
         passwordHash,
+        role: isConfiguredAdminIdentity({ openId, email: input.email }) ? "admin" : "user",
         emailVerified: false,
         verificationToken,
         verificationTokenExpiry,

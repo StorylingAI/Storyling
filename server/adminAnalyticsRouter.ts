@@ -3,7 +3,7 @@ import { router, protectedProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { getDb } from "./db";
 import { users, organizations, generatedContent, classMembers, classes, collections, collectionItems } from "../drizzle/schema";
-import { sql, gte, lte, and, eq, desc, count } from "drizzle-orm";
+import { sql, gte, lte, and, eq, desc, asc, count, like, or } from "drizzle-orm";
 
 /**
  * Admin-only procedure - requires admin role
@@ -14,6 +14,9 @@ const adminProcedure = protectedProcedure.use(({ ctx, next }) => {
   }
   return next({ ctx });
 });
+
+const userRoleSchema = z.enum(["user", "admin", "teacher", "org_admin"]);
+const userRoleFilterSchema = z.union([userRoleSchema, z.literal("all")]).default("all");
 
 export const adminAnalyticsRouter = router({
   /**
@@ -151,6 +154,182 @@ export const adminAnalyticsRouter = router({
         totalUsers: totalUsers.total,
         period: input.period,
       };
+    }),
+
+  /**
+   * List users with signup info and usage counts.
+   */
+  getUsers: adminProcedure
+    .input(
+      z.object({
+        search: z.string().trim().max(320).optional(),
+        role: userRoleFilterSchema,
+        page: z.number().int().min(1).default(1),
+        pageSize: z.number().int().min(5).max(100).default(20),
+        sortBy: z.enum(["createdAt", "lastSignedIn", "email", "name"]).default("createdAt"),
+        sortDirection: z.enum(["asc", "desc"]).default("desc"),
+      })
+    )
+    .query(async ({ input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const conditions = [];
+      const search = input.search?.trim();
+      if (search) {
+        const pattern = `%${search}%`;
+        conditions.push(or(like(users.email, pattern), like(users.name, pattern)));
+      }
+      if (input.role !== "all") {
+        conditions.push(eq(users.role, input.role));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const [{ total }] = whereClause
+        ? await db.select({ total: count() }).from(users).where(whereClause)
+        : await db.select({ total: count() }).from(users);
+
+      const sortColumn =
+        input.sortBy === "lastSignedIn"
+          ? users.lastSignedIn
+          : input.sortBy === "email"
+            ? users.email
+            : input.sortBy === "name"
+              ? users.name
+              : users.createdAt;
+      const order = input.sortDirection === "asc" ? asc(sortColumn) : desc(sortColumn);
+      const offset = (input.page - 1) * input.pageSize;
+
+      const pageUsers = whereClause
+        ? await db
+            .select({
+              id: users.id,
+              name: users.name,
+              email: users.email,
+              role: users.role,
+              loginMethod: users.loginMethod,
+              emailVerified: users.emailVerified,
+              subscriptionTier: users.subscriptionTier,
+              subscriptionStatus: users.subscriptionStatus,
+              createdAt: users.createdAt,
+              lastSignedIn: users.lastSignedIn,
+              preferredLanguage: users.preferredLanguage,
+              preferredTranslationLanguage: users.preferredTranslationLanguage,
+              timezone: users.timezone,
+            })
+            .from(users)
+            .where(whereClause)
+            .orderBy(order)
+            .limit(input.pageSize)
+            .offset(offset)
+        : await db
+            .select({
+              id: users.id,
+              name: users.name,
+              email: users.email,
+              role: users.role,
+              loginMethod: users.loginMethod,
+              emailVerified: users.emailVerified,
+              subscriptionTier: users.subscriptionTier,
+              subscriptionStatus: users.subscriptionStatus,
+              createdAt: users.createdAt,
+              lastSignedIn: users.lastSignedIn,
+              preferredLanguage: users.preferredLanguage,
+              preferredTranslationLanguage: users.preferredTranslationLanguage,
+              timezone: users.timezone,
+            })
+            .from(users)
+            .orderBy(order)
+            .limit(input.pageSize)
+            .offset(offset);
+
+      const usersWithStats = await Promise.all(
+        pageUsers.map(async (user) => {
+          const [contentStats] = await db
+            .select({
+              totalContent: count(),
+              completedContent: sql<number>`SUM(CASE WHEN ${generatedContent.status} = 'completed' THEN 1 ELSE 0 END)`,
+              failedContent: sql<number>`SUM(CASE WHEN ${generatedContent.status} = 'failed' THEN 1 ELSE 0 END)`,
+              podcastCount: sql<number>`SUM(CASE WHEN ${generatedContent.mode} = 'podcast' THEN 1 ELSE 0 END)`,
+              filmCount: sql<number>`SUM(CASE WHEN ${generatedContent.mode} = 'film' THEN 1 ELSE 0 END)`,
+              lastGeneratedAt: sql<Date | null>`MAX(${generatedContent.generatedAt})`,
+            })
+            .from(generatedContent)
+            .where(eq(generatedContent.userId, user.id));
+
+          return {
+            ...user,
+            stats: {
+              totalContent: Number(contentStats?.totalContent ?? 0),
+              completedContent: Number(contentStats?.completedContent ?? 0),
+              failedContent: Number(contentStats?.failedContent ?? 0),
+              podcastCount: Number(contentStats?.podcastCount ?? 0),
+              filmCount: Number(contentStats?.filmCount ?? 0),
+              lastGeneratedAt: contentStats?.lastGeneratedAt ?? null,
+            },
+          };
+        })
+      );
+
+      return {
+        users: usersWithStats,
+        pagination: {
+          page: input.page,
+          pageSize: input.pageSize,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / input.pageSize)),
+        },
+      };
+    }),
+
+  /**
+   * Change a user's platform role.
+   */
+  updateUserRole: adminProcedure
+    .input(
+      z.object({
+        userId: z.number().int().positive(),
+        role: userRoleSchema,
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      if (input.userId === ctx.user.id && input.role !== "admin") {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "You cannot remove your own admin access",
+        });
+      }
+
+      const [targetUser] = await db
+        .select({ id: users.id, role: users.role })
+        .from(users)
+        .where(eq(users.id, input.userId))
+        .limit(1);
+
+      if (!targetUser) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
+      }
+
+      if (targetUser.role === "admin" && input.role !== "admin") {
+        const [{ adminCount }] = await db
+          .select({ adminCount: count() })
+          .from(users)
+          .where(eq(users.role, "admin"));
+
+        if (adminCount <= 1) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "At least one admin account is required",
+          });
+        }
+      }
+
+      await db.update(users).set({ role: input.role }).where(eq(users.id, input.userId));
+
+      return { success: true };
     }),
 
   /**

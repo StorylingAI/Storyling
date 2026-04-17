@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 // ─── Types ────────────────────────────────────────────────────────────
 
@@ -518,19 +518,15 @@ function ExperimentCard({
 export default function ABTestDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
-
-  // Redirect if not admin
-  useEffect(() => {
-    if (!authLoading && (!user || user.role !== "admin")) {
-      navigate("/app");
-    }
-  }, [user, authLoading, navigate]);
+  const isAdmin = user?.role === "admin";
 
   const {
     data: experiments,
     isLoading: experimentsLoading,
     refetch: refetchExperiments,
-  } = trpc.abTest.listExperiments.useQuery();
+  } = trpc.abTest.listExperiments.useQuery(undefined, {
+    enabled: isAdmin,
+  });
 
   const seedMutation = trpc.abTest.seedAllExperiments.useMutation({
     onSuccess: () => refetchExperiments(),
@@ -545,8 +541,35 @@ export default function ABTestDashboard() {
     );
   }
 
-  if (!user || user.role !== "admin") {
-    return null;
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              <CardTitle>Admin access required</CardTitle>
+            </div>
+            <CardDescription>
+              This account is signed in, but it does not have admin access yet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700">
+              Current role: <span className="font-medium">{user?.role ?? "none"}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => navigate("/app")} variant="outline">
+                Go to app
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                Refresh session
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   const activeExperiments =

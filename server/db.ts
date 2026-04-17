@@ -38,6 +38,32 @@ import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+const isConfiguredValue = (value: string | null | undefined) => {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return Boolean(normalized) && !normalized.startsWith("<") && !normalized.startsWith("your_");
+};
+
+const normalizeEmail = (value: string | null | undefined) => value?.trim().toLowerCase() ?? "";
+
+export function isConfiguredAdminIdentity(identity: {
+  openId?: string | null;
+  email?: string | null;
+}) {
+  const openId = identity.openId?.trim();
+  const email = normalizeEmail(identity.email);
+
+  if (openId && isConfiguredValue(ENV.ownerOpenId) && openId === ENV.ownerOpenId.trim()) {
+    return true;
+  }
+
+  const adminEmails = [ENV.ownerEmail, ...ENV.adminEmails]
+    .filter(isConfiguredValue)
+    .map(normalizeEmail);
+
+  return Boolean(email && adminEmails.includes(email));
+}
+
 // Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
@@ -88,7 +114,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     if (user.role !== undefined) {
       values.role = user.role;
       updateSet.role = user.role;
-    } else if (user.openId === ENV.ownerOpenId) {
+    } else if (isConfiguredAdminIdentity(user)) {
       values.role = 'admin';
       updateSet.role = 'admin';
     }

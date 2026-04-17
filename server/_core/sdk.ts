@@ -295,10 +295,22 @@ class SDKServer {
       throw ForbiddenError("User not found");
     }
 
+    const shouldPromoteToAdmin =
+      user.role !== "admin" &&
+      db.isConfiguredAdminIdentity({ openId: user.openId, email: user.email });
+
     await db.upsertUser({
       openId: user.openId,
       lastSignedIn: signedInAt,
+      role: shouldPromoteToAdmin ? "admin" : undefined,
     });
+
+    if (shouldPromoteToAdmin) {
+      const promotedUser = await db.getUserByOpenId(sessionUserId);
+      if (promotedUser) {
+        user = promotedUser;
+      }
+    }
 
     return user;
   }

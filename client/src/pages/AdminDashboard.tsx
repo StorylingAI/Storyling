@@ -2,6 +2,23 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Users,
   Building2,
@@ -21,32 +38,90 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
-import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useState } from "react";
+
+const ADMIN_USER_PAGE_SIZE = 20;
+const USER_ROLE_OPTIONS = ["user", "admin", "teacher", "org_admin"] as const;
+type UserRole = (typeof USER_ROLE_OPTIONS)[number];
+type UserRoleFilter = UserRole | "all";
+
+function formatDate(value: Date | string | null | undefined) {
+  if (!value) return "Never";
+  return new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(new Date(value));
+}
+
+function formatRole(role: string) {
+  return role.replace("_", " ");
+}
 
 export default function AdminDashboard() {
   const { user, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  const isAdmin = user?.role === "admin";
+  const utils = trpc.useUtils();
+  const [userSearch, setUserSearch] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState<UserRoleFilter>("all");
+  const [userPage, setUserPage] = useState(1);
 
-  // Redirect if not admin
-  useEffect(() => {
-    if (!authLoading && (!user || user.role !== "admin")) {
-      navigate("/app");
-    }
-  }, [user, authLoading, navigate]);
-
-  const { data: overview, isLoading: overviewLoading } = trpc.adminAnalytics.getOverviewStats.useQuery();
-  const { data: revenue, isLoading: revenueLoading } = trpc.adminAnalytics.getRevenueMetrics.useQuery();
+  const { data: overview, isLoading: overviewLoading } = trpc.adminAnalytics.getOverviewStats.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const { data: revenue, isLoading: revenueLoading } = trpc.adminAnalytics.getRevenueMetrics.useQuery(undefined, {
+    enabled: isAdmin,
+  });
   const { data: activeUsers, isLoading: activeUsersLoading } = trpc.adminAnalytics.getActiveUsersMetrics.useQuery({
     period: "month",
+  }, {
+    enabled: isAdmin,
   });
-  const { data: engagement, isLoading: engagementLoading } = trpc.adminAnalytics.getEngagementMetrics.useQuery();
-  const { data: churn, isLoading: churnLoading } = trpc.adminAnalytics.getChurnAnalysis.useQuery();
-  const { data: orgUsage, isLoading: orgUsageLoading } = trpc.adminAnalytics.getOrganizationUsage.useQuery();
-  const { data: collectionAnalytics, isLoading: collectionAnalyticsLoading } = trpc.adminAnalytics.getCollectionAnalytics.useQuery({ limit: 20 });
-  const { data: referralOverview, isLoading: referralOverviewLoading } = trpc.adminReferral.getOverviewStats.useQuery();
-  const { data: topReferrers, isLoading: topReferrersLoading } = trpc.adminReferral.getTopReferrers.useQuery({ limit: 20 });
-  const { data: pendingRewards, isLoading: pendingRewardsLoading } = trpc.adminReferral.getPendingRewards.useQuery();
+  const { data: engagement, isLoading: engagementLoading } = trpc.adminAnalytics.getEngagementMetrics.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const { data: churn, isLoading: churnLoading } = trpc.adminAnalytics.getChurnAnalysis.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const { data: orgUsage, isLoading: orgUsageLoading } = trpc.adminAnalytics.getOrganizationUsage.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const { data: collectionAnalytics, isLoading: collectionAnalyticsLoading } = trpc.adminAnalytics.getCollectionAnalytics.useQuery({ limit: 20 }, {
+    enabled: isAdmin,
+  });
+  const { data: referralOverview, isLoading: referralOverviewLoading } = trpc.adminReferral.getOverviewStats.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const { data: topReferrers, isLoading: topReferrersLoading } = trpc.adminReferral.getTopReferrers.useQuery({ limit: 20 }, {
+    enabled: isAdmin,
+  });
+  const { data: pendingRewards, isLoading: pendingRewardsLoading } = trpc.adminReferral.getPendingRewards.useQuery(undefined, {
+    enabled: isAdmin,
+  });
+  const {
+    data: userDirectory,
+    isLoading: userDirectoryLoading,
+    isFetching: userDirectoryFetching,
+  } = trpc.adminAnalytics.getUsers.useQuery({
+    search: userSearch.trim() || undefined,
+    role: userRoleFilter,
+    page: userPage,
+    pageSize: ADMIN_USER_PAGE_SIZE,
+    sortBy: "createdAt",
+    sortDirection: "desc",
+  }, {
+    enabled: isAdmin,
+  });
+  const updateUserRole = trpc.adminAnalytics.updateUserRole.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.adminAnalytics.getUsers.invalidate(),
+        utils.auth.me.invalidate(),
+      ]);
+    },
+  });
 
   if (authLoading) {
     return (
@@ -61,8 +136,35 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || user.role !== "admin") {
-    return null;
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <AlertCircle className="h-5 w-5 text-orange-500" />
+              <CardTitle>Admin access required</CardTitle>
+            </div>
+            <CardDescription>
+              This account is signed in, but it does not have admin access yet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-md bg-gray-100 px-3 py-2 text-sm text-gray-700">
+              Current role: <span className="font-medium">{user?.role ?? "none"}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={() => navigate("/app")} variant="outline">
+                Go to app
+              </Button>
+              <Button onClick={() => window.location.reload()}>
+                Refresh session
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -243,34 +345,239 @@ export default function AdminDashboard() {
 
           {/* Users Tab */}
           <TabsContent value="users" className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Active Users</CardTitle>
+                  <CardDescription>Users who signed in recently</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {activeUsersLoading ? (
+                    <Skeleton className="h-24" />
+                  ) : (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Active This Month</span>
+                        <span className="text-3xl font-bold">{activeUsers?.activeUsers}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600">Total Users</span>
+                        <span className="text-2xl font-bold">{activeUsers?.totalUsers}</span>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Activation Rate</CardTitle>
+                  <CardDescription>Monthly active users divided by total users</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {activeUsersLoading ? (
+                    <Skeleton className="h-24" />
+                  ) : (
+                    <div className="text-4xl font-bold">
+                      {activeUsers?.totalUsers
+                        ? Math.round((activeUsers.activeUsers / activeUsers.totalUsers) * 100)
+                        : 0}
+                      %
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>New Signups</CardTitle>
+                  <CardDescription>Accounts created in the last 7 days</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {overviewLoading ? (
+                    <Skeleton className="h-24" />
+                  ) : (
+                    <div className="text-4xl font-bold">{overview?.newUsersThisWeek ?? 0}</div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
             <Card>
               <CardHeader>
-                <CardTitle>Active Users</CardTitle>
-                <CardDescription>Users who signed in recently</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {activeUsersLoading ? (
-                  <Skeleton className="h-40" />
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Active This Month</span>
-                      <span className="text-3xl font-bold">{activeUsers?.activeUsers}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Total Users</span>
-                      <span className="text-2xl font-bold">{activeUsers?.totalUsers}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-gray-600">Activation Rate</span>
-                      <span className="text-2xl font-bold">
-                        {activeUsers?.totalUsers
-                          ? Math.round((activeUsers.activeUsers / activeUsers.totalUsers) * 100)
-                          : 0}
-                        %
-                      </span>
-                    </div>
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <CardTitle>User Management</CardTitle>
+                    <CardDescription>
+                      Review signups, account info, activity, subscriptions, and roles.
+                    </CardDescription>
                   </div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={userSearch}
+                      onChange={(event) => {
+                        setUserSearch(event.target.value);
+                        setUserPage(1);
+                      }}
+                      placeholder="Search name or email"
+                      className="w-full sm:w-64"
+                    />
+                    <Select
+                      value={userRoleFilter}
+                      onValueChange={(value) => {
+                        setUserRoleFilter(value as UserRoleFilter);
+                        setUserPage(1);
+                      }}
+                    >
+                      <SelectTrigger className="w-full sm:w-40">
+                        <SelectValue placeholder="Role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All roles</SelectItem>
+                        {USER_ROLE_OPTIONS.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {formatRole(role)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {updateUserRole.error && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {updateUserRole.error.message}
+                  </div>
+                )}
+
+                {userDirectoryLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2, 3, 4, 5].map((item) => (
+                      <Skeleton key={item} className="h-14 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <span>
+                        {userDirectory?.pagination.total ?? 0} user
+                        {(userDirectory?.pagination.total ?? 0) === 1 ? "" : "s"}
+                      </span>
+                      {userDirectoryFetching && <span>Refreshing...</span>}
+                    </div>
+
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>User</TableHead>
+                          <TableHead>Signup</TableHead>
+                          <TableHead>Last Sign In</TableHead>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Plan</TableHead>
+                          <TableHead>Languages</TableHead>
+                          <TableHead>Content</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {userDirectory?.users.length ? (
+                          userDirectory.users.map((account) => (
+                            <TableRow key={account.id}>
+                              <TableCell>
+                                <div className="font-medium">{account.name || "Unnamed user"}</div>
+                                <div className="text-xs text-gray-500">{account.email || "No email"}</div>
+                                <div className="mt-1 flex gap-1">
+                                  <Badge variant={account.emailVerified ? "secondary" : "outline"}>
+                                    {account.emailVerified ? "Verified" : "Unverified"}
+                                  </Badge>
+                                  {account.loginMethod && (
+                                    <Badge variant="outline">{account.loginMethod}</Badge>
+                                  )}
+                                </div>
+                              </TableCell>
+                              <TableCell>{formatDate(account.createdAt)}</TableCell>
+                              <TableCell>{formatDate(account.lastSignedIn)}</TableCell>
+                              <TableCell>
+                                <Select
+                                  value={account.role}
+                                  disabled={account.id === user?.id || updateUserRole.isPending}
+                                  onValueChange={(role) => {
+                                    updateUserRole.mutate({
+                                      userId: account.id,
+                                      role: role as UserRole,
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {USER_ROLE_OPTIONS.map((role) => (
+                                      <SelectItem key={role} value={role}>
+                                        {formatRole(role)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </TableCell>
+                              <TableCell>
+                                <div className="capitalize">{account.subscriptionTier}</div>
+                                <div className="text-xs text-gray-500">
+                                  {account.subscriptionStatus || "No subscription"}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div>{account.preferredLanguage || "en"}</div>
+                                <div className="text-xs text-gray-500">
+                                  Translation: {account.preferredTranslationLanguage || "en"}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <div className="font-medium">{account.stats.totalContent} total</div>
+                                <div className="text-xs text-gray-500">
+                                  {account.stats.completedContent} completed, {account.stats.failedContent} failed
+                                </div>
+                                <div className="text-xs text-gray-500">
+                                  Last: {formatDate(account.stats.lastGeneratedAt)}
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          ))
+                        ) : (
+                          <TableRow>
+                            <TableCell colSpan={7} className="py-8 text-center text-gray-500">
+                              No users match the current filters.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+
+                    <div className="flex items-center justify-between">
+                      <Button
+                        variant="outline"
+                        disabled={userPage <= 1 || userDirectoryFetching}
+                        onClick={() => setUserPage((page) => Math.max(1, page - 1))}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-gray-600">
+                        Page {userDirectory?.pagination.page ?? userPage} of{" "}
+                        {userDirectory?.pagination.totalPages ?? 1}
+                      </span>
+                      <Button
+                        variant="outline"
+                        disabled={
+                          !userDirectory ||
+                          userPage >= userDirectory.pagination.totalPages ||
+                          userDirectoryFetching
+                        }
+                        onClick={() => setUserPage((page) => page + 1)}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
