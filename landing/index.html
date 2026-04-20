@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Storyling.ai - Coming Soon</title>
+  <meta name="description" content="Storyling.ai - AI-powered language learning through immersive stories. Turn vocabulary into unforgettable adventures. Sign up to be the first to know!">
+  <link rel="icon" type="image/png" href="../client/public/flip-mascot.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --purple: #8B5CF6;
+      --purple-deep: #7C3AED;
+      --purple-light: #C4B5FD;
+      --purple-glow: rgba(139, 92, 246, 0.4);
+      --teal: #14B8A6;
+      --teal-light: #5EEAD4;
+      --pink: #EC4899;
+      --pink-light: #F9A8D4;
+      --orange: #F59E0B;
+      --orange-light: #FDE68A;
+      --lime: #84CC16;
+      --bg-start: #FAF5FF;
+      --bg-end: #F0FDFA;
+      --text-dark: #1E1033;
+      --text-muted: #6B5B8A;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      background: var(--bg-start);
+      color: var(--text-dark);
+      min-height: 100vh;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ===== Animated background ===== */
+    .bg-canvas {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 10%, rgba(139, 92, 246, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 80%, rgba(20, 184, 166, 0.07) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 50% 50%, rgba(236, 72, 153, 0.05) 0%, transparent 60%),
+        linear-gradient(170deg, var(--bg-start) 0%, #FFF7ED 40%, var(--bg-end) 100%);
+    }
+
+    /* Floating shapes */
+    .shape {
+      position: fixed;
+      border-radius: 50%;
+      opacity: 0.12;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .shape-1 {
+      width: 300px; height: 300px;
+      background: var(--purple);
+      top: -80px; left: -60px;
+      animation: drift 20s ease-in-out infinite;
+    }
+
+    .shape-2 {
+      width: 200px; height: 200px;
+      background: var(--teal);
+      bottom: 10%; right: -40px;
+      animation: drift 16s ease-in-out infinite reverse;
+    }
+
+    .shape-3 {
+      width: 150px; height: 150px;
+      background: var(--pink);
+      top: 40%; left: 5%;
+      animation: drift 22s ease-in-out infinite 3s;
+    }
+
+    .shape-4 {
+      width: 100px; height: 100px;
+      background: var(--orange);
+      top: 20%; right: 15%;
+      animation: drift 18s ease-in-out infinite 1s;
+    }
+
+    @keyframes drift {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      25% { transform: translate(30px, -20px) scale(1.05); }
+      50% { transform: translate(-15px, 25px) scale(0.95); }
+      75% { transform: translate(20px, 10px) scale(1.02); }
+    }
+
+    /* Sparkle particles */
+    .sparkles {
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .sparkle {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      animation: sparkle-float linear infinite;
+    }
+
+    @keyframes sparkle-float {
+      0% {
+        transform: translateY(100vh) rotate(0deg) scale(0);
+        opacity: 0;
+      }
+      10% { opacity: 1; transform: translateY(90vh) rotate(36deg) scale(1); }
+      90% { opacity: 0.8; }
+      100% {
+        transform: translateY(-10vh) rotate(360deg) scale(0);
+        opacity: 0;
+      }
+    }
+
+    /* ===== Main layout ===== */
+    .page {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 2rem 1.5rem;
+    }
+
+    /* ===== Header / Logo ===== */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-top: 1rem;
+      animation: slide-down 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .logo-img {
+      width: 52px;
+      height: 52px;
+      filter: drop-shadow(0 4px 12px var(--purple-glow));
+      animation: wiggle 3s ease-in-out infinite 2s;
+    }
+
+    .logo-text {
+      font-family: 'Fredoka One', cursive;
+      font-size: 1.75rem;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--pink) 50%, var(--teal) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.02em;
+    }
+
+    /* ===== Hero section ===== */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-top: 3rem;
+      max-width: 680px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 1.2rem;
+      border-radius: 100px;
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.12), rgba(20, 184, 166, 0.1));
+      border: 1px solid rgba(139, 92, 246, 0.2);
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--purple-deep);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      animation: slide-down 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.8); }
+    }
+
+    .hero h1 {
+      font-family: 'Fredoka One', cursive;
+      font-size: clamp(2.2rem, 6vw, 3.8rem);
+      line-height: 1.15;
+      margin-top: 1.5rem;
+      animation: slide-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
+    }
+
+    .hero h1 .highlight {
+      position: relative;
+      display: inline-block;
+      color: var(--purple);
+    }
+
+    .hero h1 .highlight::after {
+      content: '';
+      position: absolute;
+      bottom: 2px;
+      left: -4px;
+      right: -4px;
+      height: 12px;
+      background: linear-gradient(90deg, var(--orange-light), var(--pink-light));
+      border-radius: 4px;
+      z-index: -1;
+      opacity: 0.6;
+      transform: rotate(-1deg);
+    }
+
+    .hero p {
+      font-size: 1.15rem;
+      line-height: 1.7;
+      color: var(--text-muted);
+      margin-top: 1.25rem;
+      max-width: 520px;
+      font-weight: 600;
+      animation: slide-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.45s both;
+    }
+
+    /* ===== Mascot ===== */
+    .mascot-wrapper {
+      margin-top: 2rem;
+      animation: float-mascot 4s ease-in-out infinite, fade-scale-in 1s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+    }
+
+    .mascot-wrapper img {
+      width: 180px;
+      height: 180px;
+      filter: drop-shadow(0 20px 40px rgba(139, 92, 246, 0.25));
+    }
+
+    @keyframes float-mascot {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-12px) rotate(1.5deg); }
+      75% { transform: translateY(-6px) rotate(-1deg); }
+    }
+
+    @keyframes fade-scale-in {
+      from { opacity: 0; transform: scale(0.7) translateY(30px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    /* ===== Countdown ===== */
+    .countdown-section {
+      margin-top: 2.5rem;
+      animation: slide-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.75s both;
+    }
+
+    .countdown-label {
+      font-family: 'Fredoka One', cursive;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .countdown {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: center;
+    }
+
+    .countdown-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .countdown-value {
+      font-family: 'Fredoka One', cursive;
+      font-size: clamp(2rem, 5vw, 2.8rem);
+      width: 80px;
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 20px;
+      background: white;
+      color: var(--purple);
+      box-shadow:
+        0 1px 3px rgba(0,0,0,0.04),
+        0 8px 24px rgba(139, 92, 246, 0.1),
+        inset 0 -3px 0 rgba(139, 92, 246, 0.08);
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .countdown-value::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 50%;
+      background: rgba(139, 92, 246, 0.02);
+      border-bottom: 1px solid rgba(139, 92, 246, 0.06);
+    }
+
+    .countdown-value.tick {
+      transform: scale(1.08);
+    }
+
+    .countdown-unit {
+      font-size: 0.7rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    /* Color accent per card */
+    .countdown-card:nth-child(1) .countdown-value { color: var(--purple); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(139, 92, 246, 0.12), inset 0 -3px 0 rgba(139, 92, 246, 0.08); }
+    .countdown-card:nth-child(2) .countdown-value { color: var(--teal); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(20, 184, 166, 0.12), inset 0 -3px 0 rgba(20, 184, 166, 0.08); }
+    .countdown-card:nth-child(3) .countdown-value { color: var(--pink); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(236, 72, 153, 0.12), inset 0 -3px 0 rgba(236, 72, 153, 0.08); }
+    .countdown-card:nth-child(4) .countdown-value { color: var(--orange); box-shadow: 0 1px 3px rgba(0,0,0,0.04), 0 8px 24px rgba(245, 158, 11, 0.12), inset 0 -3px 0 rgba(245, 158, 11, 0.08); }
+
+    /* ===== Email form ===== */
+    .form-section {
+      margin-top: 2.5rem;
+      width: 100%;
+      max-width: 480px;
+      animation: slide-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.9s both;
+    }
+
+    .form-wrapper {
+      position: relative;
+      display: flex;
+      background: white;
+      border-radius: 100px;
+      padding: 5px;
+      box-shadow:
+        0 1px 3px rgba(0,0,0,0.04),
+        0 12px 32px rgba(139, 92, 246, 0.12);
+      border: 2px solid transparent;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .form-wrapper:focus-within {
+      border-color: var(--purple-light);
+      box-shadow:
+        0 1px 3px rgba(0,0,0,0.04),
+        0 12px 32px rgba(139, 92, 246, 0.18),
+        0 0 0 4px rgba(139, 92, 246, 0.08);
+    }
+
+    .form-wrapper input {
+      flex: 1;
+      border: none;
+      outline: none;
+      padding: 0.9rem 1.4rem;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 500;
+      color: var(--text-dark);
+      background: transparent;
+      border-radius: 100px;
+      min-width: 0;
+    }
+
+    .form-wrapper input::placeholder {
+      color: #B8A4D0;
+    }
+
+    .form-wrapper button {
+      flex-shrink: 0;
+      padding: 0.85rem 1.6rem;
+      border: none;
+      border-radius: 100px;
+      background: linear-gradient(135deg, var(--purple) 0%, var(--purple-deep) 100%);
+      color: white;
+      font-family: 'Nunito', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
+      white-space: nowrap;
+    }
+
+    .form-wrapper button:hover {
+      transform: scale(1.04);
+      box-shadow: 0 6px 20px var(--purple-glow);
+    }
+
+    .form-wrapper button:active {
+      transform: scale(0.97);
+    }
+
+    .form-wrapper button.success {
+      background: linear-gradient(135deg, var(--teal) 0%, #0D9488 100%);
+    }
+
+    .form-hint {
+      text-align: center;
+      margin-top: 0.75rem;
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      opacity: 0.7;
+    }
+
+    .form-message {
+      text-align: center;
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .form-message.visible {
+      opacity: 1;
+    }
+
+    .form-message.success { color: var(--teal); }
+    .form-message.error { color: var(--pink); }
+
+    /* ===== Features teaser ===== */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1.25rem;
+      margin-top: 3.5rem;
+      max-width: 600px;
+      width: 100%;
+      animation: slide-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) 1.1s both;
+    }
+
+    .feature-card {
+      text-align: center;
+      padding: 1.5rem 1rem;
+      border-radius: 20px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(139, 92, 246, 0.08);
+      transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s;
+    }
+
+    .feature-card:hover {
+      transform: translateY(-6px);
+      box-shadow: 0 12px 32px rgba(139, 92, 246, 0.12);
+    }
+
+    .feature-icon {
+      font-size: 2.2rem;
+      margin-bottom: 0.6rem;
+      display: block;
+    }
+
+    .feature-title {
+      font-family: 'Fredoka One', cursive;
+      font-size: 0.85rem;
+      color: var(--text-dark);
+    }
+
+    .feature-desc {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.3rem;
+      line-height: 1.4;
+      font-weight: 600;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      margin-top: auto;
+      padding-top: 3rem;
+      padding-bottom: 1.5rem;
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      opacity: 0.6;
+      animation: fade-in 1s 1.4s both;
+    }
+
+    /* ===== Animations ===== */
+    @keyframes slide-up {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes slide-down {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    @keyframes wiggle {
+      0%, 100% { transform: rotate(0deg); }
+      20% { transform: rotate(-4deg); }
+      40% { transform: rotate(4deg); }
+      60% { transform: rotate(-2deg); }
+      80% { transform: rotate(2deg); }
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 600px) {
+      .page { padding: 1.5rem 1rem; }
+
+      .hero { margin-top: 2rem; }
+
+      .hero h1 { font-size: 2rem; }
+
+      .mascot-wrapper img { width: 140px; height: 140px; }
+
+      .countdown { gap: 0.5rem; }
+      .countdown-value { width: 64px; height: 64px; font-size: 1.6rem; border-radius: 16px; }
+
+      .features {
+        grid-template-columns: 1fr;
+        max-width: 300px;
+        gap: 0.75rem;
+      }
+
+      .feature-card { padding: 1.25rem; }
+
+      .form-wrapper {
+        flex-direction: column;
+        border-radius: 20px;
+        padding: 6px;
+      }
+
+      .form-wrapper input {
+        padding: 0.8rem 1.2rem;
+        text-align: center;
+      }
+
+      .form-wrapper button {
+        border-radius: 16px;
+        padding: 0.8rem;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background -->
+  <div class="bg-canvas"></div>
+  <div class="shape shape-1"></div>
+  <div class="shape shape-2"></div>
+  <div class="shape shape-3"></div>
+  <div class="shape shape-4"></div>
+  <div class="sparkles" id="sparkles"></div>
+
+  <!-- Page content -->
+  <div class="page">
+
+    <!-- Header -->
+    <header class="header">
+      <img src="../client/public/flip-mascot.png" alt="Flip, the Storyling mascot" class="logo-img">
+      <span class="logo-text">Storyling.ai</span>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="badge">
+        <span class="badge-dot"></span>
+        Coming Soon
+      </div>
+
+      <h1>
+        Learn languages through<br>
+        <span class="highlight">immersive</span> AI stories
+      </h1>
+
+      <p>
+        Storyling turns your vocabulary into captivating, personalized stories.
+        Master any language naturally, one adventure at a time.
+      </p>
+    </section>
+
+    <!-- Mascot -->
+    <div class="mascot-wrapper">
+      <img src="../client/public/flip-mascot.png" alt="Flip, the magic book">
+    </div>
+
+    <!-- Countdown -->
+    <section class="countdown-section">
+      <div class="countdown-label">Launching in</div>
+      <div class="countdown" id="countdown">
+        <div class="countdown-card">
+          <div class="countdown-value" id="days">--</div>
+          <span class="countdown-unit">days</span>
+        </div>
+        <div class="countdown-card">
+          <div class="countdown-value" id="hours">--</div>
+          <span class="countdown-unit">hours</span>
+        </div>
+        <div class="countdown-card">
+          <div class="countdown-value" id="minutes">--</div>
+          <span class="countdown-unit">min</span>
+        </div>
+        <div class="countdown-card">
+          <div class="countdown-value" id="seconds">--</div>
+          <span class="countdown-unit">sec</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Email signup -->
+    <section class="form-section">
+      <form class="form-wrapper" id="signup-form" onsubmit="return handleSubmit(event)">
+        <input
+          type="email"
+          id="email-input"
+          placeholder="you@email.com"
+          required
+          autocomplete="email"
+          aria-label="Email address"
+        >
+        <button type="submit" id="submit-btn">Notify me</button>
+      </form>
+      <p class="form-hint">No spam, ever. Just the magic when it's ready.</p>
+      <p class="form-message" id="form-message"></p>
+    </section>
+
+    <!-- Features teaser -->
+    <section class="features">
+      <div class="feature-card">
+        <span class="feature-icon">&#x1F4D6;</span>
+        <div class="feature-title">AI Stories</div>
+        <p class="feature-desc">Personalized stories built from your vocabulary</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">&#x1F3A7;</span>
+        <div class="feature-title">Listen & Learn</div>
+        <p class="feature-desc">Immersive audio to train your ear naturally</p>
+      </div>
+      <div class="feature-card">
+        <span class="feature-icon">&#x1F680;</span>
+        <div class="feature-title">Smart Review</div>
+        <p class="feature-desc">Spaced repetition that adapts to your progress</p>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      &copy; 2026 Storyling.ai &mdash; All rights reserved
+    </footer>
+  </div>
+
+  <script>
+    // ===== Countdown timer =====
+    // Set launch date: 60 days from now (adjust as needed)
+    const LAUNCH_DATE = new Date('2026-05-01T09:00:00');
+
+    function updateCountdown() {
+      const now = new Date();
+      const diff = LAUNCH_DATE - now;
+
+      if (diff <= 0) {
+        document.getElementById('days').textContent = '0';
+        document.getElementById('hours').textContent = '0';
+        document.getElementById('minutes').textContent = '0';
+        document.getElementById('seconds').textContent = '0';
+        return;
+      }
+
+      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diff / (1000 * 60)) % 60);
+      const seconds = Math.floor((diff / 1000) % 60);
+
+      const els = { days, hours, minutes, seconds };
+
+      Object.entries(els).forEach(([id, value]) => {
+        const el = document.getElementById(id);
+        const newVal = String(value).padStart(2, '0');
+        if (el.textContent !== newVal) {
+          el.textContent = newVal;
+          el.classList.add('tick');
+          setTimeout(() => el.classList.remove('tick'), 300);
+        }
+      });
+    }
+
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+
+    // ===== Email form =====
+    function handleSubmit(e) {
+      e.preventDefault();
+      const input = document.getElementById('email-input');
+      const btn = document.getElementById('submit-btn');
+      const msg = document.getElementById('form-message');
+      const email = input.value.trim();
+
+      if (!email) return false;
+
+      // Simulate submission (replace with real API call)
+      btn.disabled = true;
+      btn.textContent = '...';
+
+      setTimeout(() => {
+        btn.textContent = 'You\'re in!';
+        btn.classList.add('success');
+        msg.textContent = 'Thanks! We\'ll let you know when it\'s ready.';
+        msg.className = 'form-message visible success';
+        input.value = '';
+
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.textContent = 'Notify me';
+          btn.classList.remove('success');
+        }, 3000);
+      }, 800);
+
+      return false;
+    }
+
+    // ===== Sparkle particles =====
+    function createSparkles() {
+      const container = document.getElementById('sparkles');
+      const colors = ['#8B5CF6', '#14B8A6', '#EC4899', '#F59E0B', '#C4B5FD', '#5EEAD4'];
+      const count = window.innerWidth < 600 ? 12 : 20;
+
+      for (let i = 0; i < count; i++) {
+        const sparkle = document.createElement('div');
+        sparkle.className = 'sparkle';
+        sparkle.style.left = Math.random() * 100 + '%';
+        sparkle.style.background = colors[Math.floor(Math.random() * colors.length)];
+        sparkle.style.animationDuration = (12 + Math.random() * 18) + 's';
+        sparkle.style.animationDelay = (Math.random() * 15) + 's';
+        sparkle.style.width = (3 + Math.random() * 5) + 'px';
+        sparkle.style.height = sparkle.style.width;
+        sparkle.style.opacity = 0.3 + Math.random() * 0.4;
+        container.appendChild(sparkle);
+      }
+    }
+
+    createSparkles();
+  </script>
+</body>
+</html>

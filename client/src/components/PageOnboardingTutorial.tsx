@@ -68,7 +68,7 @@ export function PageOnboardingTutorial({ storageKey, title, steps }: PageOnboard
           }
         }}
       >
-        <DialogContent className="max-w-md rounded-2xl">
+        <DialogContent className="max-w-md rounded-2xl" showCloseButton={false}>
           <DialogHeader>
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -77,7 +77,13 @@ export function PageOnboardingTutorial({ storageKey, title, steps }: PageOnboard
                 </p>
                 <DialogTitle className="mt-1 text-2xl">{title}</DialogTitle>
               </div>
-              <Button type="button" variant="ghost" size="icon" onClick={completeTutorial}>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={completeTutorial}
+                aria-label="Close tutorial"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
