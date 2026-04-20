@@ -77,7 +77,7 @@ export function registerOAuthRoutes(app: Express) {
           email,
           avatarUrl: null,
           loginMethod: "dev",
-          role: "admin",
+          role: db.isConfiguredAdminIdentity({ openId, email }) ? "admin" : "user",
           lastSignedIn: new Date(),
         });
 

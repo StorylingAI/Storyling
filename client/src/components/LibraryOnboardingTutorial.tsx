@@ -43,7 +43,7 @@ const tutorialSteps = [
   {
     id: "collections",
     title: "Organize with Collections",
-    description: "Create collections to organize your stories by topic, language, or learning goals.",
+    description: "Create collections to organize your stories by topic, language, or learning goals. After this tour, use the Tutorial button at the bottom whenever you need it again.",
     icon: FolderOpen,
     targetSelector: '[data-tutorial="collections-button"]',
     position: "bottom" as const,

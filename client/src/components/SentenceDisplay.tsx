@@ -377,8 +377,8 @@ export function SentenceDisplay({
       return cleanOriginal === cleanSentence || cleanOriginal.includes(cleanSentence) || cleanSentence.includes(cleanOriginal);
     });
     
-    return match || null;
-  }, [currentSentence, lineTranslations]);
+    return match || lineTranslations[currentSentenceIndex] || null;
+  }, [currentSentence, currentSentenceIndex, lineTranslations]);
 
   // Helper function to check if a word is in vocabulary list
   const isVocabularyWord = (word: string): boolean => {
@@ -431,20 +431,56 @@ export function SentenceDisplay({
           break;
         }
       }
+
+      if (sentenceCharIdx === -1) {
+        const directMatchIdx = alignedText.indexOf(cleanSentence);
+        if (directMatchIdx !== -1) {
+          sentenceCharIdx = directMatchIdx;
+        }
+      }
+
+      if (sentenceCharIdx === -1) {
+        const compactSentence = cleanSentence.replace(/\s+/g, '');
+        const compactAligned = alignedText.replace(/\s+/g, '');
+        const compactIdx = compactAligned.indexOf(compactSentence);
+
+        if (compactIdx !== -1) {
+          let compactPosition = 0;
+          for (let i = 0; i < alignChars.length; i++) {
+            if (/\s/.test(alignChars[i])) continue;
+            if (compactPosition === compactIdx) {
+              sentenceCharIdx = i;
+              break;
+            }
+            compactPosition += 1;
+          }
+        }
+      }
       
       // If we found the sentence position, map words to alignment timestamps
       if (sentenceCharIdx !== -1) {
         let charOffset = sentenceCharIdx;
+        const isCharacterBased = /[\u4e00-\u9fa5]/.test(cleanSentence);
+
         return words.map((word) => {
           const cleanWord = word.replace(/\*\*/g, '');
+
+          while (charOffset < alignChars.length && /\s/.test(alignChars[charOffset])) {
+            charOffset += 1;
+          }
+
           const wordStartIdx = charOffset;
           const wordEndIdx = Math.min(charOffset + cleanWord.length - 1, endTimes.length - 1);
           
           const wordStart = wordStartIdx < startTimes.length ? startTimes[wordStartIdx] : sentenceStart;
           const wordEnd = wordEndIdx < endTimes.length ? endTimes[wordEndIdx] : sentenceEnd;
           
-          // Move past this word + space
-          charOffset += cleanWord.length + 1;
+          charOffset = wordEndIdx + 1;
+          if (!isCharacterBased) {
+            while (charOffset < alignChars.length && /\s/.test(alignChars[charOffset])) {
+              charOffset += 1;
+            }
+          }
           
           return { word, startTime: wordStart, endTime: wordEnd };
         });
@@ -734,7 +770,11 @@ export function SentenceDisplay({
   }, []);
 
   // Check if Chinese content
-  const isChinese = storyLanguage?.toLowerCase().includes('chinese');
+  const storyLanguageLower = storyLanguage?.toLowerCase() || "";
+  const isChinese =
+    storyLanguageLower.includes('chinese') ||
+    storyLanguageLower.includes('mandarin') ||
+    /[\u4e00-\u9fa5]/.test(currentSentence);
   const hasPinyin = currentTranslation?.pinyin;
 
   return (
@@ -797,6 +837,7 @@ export function SentenceDisplay({
                 }
                 
                 const isPlayingThis = playingCharacter === pair.chinese;
+                const isHighlighted = idx === currentWordIndex && isPlaying;
                 
                 return (
                   <ruby 
@@ -807,7 +848,9 @@ export function SentenceDisplay({
                   >
                     <span 
                       className={`cursor-pointer transition-all duration-200 ${
-                        isPlayingThis 
+                        isHighlighted
+                          ? 'text-blue-500 font-bold underline decoration-2 underline-offset-4 bg-blue-50 rounded px-0.5'
+                          : isPlayingThis
                           ? 'text-primary scale-110 bg-primary/10 rounded px-0.5' 
                           : 'hover:text-primary hover:scale-105'
                       }`}
@@ -820,7 +863,7 @@ export function SentenceDisplay({
                     </span>
                     <rp>(</rp>
                     <rt className={`text-sm font-medium transition-colors ${
-                      isPlayingThis ? 'text-primary' : 'text-amber-600'
+                      isHighlighted ? 'text-blue-500' : isPlayingThis ? 'text-primary' : 'text-amber-600'
                     }`} style={{ textAlign: 'center' }}>{pair.pinyin.replace(/\*\*/g, '')}</rt>
                     <rp>)</rp>
                   </ruby>
@@ -850,9 +893,6 @@ export function SentenceDisplay({
                     isPlayingThis ? "scale-105 bg-primary/10 rounded px-1" : ""
                   }`}
                   onClick={() => {
-                    if (isVocab) {
-                      handleVocabPronunciation(word);
-                    }
                     handleWordClick(word);
                   }}
                   onContextMenu={(e) => e.preventDefault()}

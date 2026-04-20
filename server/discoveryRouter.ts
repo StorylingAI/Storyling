@@ -34,6 +34,10 @@ export const discoveryRouter = router({
 
       // Build filter conditions
       const baseConditions = [eq(collections.isPublic, true)];
+      const storyConditions = [
+        eq(generatedContent.isPublic, true),
+        eq(generatedContent.status, "completed"),
+      ];
       
       if (input.searchQuery) {
         baseConditions.push(
@@ -42,6 +46,25 @@ export const discoveryRouter = router({
             like(collections.description, `%${input.searchQuery}%`)
           )!
         );
+        storyConditions.push(
+          or(
+            like(generatedContent.title, `%${input.searchQuery}%`),
+            like(generatedContent.storyText, `%${input.searchQuery}%`),
+            like(generatedContent.theme, `%${input.searchQuery}%`)
+          )!
+        );
+      }
+
+      if (input.language) {
+        storyConditions.push(like(vocabularyLists.targetLanguage, `%${input.language}%`));
+      }
+
+      if (input.difficulty) {
+        storyConditions.push(like(generatedContent.difficultyLevel, `%${input.difficulty}%`));
+      }
+
+      if (input.theme) {
+        storyConditions.push(like(generatedContent.theme, `%${input.theme}%`));
       }
 
       // Get trending collections (most clones in the past week)
@@ -221,11 +244,34 @@ export const discoveryRouter = router({
         }
       }
 
+      const publicStories = await db
+        .select({
+          id: generatedContent.id,
+          title: generatedContent.title,
+          titleTranslation: generatedContent.titleTranslation,
+          thumbnailUrl: generatedContent.thumbnailUrl,
+          theme: generatedContent.theme,
+          mode: generatedContent.mode,
+          difficultyLevel: generatedContent.difficultyLevel,
+          generatedAt: generatedContent.generatedAt,
+          playCount: generatedContent.playCount,
+          userName: users.name,
+          avatarUrl: users.avatarUrl,
+          targetLanguage: vocabularyLists.targetLanguage,
+        })
+        .from(generatedContent)
+        .innerJoin(users, eq(generatedContent.userId, users.id))
+        .innerJoin(vocabularyLists, eq(generatedContent.vocabularyListId, vocabularyLists.id))
+        .where(and(...storyConditions))
+        .orderBy(desc(generatedContent.generatedAt))
+        .limit(input.limit);
+
       return {
         trending: trendingCollections,
         new: newCollections,
         popular: popularCollections,
         personalized: personalizedCollections,
+        stories: publicStories,
       };
     }),
 });

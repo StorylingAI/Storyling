@@ -1,0 +1,1 @@
+ALTER TABLE `generated_content` ADD `is_public` boolean DEFAULT false NOT NULL;

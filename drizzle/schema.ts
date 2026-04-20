@@ -306,6 +306,7 @@ export const generatedContent = mysqlTable("generated_content", {
   retryCount: int("retry_count").default(0).notNull(),
   lastRetryAt: timestamp("last_retry_at"),
   failureReason: text("failure_reason"),
+  isPublic: boolean("is_public").default(false).notNull(),
   generatedAt: timestamp("generated_at").defaultNow().notNull(),
   playCount: int("play_count").default(0).notNull(),
   lastPlayedAt: timestamp("last_played_at"),

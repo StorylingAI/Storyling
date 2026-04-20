@@ -26,6 +26,7 @@ import { SubtitlePreview } from "@/components/SubtitlePreview";
 import { PaywallModal } from "@/components/upgrade/PaywallModal";
 import type { PaywallHeadline } from "@/components/upgrade/PaywallModal";
 import { PersonalizedStoryOverlay } from "@/components/upgrade/PersonalizedStoryOverlay";
+import { PageOnboardingTutorial } from "@/components/PageOnboardingTutorial";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { MobileNav } from "@/components/MobileNav";
@@ -193,16 +194,18 @@ export default function CreateStory() {
   const [generatingContentId, setGeneratingContentId] = useState<number | null>(null);
   const completionToastShownRef = useRef(false);
 
-  // Read URL params for pre-filling from level test
-  const urlParams = new URLSearchParams(location.split('?')[1] || '');
+  // Read URL params for pre-filling from level test and Wordbank.
+  // Wouter's location can omit the query string, so read the browser search directly.
+  const urlParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const languageParam = urlParams.get('language');
   const levelParam = urlParams.get('level');
+  const vocabParam = urlParams.get('vocab');
 
   // Step 1 state
   const [targetLanguage, setTargetLanguage] = useState(languageParam || "");
   const [spanishDialect, setSpanishDialect] = useState<"spain" | "latam" | "">("")
   const [proficiencyLevel, setProficiencyLevel] = useState(levelParam || "");
-  const [vocabularyText, setVocabularyText] = useState("");
+  const [vocabularyText, setVocabularyText] = useState(vocabParam || "");
   const [topicPrompt, setTopicPrompt] = useState("");
   const [translationLanguage, setTranslationLanguage] = useState("");
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
@@ -366,23 +369,7 @@ export default function CreateStory() {
   });
 
   // Photo OCR mutation
-  const ocrMutation = trpc.ocr.extractVocabularyFromImage.useMutation({
-    onSuccess: (data) => {
-      if (data.wordCount === 0) {
-        toast.error("No vocabulary found in the image. Please try a clearer photo.");
-        setIsProcessingPhoto(false);
-        return;
-      }
-      const newWords = data.vocabulary.join(", ");
-      setVocabularyText(prev => prev ? `${prev}, ${newWords}` : newWords);
-      toast.success(`Extracted ${data.wordCount} words from photo!`);
-      setIsProcessingPhoto(false);
-    },
-    onError: (error) => {
-      toast.error("Failed to extract vocabulary from photo: " + error.message);
-      setIsProcessingPhoto(false);
-    },
-  });
+  const ocrMutation = trpc.ocr.extractVocabularyFromImage.useMutation();
 
   // Navigate when content is ready
   useEffect(() => {
@@ -550,6 +537,38 @@ export default function CreateStory() {
               <span className="text-purple-300 font-semibold">💡 Tip: </span>
               {tips[tipIndex]}
             </p>
+          </div>
+
+          <div className="mt-5 w-full max-w-sm rounded-2xl border border-white/10 bg-black/20 px-5 py-4 text-center backdrop-blur-md">
+            <p className="text-sm leading-6 text-white/85">
+              You can explore other pages while this runs. We'll notify you when your story is ready.
+            </p>
+            <div className="mt-4 grid grid-cols-3 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/library")}
+                className="rounded-lg border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                Library
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/wordbank")}
+                className="rounded-lg border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                Wordbank
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setLocation("/discover")}
+                className="rounded-lg border-white/20 bg-white/10 text-white hover:bg-white/20 hover:text-white"
+              >
+                Discover
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -732,19 +751,29 @@ export default function CreateStory() {
     e.target.value = "";
   };
 
-  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const readFileAsBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = reader.result?.toString().split(",")[1];
+        if (!base64Data) {
+          reject(new Error("Failed to read image"));
+          return;
+        }
+        resolve(base64Data);
+      };
+      reader.onerror = () => reject(new Error("Failed to read image"));
+      reader.readAsDataURL(file);
+    });
 
-    if (!file.type.startsWith('image/')) {
-      toast.error("Please upload an image file (JPG, PNG, etc.)");
-      e.target.value = "";
-      return;
-    }
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
 
     const maxSize = 10 * 1024 * 1024;
-    if (file.size > maxSize) {
-      toast.error("Image size must be less than 10MB");
+    const invalidFile = files.find(file => !file.type.startsWith("image/") || file.size > maxSize);
+    if (invalidFile) {
+      toast.error("Please upload image files under 10MB each");
       e.target.value = "";
       return;
     }
@@ -752,32 +781,55 @@ export default function CreateStory() {
     setIsProcessingPhoto(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64Data = reader.result?.toString().split(",")[1];
-        if (!base64Data) {
-          toast.error("Failed to read image");
-          setIsProcessingPhoto(false);
-          return;
-        }
+      let totalWords = 0;
+      const collectedWords: string[] = [];
 
-        ocrMutation.mutate({
+      for (const file of files) {
+        const base64Data = await readFileAsBase64(file);
+        const data = await ocrMutation.mutateAsync({
           imageBase64: base64Data,
           mimeType: file.type || "image/jpeg",
           targetLanguage: effectiveLanguage || undefined,
         });
-      };
-      reader.onerror = () => {
-        toast.error("Failed to read image");
-        setIsProcessingPhoto(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (error) {
-      toast.error("Failed to process image");
-      setIsProcessingPhoto(false);
-    }
 
-    e.target.value = "";
+        if (data.wordCount > 0) {
+          totalWords += data.wordCount;
+          collectedWords.push(...data.vocabulary);
+        }
+      }
+
+      if (collectedWords.length === 0) {
+        toast.error("No vocabulary found in the selected images. Please try clearer photos.");
+        return;
+      }
+
+      mergeVocabularyWords(collectedWords);
+      toast.success(`Extracted ${totalWords} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
+    } catch (error) {
+      toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsProcessingPhoto(false);
+      e.target.value = "";
+    }
+  };
+
+  const handleVocabularyPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData("text");
+    if (!pastedText) return;
+
+    e.preventDefault();
+    const target = e.currentTarget;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+
+    setVocabularyText((current) => {
+      const nextText = `${current.slice(0, start)}${pastedText}${current.slice(end)}`;
+      window.requestAnimationFrame(() => {
+        const cursor = start + pastedText.length;
+        target.setSelectionRange(cursor, cursor);
+      });
+      return nextText;
+    });
   };
 
   const handleGenerate = () => {
@@ -914,7 +966,7 @@ export default function CreateStory() {
 
               <div className="space-y-5">
                 {/* Target Language */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-tutorial="create-language">
                   <Label htmlFor="language" className="text-sm font-semibold text-gray-700">Target Language <span className="text-red-500">*</span></Label>
                   <Select value={targetLanguage} onValueChange={(val) => {
                     setTargetLanguage(val);
@@ -996,7 +1048,7 @@ export default function CreateStory() {
                 </div>
 
                 {/* Translation Language */}
-                <div className="space-y-2">
+                <div className="space-y-2" data-tutorial="create-vocabulary">
                   <Label htmlFor="translation-language" className="text-sm font-semibold text-gray-700">Translation Language (Optional)</Label>
                   <Select value={translationLanguage} onValueChange={setTranslationLanguage}>
                     <SelectTrigger id="translation-language" className="rounded-xl border-gray-200 h-11">
@@ -1024,6 +1076,7 @@ export default function CreateStory() {
                     placeholder="Paste words (comma or newline separated)"
                     value={vocabularyText}
                     onChange={(e) => setVocabularyText(e.target.value)}
+                    onPaste={handleVocabularyPaste}
                     rows={5}
                     className="rounded-xl border-gray-200 resize-none"
                   />
@@ -1082,6 +1135,7 @@ export default function CreateStory() {
                     ref={photoInputRef}
                     type="file"
                     accept="image/*"
+                    multiple
                     className="hidden"
                     onChange={handlePhotoUpload}
                   />
@@ -1217,7 +1271,7 @@ export default function CreateStory() {
                 </button>
               </div>
 
-              <div className="flex gap-3 mt-6">
+              <div className="flex gap-3 mt-6" data-tutorial="generate-story">
                 <Button
                   variant="outline"
                   onClick={() => setStep(1)}
@@ -1686,6 +1740,25 @@ export default function CreateStory() {
         trigger="locked_content"
         headline="keep_going"
         skipToStep2
+      />
+
+      <PageOnboardingTutorial
+        storageKey="createStoryTutorialSeen"
+        title="Create Story"
+        steps={[
+          {
+            title: "Choose the language and level",
+            description: "Pick the language you are learning, your level, and the language you want translations to use.",
+          },
+          {
+            title: "Add vocabulary",
+            description: "Paste words, upload a file, or upload one or more photos. Words can be separated by commas or new lines.",
+          },
+          {
+            title: "Generate and keep browsing",
+            description: "Start generation, then explore Library, Wordbank, or Discover while the story finishes. After this tour, use the Tutorial button at the bottom whenever you need it again.",
+          },
+        ]}
       />
     </div>
   );

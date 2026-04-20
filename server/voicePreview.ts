@@ -576,39 +576,56 @@ export async function generateVoicePreview(
     return generateSpeechGoogleCloud(previewText, targetLanguage, gender);
   }
 
-  const voiceId = getNativeVoiceId(targetLanguage, voiceType, gender);
   const voiceSettings = getVoiceSettings(voiceType);
 
-  console.log("[Voice Preview] Generating preview:", {
-    targetLanguage,
-    voiceType,
-    gender,
-    voiceId,
-  });
+  let voiceId = getNativeVoiceId(targetLanguage, voiceType, gender);
 
   try {
-    const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + voiceId, {
-      method: "POST",
-      headers: {
-        Accept: "audio/mpeg",
-        "Content-Type": "application/json",
-        "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
-      },
-      body: JSON.stringify({
-        text: previewText,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: voiceSettings,
-      }),
-    });
+    const generatePreviewBuffer = async (selectedVoiceId: string) => {
+      console.log("[Voice Preview] Generating preview:", {
+        targetLanguage,
+        voiceType,
+        gender,
+        voiceId: selectedVoiceId,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("[Voice Preview] ElevenLabs API error:", response.status, errorText);
-      throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
+      const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + selectedVoiceId, {
+        method: "POST",
+        headers: {
+          Accept: "audio/mpeg",
+          "Content-Type": "application/json",
+          "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
+        },
+        body: JSON.stringify({
+          text: previewText,
+          model_id: "eleven_multilingual_v2",
+          voice_settings: voiceSettings,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`ElevenLabs API error: ${response.status} ${errorText}`);
+      }
+
+      const audioBuffer = await response.arrayBuffer();
+      return Buffer.from(audioBuffer);
+    };
+
+    let audioData: Buffer;
+    try {
+      audioData = await generatePreviewBuffer(voiceId);
+    } catch (error) {
+      if (voiceType === "Warm & Friendly") {
+        throw error;
+      }
+      console.warn(
+        `[Voice Preview] Voice "${voiceType}" failed, falling back to Warm & Friendly:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      voiceId = getNativeVoiceId(targetLanguage, "Warm & Friendly", gender);
+      audioData = await generatePreviewBuffer(voiceId);
     }
-
-    const audioBuffer = await response.arrayBuffer();
-    const audioData = Buffer.from(audioBuffer);
 
     // Generate unique filename for preview
     const timestamp = Date.now();

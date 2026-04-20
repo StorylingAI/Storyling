@@ -22,6 +22,7 @@ import { MobileNav } from "@/components/MobileNav";
 import PracticeQuiz from "@/components/PracticeQuiz";
 import { useLocation } from "wouter";
 import { useScrollToTop } from "@/hooks/useScrollToTop";
+import { PageOnboardingTutorial } from "@/components/PageOnboardingTutorial";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +30,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
+const SUPPORTED_WORD_LANGUAGES = [
+  "Spanish",
+  "French",
+  "German",
+  "Italian",
+  "Portuguese",
+  "Chinese (Mandarin)",
+  "Japanese",
+  "Korean",
+  "Arabic",
+  "Hebrew",
+  "Russian",
+  "Hindi",
+  "Persian (Farsi)",
+  "Turkish",
+  "Dutch",
+  "Swedish",
+  "Norwegian",
+  "Danish",
+];
 
 export default function Wordbank() {
   useScrollToTop();
@@ -212,11 +234,14 @@ export default function Wordbank() {
     });
   }, [wordsToDisplay, searchQuery, languageFilter, masteryFilter, showMastered]);
 
-  // Get unique languages
+  // Get supported languages plus languages already used by saved words.
   const languages = useMemo(() => {
-    const uniqueLangs = new Set(wordsToDisplay.map((w) => w.targetLanguage));
+    const uniqueLangs = new Set(SUPPORTED_WORD_LANGUAGES);
+    words.forEach((w) => {
+      if (w.targetLanguage) uniqueLangs.add(w.targetLanguage);
+    });
     return Array.from(uniqueLangs);
-  }, [wordsToDisplay]);
+  }, [words]);
 
   const dueCount = dueWords.length;
 
@@ -301,22 +326,37 @@ export default function Wordbank() {
     reader.readAsText(file);
   };
 
+  const handleImportPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedText = e.clipboardData.getData("text");
+    if (!pastedText) return;
+
+    e.preventDefault();
+    const target = e.currentTarget;
+    const start = target.selectionStart;
+    const end = target.selectionEnd;
+
+    setImportText((current) => {
+      const nextText = `${current.slice(0, start)}${pastedText}${current.slice(end)}`;
+      window.requestAnimationFrame(() => {
+        const cursor = start + pastedText.length;
+        target.setSelectionRange(cursor, cursor);
+      });
+      return nextText;
+    });
+  };
+
   const handleImport = () => {
     if (!importText.trim()) {
       toast.error("Please provide words to import");
       return;
     }
 
-    // Parse line-by-line text - just words to import
-    const lines = importText.split("\n").filter(line => line.trim());
-    const words: string[] = [];
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed) {
-        words.push(trimmed);
-      }
-    }
+    const words = Array.from(new Set(
+      importText
+        .split(/[\n,，、;]+/)
+        .map((word) => word.trim())
+        .filter(Boolean)
+    ));
 
     if (words.length === 0) {
       toast.error("No valid words found. Enter one word per line.");
@@ -500,7 +540,7 @@ export default function Wordbank() {
           </div>
 
           {/* Filter pills */}
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-2 mb-4" data-tutorial="wordbank-filters">
             <Select value={languageFilter} onValueChange={setLanguageFilter}>
               <SelectTrigger className="w-auto min-w-[140px] rounded-full border-gray-300 h-9 text-sm">
                 <SelectValue placeholder="All Languages" />
@@ -619,39 +659,38 @@ export default function Wordbank() {
           </div>
         )}
 
-        {/* Select Mode Toggle */}
-        <div className="flex justify-center items-center gap-3 mb-4">
-          <Button
-            variant={selectMode ? "default" : "outline"}
-            onClick={toggleSelectMode}
-            className={`rounded-full gap-2 ${selectMode ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-white/80 border-gray-300'}`}
-          >
-            {selectMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-            {selectMode ? "Exit Select Mode" : "Select Mode"}
-          </Button>
-          {selectMode && (
+        {/* Import + Action Buttons */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-2" data-tutorial="wordbank-import">
             <Button
               variant="outline"
               size="sm"
-              onClick={selectedWords.size === filteredWords.length ? clearSelection : selectAll}
-              className="rounded-full gap-2 text-purple-600 border-purple-300 hover:bg-purple-50"
+              onClick={() => setShowImportDialog(true)}
+              className="rounded-full gap-2 bg-white/80 border-gray-300"
             >
-              {selectedWords.size === filteredWords.length ? "Deselect All" : "Select All"}
+              <Upload className="h-4 w-4" />
+              Import Words
             </Button>
-          )}
-        </div>
-
-        {/* Import + Action Buttons */}
-        <div className="flex justify-between items-center mb-4">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowImportDialog(true)}
-            className="rounded-full gap-2 bg-white/80 border-gray-300"
-          >
-            <Upload className="h-4 w-4" />
-            Import Words
-          </Button>
+            <Button
+              variant={selectMode ? "default" : "outline"}
+              size="sm"
+              onClick={toggleSelectMode}
+              className={`rounded-full gap-2 ${selectMode ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-white/80 border-gray-300'}`}
+            >
+              {selectMode ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+              {selectMode ? "Exit Select" : "Select"}
+            </Button>
+            {selectMode && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={selectedWords.size === filteredWords.length ? clearSelection : selectAll}
+                className="rounded-full gap-2 text-purple-600 border-purple-300 hover:bg-purple-50"
+              >
+                {selectedWords.size === filteredWords.length ? "Deselect All" : "Select All"}
+              </Button>
+            )}
+          </div>
           <Button
             size="sm"
             onClick={() => setShowModeSelect(true)}
@@ -911,11 +950,12 @@ export default function Wordbank() {
                 </p>
               </div>
               <div>
-                <label className="text-sm font-bold mb-2 block">Paste Words (one per line)</label>
+                <label className="text-sm font-bold mb-2 block">Paste Words</label>
                 <Textarea
-                  placeholder={"hola\nmundo\namigo\ncasa\nlibro"}
+                  placeholder={"hola\nmundo\namigo\ncasa\nlibro\n\nor: hola, mundo, amigo"}
                   value={importText}
                   onChange={(e) => setImportText(e.target.value)}
+                  onPaste={handleImportPaste}
                   rows={8}
                   className="font-mono border-purple-200 focus:border-purple-400 focus:ring-purple-300 rounded-xl"
                 />
@@ -1006,6 +1046,25 @@ export default function Wordbank() {
       <PersonalizedStoryOverlay
         open={showPersonalizedOverlay}
         onOpenChange={setShowPersonalizedOverlay}
+      />
+
+      <PageOnboardingTutorial
+        storageKey="wordbankTutorialSeen"
+        title="Wordbank"
+        steps={[
+          {
+            title: "Find words by language",
+            description: "Use the language filter to switch between supported languages, even before a language has saved words.",
+          },
+          {
+            title: "Import and select words",
+            description: "Paste words separated by new lines or commas, upload a text file, and use Select next to Import Words for bulk actions.",
+          },
+          {
+            title: "Practice anytime",
+            description: "Start a practice session from this page when words are due, or return here from a story. After this tour, use the Tutorial button at the bottom whenever you need it again.",
+          },
+        ]}
       />
     </div>
   );

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Play, Heart, Clock, BookOpen, Sparkles, RefreshCw, Search, X, Filter, Folder, CheckSquare, Square, Plus, Palette, GraduationCap, ArrowLeft, Mic, Film, Download, Globe, Settings2, ChevronDown, FolderPlus, FolderHeart, ArrowUpDown, Check } from "lucide-react";
+import { Loader2, Play, Heart, Clock, BookOpen, Sparkles, RefreshCw, Search, X, Filter, Folder, CheckSquare, Square, Plus, Palette, GraduationCap, ArrowLeft, Mic, Film, Download, Globe, Settings2, ChevronDown, FolderPlus, FolderHeart, ArrowUpDown, Check, HelpCircle } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -1444,6 +1444,17 @@ export default function Library() {
     </PullToRefresh>
     {showLibraryTutorial && (
       <LibraryOnboardingTutorial onComplete={handleLibraryTutorialComplete} />
+    )}
+    {hasSeenLibraryTutorial && !showLibraryTutorial && (
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => setShowLibraryTutorial(true)}
+        className="fixed bottom-5 right-5 z-50 rounded-full bg-white text-purple-700 shadow-lg border border-purple-200 hover:bg-purple-50"
+      >
+        <HelpCircle className="mr-2 h-4 w-4" />
+        Tutorial
+      </Button>
     )}
     </>
   );

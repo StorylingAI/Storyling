@@ -151,6 +151,7 @@ export default function Content() {
   const [showConvertToFilm, setShowConvertToFilm] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [isBottomBarMinimized, setIsBottomBarMinimized] = useState(false);
+  const [activeTab, setActiveTab] = useState("transcript");
   const [convertCinematicStyle, setConvertCinematicStyle] = useState("cinematic");
   const [convertVideoDuration, setConvertVideoDuration] = useState<number>(30);
   const [convertBackgroundMusic, setConvertBackgroundMusic] = useState<string>("none");
@@ -245,6 +246,15 @@ export default function Content() {
   });
   
   const utils = trpc.useUtils();
+
+  const updateVisibilityMutation = trpc.content.updateVisibility.useMutation({
+    onSuccess: (_, variables) => {
+      utils.content.getById.invalidate({ id: variables.contentId });
+    },
+    onError: (error) => {
+      toast.error(error.message || "Failed to update story visibility");
+    },
+  });
 
   const regenerateMissingThumbnailMutation = trpc.content.regenerateThumbnail.useMutation({
     onSuccess: () => {
@@ -605,7 +615,32 @@ export default function Content() {
   };
 
   const handleShare = () => {
+    if (!content) return;
+
+    if (!content.isPublic) {
+      updateVisibilityMutation.mutate(
+        { contentId: content.id, isPublic: true },
+        {
+          onSuccess: () => {
+            toast.success("Story is public now. You can share the link.");
+            setShowShareModal(true);
+          },
+        }
+      );
+      return;
+    }
+
     setShowShareModal(true);
+  };
+
+  const handlePracticeWords = () => {
+    setActiveTab("quiz");
+    setTimeout(() => {
+      document.getElementById("content-practice-tabs")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
   };
 
   const handleDownload = async () => {
@@ -797,9 +832,14 @@ export default function Content() {
               variant="ghost"
               size="icon"
               onClick={handleShare}
+              disabled={updateVisibilityMutation.isPending}
               className="h-9 w-9 rounded-full text-white hover:bg-white/20"
             >
-              <Share2 className="h-4 w-4" />
+              {updateVisibilityMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="h-4 w-4" />
+              )}
             </Button>
             <Button
               variant="ghost"
@@ -1372,7 +1412,7 @@ export default function Content() {
         )}
 
         {/* Tabs */}
-        <Tabs defaultValue="transcript" className="mb-8">
+        <Tabs id="content-practice-tabs" value={activeTab} onValueChange={setActiveTab} className="mb-8">
           <TabsList className="w-full bg-transparent border-b border-gray-200 rounded-none p-0 h-auto">
             <TabsTrigger value="transcript" className="rounded-none border-b-2 border-transparent data-[state=active]:border-purple-600 data-[state=active]:text-purple-600 data-[state=active]:shadow-none bg-transparent px-6 py-3 font-semibold">
               Transcript
@@ -1501,6 +1541,7 @@ export default function Content() {
             {/* Practice Words */}
             <div className="group relative">
               <Button
+                onClick={handlePracticeWords}
                 aria-label="Practice vocabulary from this story"
                 className="flex items-center gap-2 rounded-full border-2 border-purple-300/60 bg-gradient-to-br from-purple-50 to-white text-purple-700 hover:bg-purple-100 hover:border-purple-400 hover:shadow-lg active:shadow-inner disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 h-12 px-5 text-sm font-semibold"
               >
@@ -1516,10 +1557,15 @@ export default function Content() {
             <div className="group relative">
               <Button
                 onClick={handleShare}
+                disabled={updateVisibilityMutation.isPending}
                 aria-label="Share this story"
                 className="flex items-center gap-2 rounded-full border-2 border-purple-300/60 bg-gradient-to-br from-purple-50 to-white text-purple-700 hover:bg-purple-100 hover:border-purple-400 hover:shadow-lg active:shadow-inner disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 h-12 px-5 text-sm font-semibold"
               >
-                <Share2 className="h-4 w-4" />
+                {updateVisibilityMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Share2 className="h-4 w-4" />
+                )}
                 <span className="hidden sm:inline">Share</span>
               </Button>
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block bg-gray-900 text-white text-xs rounded-lg px-3 py-2 whitespace-nowrap z-50">

@@ -87,6 +87,48 @@ export default function Discover() {
     </Card>
   );
 
+  const StoryCard = ({ story }: { story: any }) => (
+    <Card
+      className="rounded-card border-2 hover-lift transition-all cursor-pointer overflow-hidden"
+      onClick={() => setLocation(`/story/${story.id}`)}
+    >
+      <CardContent className="p-0">
+        <div className="h-32 bg-gradient-to-br from-purple-600 to-teal-500">
+          {story.thumbnailUrl && (
+            <img src={story.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+          )}
+        </div>
+        <div className="p-5">
+          <div className="flex flex-wrap gap-2 mb-3">
+            <Badge variant="secondary" className="rounded-full">
+              {story.targetLanguage}
+            </Badge>
+            {story.difficultyLevel && (
+              <Badge variant="secondary" className="rounded-full">
+                {story.difficultyLevel}
+              </Badge>
+            )}
+            <Badge variant="secondary" className="rounded-full">
+              {story.mode === "film" ? "Film" : "Podcast"}
+            </Badge>
+          </div>
+          <h4 className="font-bold text-lg mb-1 line-clamp-2">
+            {story.title || "Untitled Story"}
+          </h4>
+          {story.titleTranslation && (
+            <p className="text-sm text-muted-foreground mb-3 line-clamp-1">
+              {story.titleTranslation}
+            </p>
+          )}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <span>by {story.userName || "A Storyling learner"}</span>
+            {story.theme && <span>{story.theme}</span>}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50">
       {/* Mobile hamburger nav */}
@@ -175,8 +217,9 @@ export default function Discover() {
             {(feed?.trending || feed?.new || feed?.popular || feed?.personalized) && (
               <p className="text-sm text-muted-foreground">
                 {(() => {
-                  const total = (feed?.trending?.length || 0) + (feed?.new?.length || 0) + (feed?.popular?.length || 0) + (feed?.personalized?.length || 0);
-                  return `${total} collection${total !== 1 ? 's' : ''} found`;
+                  const totalCollections = (feed?.trending?.length || 0) + (feed?.new?.length || 0) + (feed?.popular?.length || 0) + (feed?.personalized?.length || 0);
+                  const totalStories = feed?.stories?.length || 0;
+                  return `${totalCollections} collection${totalCollections !== 1 ? 's' : ''} and ${totalStories} public stor${totalStories === 1 ? 'y' : 'ies'} found`;
                 })()}
               </p>
             )}
@@ -195,6 +238,24 @@ export default function Discover() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {feed.personalized.map((collection) => (
                 <CollectionCard key={collection.id} collection={collection} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* Public Stories Section */}
+        {feed?.stories && feed.stories.length > 0 && (
+          <section className="animate-slide-up stagger-1">
+            <div className="flex items-center gap-2 mb-6">
+              <BookOpen className="h-6 w-6 text-purple-500" />
+              <h2 className="text-3xl font-bold">Public Stories</h2>
+            </div>
+            <p className="text-muted-foreground mb-6">
+              Stories learners have chosen to share
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {feed.stories.map((story) => (
+                <StoryCard key={story.id} story={story} />
               ))}
             </div>
           </section>
@@ -255,7 +316,7 @@ export default function Discover() {
         )}
 
         {/* Empty State */}
-        {!feed?.trending?.length && !feed?.new?.length && !feed?.popular?.length && (
+        {!feed?.trending?.length && !feed?.new?.length && !feed?.popular?.length && !feed?.stories?.length && (
           <Card className="rounded-card shadow-playful-lg border-2 animate-bounce-in">
             <CardContent className="py-16 text-center">
               <BookOpen className="w-32 h-32 mx-auto text-muted-foreground mb-4" />

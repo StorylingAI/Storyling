@@ -70,15 +70,46 @@ export async function generateWordAudio(
   voiceId?: string
 ): Promise<string> {
   const languageKey = targetLanguage.toLowerCase().split(" ")[0];
+  const googleSupportedLanguages = new Set([
+    "arabic",
+    "chinese",
+    "danish",
+    "dutch",
+    "english",
+    "farsi",
+    "french",
+    "german",
+    "hebrew",
+    "hindi",
+    "italian",
+    "japanese",
+    "korean",
+    "mandarin",
+    "norwegian",
+    "persian",
+    "portuguese",
+    "russian",
+    "spanish",
+    "swedish",
+    "turkish",
+  ]);
   
-  // Use Google Cloud TTS for Chinese to ensure accurate tone pronunciation
+  // Prefer Google Cloud TTS for languages where exact language codes are available.
   if (
-    languageKey === "chinese" ||
-    languageKey === "mandarin" ||
-    isSpanishLanguage(targetLanguage)
+    googleSupportedLanguages.has(languageKey) ||
+    isSpanishLanguage(targetLanguage) ||
+    targetLanguage.toLowerCase().includes("chinese") ||
+    targetLanguage.toLowerCase().includes("mandarin")
   ) {
-    const { generateWordAudioGoogleCloud } = await import("./googleCloudTTS");
-    return generateWordAudioGoogleCloud(word, targetLanguage);
+    try {
+      const { generateWordAudioGoogleCloud } = await import("./googleCloudTTS");
+      return await generateWordAudioGoogleCloud(word, targetLanguage);
+    } catch (error) {
+      console.warn(
+        `[Word Audio] Google Cloud TTS failed for ${targetLanguage}; falling back to ElevenLabs:`,
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
   
   // Use ElevenLabs for other languages
@@ -89,6 +120,16 @@ export async function generateWordAudio(
     german: "ThT5KcBeYPX3keUQqHPh", // Dorothy (supports German)
     japanese: "AZnzlk1XvdvUeBnXmlld", // Domi (supports Japanese)
     korean: "onwK4e9ZLuTAKqWW03F9", // Daniel (supports Korean)
+    arabic: "Qp2PG6sgef1EHtrNQKnf",
+    hebrew: "pNInz6obpgDQGcFmaJgB",
+    persian: "pNInz6obpgDQGcFmaJgB",
+    farsi: "pNInz6obpgDQGcFmaJgB",
+    turkish: "pNInz6obpgDQGcFmaJgB",
+    hindi: "pNInz6obpgDQGcFmaJgB",
+    dutch: "pNInz6obpgDQGcFmaJgB",
+    swedish: "pNInz6obpgDQGcFmaJgB",
+    norwegian: "pNInz6obpgDQGcFmaJgB",
+    danish: "pNInz6obpgDQGcFmaJgB",
     default: "EXAVITQu4vr4xnSDxMaL", // Sarah (multilingual)
   };
 

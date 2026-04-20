@@ -1,4 +1,4 @@
-import { and, count, eq, gte, lt, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import { dailyUsageTracking, generatedContent, wordbank } from "../drizzle/schema";
 import { FREE_TIER_LIMITS, hasPremiumAccess, type SubscriptionTier } from "../shared/freemiumLimits";
 import { getDb } from "./db";
@@ -144,7 +144,13 @@ async function getGeneratedStoriesSince(userId: number, dayStart: Date): Promise
   const [result] = await db
     .select({ count: count() })
     .from(generatedContent)
-    .where(and(eq(generatedContent.userId, userId), gte(generatedContent.generatedAt, dayStart)));
+    .where(
+      and(
+        eq(generatedContent.userId, userId),
+        gte(generatedContent.generatedAt, dayStart),
+        inArray(generatedContent.status, ["pending", "generating", "completed"]),
+      ),
+    );
 
   return Number(result?.count ?? 0);
 }
@@ -295,6 +301,21 @@ export async function claimDailyStoryGeneration(
   }
 
   return { allowed: true, used: used + 1, limit };
+}
+
+export async function releaseDailyStoryGeneration(
+  userId: number,
+  window: DailyWindow,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+
+  await db
+    .update(dailyUsageTracking)
+    .set({
+      storyCount: sql`GREATEST(${dailyUsageTracking.storyCount} - 1, 0)`,
+    })
+    .where(and(eq(dailyUsageTracking.userId, userId), eq(dailyUsageTracking.dateKey, window.dateKey)));
 }
 
 export async function getDailyVocabSaveUsage(userId: number, window: DailyWindow): Promise<number> {

@@ -47,7 +47,7 @@ const tutorialSteps: TutorialStep[] = [
   {
     id: "complete",
     title: "You're All Set! 🚀",
-    description: "Start creating your first story and begin your language learning adventure. You can always access help from Settings.",
+    description: "Start creating your first story and begin your language learning adventure. After this tour, use the Show Tutorial button at the bottom whenever you need it again.",
   },
 ];
 

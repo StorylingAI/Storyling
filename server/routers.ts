@@ -33,7 +33,7 @@ import {
   organizationAdmins,
   users,
 } from "../drizzle/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, sql } from "drizzle-orm";
 import {
   organizationRouter,
   classRouter,
@@ -95,7 +95,9 @@ import {
   claimDailyStoryGeneration,
   getDailyWindow,
   isFreeLimitedUser,
+  releaseDailyStoryGeneration,
 } from "./dailyUsage";
+import { hasPremiumAccess } from "@shared/freemiumLimits";
 import {
   getAvailableMoods,
   getTracksByMood,
@@ -562,8 +564,18 @@ export const appRouter = router({
       .mutation(async ({ input, ctx }) => {
         // --- SERVER-SIDE FREE TIER LIMIT: 1 story per calendar day ---
         let shouldDecrementStarterCredit = false;
+        let dailyClaimWindow: ReturnType<typeof getDailyWindow> | null = null;
+
+        if (input.mode === "film" && !hasPremiumAccess((ctx.user.subscriptionTier ?? "free") as any)) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "Film generation is available on Premium plans.",
+          });
+        }
+
         if (isFreeLimitedUser(ctx.user)) {
           const dailyWindow = getDailyWindow(input.timezone || ctx.user.timezone || null);
+          dailyClaimWindow = dailyWindow;
           const claim = await claimDailyStoryGeneration(ctx.user.id, dailyWindow);
 
           if (!claim.allowed) {
@@ -693,36 +705,11 @@ export const appRouter = router({
                 "Preparing video thumbnail..."
               );
             } else {
-              // Stage 2: Thumbnail Generation (40-50%)
               await updateContentProgress(
                 content.id,
-                42,
-                "Generating thumbnail..."
+                50,
+                "Preparing audio..."
               );
-
-              // Generate thumbnail image based on theme and story content
-              try {
-                console.log(
-                  "[Thumbnail Generation] Starting thumbnail generation for content ID:",
-                  content.id
-                );
-                thumbnailUrl = await generateStoryThumbnailImage(
-                  input.theme,
-                  finalTitle
-                );
-                console.log(
-                  "[Thumbnail Generation] Success! Thumbnail URL:",
-                  thumbnailUrl
-                );
-                await updateContentProgress(
-                  content.id,
-                  50,
-                  "Thumbnail generated"
-                );
-              } catch (error) {
-                console.error("[Thumbnail Generation] Failed:", error);
-                // Continue without thumbnail - it's not critical
-              }
             }
 
             if (input.mode === "podcast" && input.voiceType) {
@@ -863,6 +850,21 @@ export const appRouter = router({
               progress: 100,
               progressStage: "Completed",
             });
+
+            if (input.mode === "podcast" && process.env.GENERATE_STORY_THUMBNAILS !== "false") {
+              generateStoryThumbnailImage(input.theme, finalTitle)
+                .then(async (generatedThumbnailUrl) => {
+                  if (generatedThumbnailUrl) {
+                    await updateGeneratedContent(content.id, {
+                      thumbnailUrl: generatedThumbnailUrl,
+                      thumbnailStyle: "pixar" as any,
+                    });
+                  }
+                })
+                .catch((thumbnailError) => {
+                  console.error("[Thumbnail Generation] Background thumbnail failed:", thumbnailError);
+                });
+            }
 
             const progress = await getLearningProgressByUserId(ctx.user.id);
             const existingProgress = progress.find(
@@ -1009,6 +1011,18 @@ export const appRouter = router({
               console.error("Failed to increment weekly progress:", error);
             }
 
+            if (shouldDecrementStarterCredit) {
+              await db
+                .update(users)
+                .set({
+                  bonusStoryCredits: sql`GREATEST(${users.bonusStoryCredits} - 1, 0)`,
+                })
+                .where(eq(users.id, ctx.user.id));
+              console.log(
+                `[StarterPack] Tracked 1 completed starter story for user ${ctx.user.id}`
+              );
+            }
+
             // Check for new achievements
             const allAchievements = await db.select().from(achievements);
             const unlockedIds = (
@@ -1081,27 +1095,15 @@ export const appRouter = router({
 
             await updateGeneratedContent(content.id, {
               status: "failed",
+              progressStage: "Failed",
+              failureReason: error instanceof Error ? error.message : String(error),
             });
+
+            if (dailyClaimWindow && isFreeLimitedUser(ctx.user)) {
+              await releaseDailyStoryGeneration(ctx.user.id, dailyClaimWindow);
+            }
           }
         })();
-
-        // Track the first 3 starter stories without allowing them to bypass the daily limit.
-        if (shouldDecrementStarterCredit) {
-          const db = await getDb();
-          if (db) {
-            const { users: usersTable } = await import("../drizzle/schema");
-            const { eq, sql } = await import("drizzle-orm");
-            await db
-              .update(usersTable)
-              .set({
-                bonusStoryCredits: sql`GREATEST(${usersTable.bonusStoryCredits} - 1, 0)`,
-              })
-              .where(eq(usersTable.id, ctx.user.id));
-            console.log(
-              `[StarterPack] Tracked 1 starter story for user ${ctx.user.id}`
-            );
-          }
-        }
 
         return { contentId: content.id };
       }),
@@ -1111,7 +1113,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         const content = await getGeneratedContentById(input.id);
-        if (!content || content.status !== "completed") {
+        if (!content || content.status !== "completed" || !content.isPublic) {
           throw new Error("Story not found");
         }
         // Return limited preview data — first 3 sentences, title, thumbnail, metadata
@@ -1168,16 +1170,46 @@ export const appRouter = router({
         };
       }),
 
+    updateVisibility: protectedProcedure
+      .input(
+        z.object({
+          contentId: z.number(),
+          isPublic: z.boolean(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const content = await getGeneratedContentById(input.contentId);
+        if (!content || content.userId !== ctx.user.id) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Content not found",
+          });
+        }
+
+        if (input.isPublic && content.status !== "completed") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Only completed stories can be made public.",
+          });
+        }
+
+        await updateGeneratedContent(input.contentId, {
+          isPublic: input.isPublic,
+        });
+
+        return { success: true, isPublic: input.isPublic };
+      }),
+
     getById: protectedProcedure
       .input(z.object({ id: z.number() }))
       .query(async ({ input, ctx }) => {
         const content = await getGeneratedContentById(input.id);
-        if (!content || content.userId !== ctx.user.id) {
+        if (!content || (content.userId !== ctx.user.id && !content.isPublic)) {
           throw new Error("Content not found");
         }
 
         // Get vocabulary list to include target language and words
-        const vocabList = await getVocabularyListsByUserId(ctx.user.id);
+        const vocabList = await getVocabularyListsByUserId(content.userId);
         const matchingList = vocabList.find(
           v => v.id === content.vocabularyListId
         );
@@ -1210,6 +1242,7 @@ export const appRouter = router({
           vocabularyTranslations: content.vocabularyTranslations || {},
           // Ensure lineTranslations is always an array, never null
           lineTranslations: content.lineTranslations || [],
+          isOwner: content.userId === ctx.user.id,
         };
       }),
 
@@ -1311,12 +1344,15 @@ export const appRouter = router({
       // Async backfill: generate Pixar-style thumbnails for completed stories that either:
       // 1. Don't have a thumbnail at all, or
       // 2. Have a non-pixar style thumbnail that needs upgrading
-      const storiesNeedingThumbnails = content.filter(
-        c =>
-          c.status === "completed" &&
-          c.title &&
-          (!c.thumbnailUrl || c.thumbnailStyle !== "pixar")
-      );
+      const storiesNeedingThumbnails =
+        process.env.AUTO_GENERATE_MISSING_THUMBNAILS === "true"
+          ? content.filter(
+              c =>
+                c.status === "completed" &&
+                c.title &&
+                (!c.thumbnailUrl || c.thumbnailStyle !== "pixar")
+            )
+          : [];
       if (storiesNeedingThumbnails.length > 0) {
         // Fire and forget - don't block the response. Process max 20 at a time to catch up faster.
         (async () => {

@@ -1357,10 +1357,6 @@ export default function AdventureMap() {
                     <h2 className="text-[1.65rem] font-semibold leading-none text-[#231532] xl:text-[1.78rem] 2xl:text-[1.9rem]">
                       Explore new stories
                     </h2>
-                    {/* Decorative confetti streamer */}
-                    <span className="pointer-events-none hidden select-none text-[0.85rem] opacity-60 sm:inline">
-                      💜✨⭐🩷🎵✨
-                    </span>
                   </div>
                   <button
                     type="button"

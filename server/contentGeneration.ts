@@ -163,7 +163,7 @@ function buildStoryResponseFormatInstructions(
 - vocabularyUsage: Object mapping each vocabulary word to sentences where it appears${visualBeatsInstruction}
 - lineTranslations: Array of objects, one per sentence/line with:
   * original: The sentence in ${targetLanguage}${isChinese ? "\n  * pinyin: Pinyin romanization with ONE SYLLABLE PER CHARACTER separated by spaces. CRITICAL: Each Chinese character must have exactly one pinyin syllable. Example: For 'æž—è–‡ç«™åœ¨ç§‘æŠ€å±•çš„å±•ä½å‰' write 'LÃ­n WÄ“i zhÃ n zÃ i kÄ“ jÃ¬ zhÇŽn de zhÇŽn wÃ¨i qiÃ¡n' (11 characters = 11 syllables), NOT 'LÃ­n WÄ“i zhÃ n zÃ i kÄ“jÃ¬ zhÇŽn de zhÇŽnwÃ¨iqiÃ¡n'. Count the characters and syllables to verify they match." : ""}
-  * english: ${translationLanguage} translation
+  * english: ${translationLanguage} translation. The field name is "english" for backwards compatibility, but the VALUE must be written in ${translationLanguage}.
 - vocabularyTranslations: Object where EACH vocabulary word is a key, and the value is an object with:
   * word: The vocabulary word itself
   * pinyin: Pinyin with ONE SYLLABLE PER CHARACTER separated by spaces (Chinese only, e.g., for 'åˆ›ä¸š' write 'chuÃ ng yÃ¨' = 2 characters = 2 syllables)
@@ -213,6 +213,11 @@ ${dialectInstruction ? `- Dialect requirement: ${dialectInstruction}` : ""}
 The story should:
 ${storyInstructions}
 
+Important translation requirement:
+- Translate titleTranslation, every lineTranslations.english value, and every vocabularyTranslations.translation value into ${translationLanguage}.
+- Do not write those translation values in English unless ${translationLanguage} is English.
+- The JSON property is still named "english" for backwards compatibility, but its value must be ${translationLanguage}.
+
 ${buildStoryResponseFormatInstructions(targetLanguage, translationLanguage, isChinese, mode, targetSceneCount)}
 - title: Story title in ${targetLanguage}
 - titleTranslation: Story title translated to ${translationLanguage}
@@ -220,7 +225,7 @@ ${buildStoryResponseFormatInstructions(targetLanguage, translationLanguage, isCh
 - vocabularyUsage: Object mapping each vocabulary word to sentences where it appears
 - lineTranslations: Array of objects, one per sentence/line with:
   * original: The sentence in ${targetLanguage}${isChinese ? "\n  * pinyin: Pinyin romanization with ONE SYLLABLE PER CHARACTER separated by spaces. CRITICAL: Each Chinese character must have exactly one pinyin syllable. Example: For '林薇站在科技展的展位前' write 'Lín Wēi zhàn zài kē jì zhǎn de zhǎn wèi qián' (11 characters = 11 syllables), NOT 'Lín Wēi zhàn zài kējì zhǎn de zhǎnwèiqián'. Count the characters and syllables to verify they match." : ""}
-  * english: ${translationLanguage} translation
+  * english: ${translationLanguage} translation. The field name is "english" for backwards compatibility, but the VALUE must be written in ${translationLanguage}.
 - vocabularyTranslations: Object where EACH vocabulary word is a key, and the value is an object with:
   * word: The vocabulary word itself
   * pinyin: Pinyin with ONE SYLLABLE PER CHARACTER separated by spaces (Chinese only, e.g., for '创业' write 'chuàng yè' = 2 characters = 2 syllables)
@@ -229,8 +234,8 @@ ${buildStoryResponseFormatInstructions(targetLanguage, translationLanguage, isCh
 
 EXAMPLE vocabularyTranslations structure:
 {
-  "mesa": { "word": "mesa", "translation": "table", "exampleSentences": ["La mesa es grande."] },
-  "agua": { "word": "agua", "translation": "water", "exampleSentences": ["Bebo agua."] }
+  "word1": { "word": "word1", "translation": "translation in ${translationLanguage}", "exampleSentences": ["Example sentence in ${targetLanguage}."] },
+  "word2": { "word": "word2", "translation": "translation in ${translationLanguage}", "exampleSentences": ["Example sentence in ${targetLanguage}."] }
 }`;
 
   const response = await invokeLLM({
@@ -240,8 +245,8 @@ EXAMPLE vocabularyTranslations structure:
         role: "user",
         content:
           mode === "film"
-            ? `Generate a film-friendly ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Keep the visuals simple and consistent, keep the full narration close to ${targetVideoDuration ?? 30} seconds, include exactly ${targetSceneCount ?? 6} visual beats in story order, and make each beat feel like the next shot of the same short film. Include line-by-line translations${isChinese ? " with pinyin" : ""}.`
-            : `Generate a ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Include line-by-line translations${isChinese ? " with pinyin" : ""}.`,
+            ? `Generate a film-friendly ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Keep the visuals simple and consistent, keep the full narration close to ${targetVideoDuration ?? 30} seconds, include exactly ${targetSceneCount ?? 6} visual beats in story order, and make each beat feel like the next shot of the same short film. Include line-by-line translations into ${translationLanguage}${isChinese ? " with pinyin" : ""}.`
+            : `Generate a ${theme.toLowerCase()} story in ${targetLanguage} that teaches these vocabulary words: ${vocabularyWords.join(", ")}. ${dialectInstruction ?? ""} Include line-by-line translations into ${translationLanguage}${isChinese ? " with pinyin" : ""}.`,
       },
     ],
     response_format: {
@@ -280,7 +285,10 @@ EXAMPLE vocabularyTranslations structure:
                 properties: {
                   original: { type: "string" },
                   ...(isChinese ? { pinyin: { type: "string" } } : {}),
-                  english: { type: "string" },
+                  english: {
+                    type: "string",
+                    description: `${translationLanguage} translation. The key remains "english" only for backwards compatibility.`,
+                  },
                 },
                 required: isChinese ? ["original", "pinyin", "english"] : ["original", "english"],
               },
@@ -839,7 +847,7 @@ function getVoiceSettings(voiceType: string) {
 export async function generatePodcast(
   params: PodcastGenerationParams,
   storyText: string
-): Promise<{ audioUrl: string; transcript: string }> {
+): Promise<{ audioUrl: string; transcript: string; audioAlignment?: ElevenLabsAlignment }> {
   const gender = params.narratorGender || "female";
 
   // Strip markdown formatting (bold, italic, etc.) from story text for clean TTS
@@ -862,46 +870,95 @@ export async function generatePodcast(
       return { audioUrl, transcript: storyText };
     }
 
-    const voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
     const voiceSettings = getVoiceSettings(params.voiceType);
-
-    const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + voiceId, {
-      method: "POST",
-      headers: {
-        Accept: "audio/mpeg",
-        "Content-Type": "application/json",
-        "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
+    const requestBody = {
+      text: cleanText,
+      model_id: "eleven_multilingual_v2",
+      voice_settings: {
+        stability: voiceSettings.stability,
+        similarity_boost: voiceSettings.similarity_boost,
+        style: voiceSettings.style,
+        use_speaker_boost: true,
       },
-      body: JSON.stringify({
-        text: cleanText,
-        model_id: "eleven_multilingual_v2",
-        voice_settings: {
-          stability: voiceSettings.stability,
-          similarity_boost: voiceSettings.similarity_boost,
-          style: voiceSettings.style,
-          use_speaker_boost: true, // Enable speaker boost for clarity
+    };
+
+    const synthesizeWithElevenLabs = async (
+      voiceId: string,
+    ): Promise<{ audioData: Buffer; audioAlignment?: ElevenLabsAlignment }> => {
+      const timestampResponse = await fetch(
+        "https://api.elevenlabs.io/v1/text-to-speech/" + voiceId + "/with-timestamps",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+            "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
+          },
+          body: JSON.stringify(requestBody),
+        }
+      );
+
+      if (timestampResponse.ok) {
+        const timestampResult = await timestampResponse.json() as ElevenLabsTimestampResponse;
+        if (timestampResult.audio_base64) {
+          return {
+            audioData: Buffer.from(timestampResult.audio_base64, "base64"),
+            audioAlignment: timestampResult.normalized_alignment || timestampResult.alignment,
+          };
+        }
+      } else {
+        const errorText = await timestampResponse.text();
+        console.warn("[Podcast Generation] ElevenLabs timestamp TTS failed:", timestampResponse.status, errorText);
+      }
+
+      const response = await fetch("https://api.elevenlabs.io/v1/text-to-speech/" + voiceId, {
+        method: "POST",
+        headers: {
+          Accept: "audio/mpeg",
+          "Content-Type": "application/json",
+          "xi-api-key": process.env.ELEVENLABS_API_KEY || "",
         },
-      }),
-    });
+        body: JSON.stringify(requestBody),
+      });
 
-    if (!response.ok) {
-      throw new Error(`ElevenLabs API error: ${response.statusText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`ElevenLabs API error: ${response.status} ${errorText || response.statusText}`);
+      }
+
+      const audioBuffer = await response.arrayBuffer();
+      return { audioData: Buffer.from(audioBuffer) };
+    };
+
+    let voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
+    let synthesis: { audioData: Buffer; audioAlignment?: ElevenLabsAlignment };
+
+    try {
+      synthesis = await synthesizeWithElevenLabs(voiceId);
+    } catch (error) {
+      if (params.voiceType === "Warm & Friendly") {
+        throw error;
+      }
+
+      console.warn(
+        `[Podcast Generation] Voice "${params.voiceType}" failed, falling back to Warm & Friendly:`,
+        error instanceof Error ? error.message : String(error),
+      );
+      voiceId = getNativeVoiceId(params.targetLanguage, "Warm & Friendly", gender);
+      synthesis = await synthesizeWithElevenLabs(voiceId);
     }
-
-    const audioBuffer = await response.arrayBuffer();
-    const audioData = Buffer.from(audioBuffer);
 
     // Upload to S3
     const timestamp = Date.now();
     const randomSuffix = Math.random().toString(36).substring(7);
     const fileKey = `podcasts/podcast-${timestamp}-${randomSuffix}.mp3`;
 
-    const { url: audioUrl } = await storagePut(fileKey, audioData, "audio/mpeg");
+    const { url: audioUrl } = await storagePut(fileKey, synthesis.audioData, "audio/mpeg");
 
     // Generate transcript (for now, just use the story text)
     const transcript = storyText;
 
-    return { audioUrl, transcript };
+    return { audioUrl, transcript, audioAlignment: synthesis.audioAlignment };
   } catch (error) {
     console.error("Error generating podcast:", error);
     throw new Error("Failed to generate podcast audio");
