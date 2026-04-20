@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,11 @@ import {
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  normalizeLineTranslations,
+  safeString,
+  type DisplayLineTranslation,
+} from "@/lib/contentDisplay";
 
 // Client-side share rate limiting (10 shares/day)
 const SHARE_LIMIT_PER_DAY = 10;
@@ -46,9 +51,9 @@ interface ShareStoryModalProps {
   onOpenChange: (open: boolean) => void;
   storyId: number;
   storyTitle: string;
-  storyText: string;
+  storyText?: unknown;
   titleTranslation?: string;
-  lineTranslations?: Array<{ original: string; english: string; pinyin?: string }>;
+  lineTranslations?: unknown;
   language: string;
   wordsLearned?: number;
   thumbnailUrl?: string;
@@ -83,7 +88,7 @@ function extractSnippet(text: string, maxSentences = 2): string {
 // Get translation for the snippet
 function getSnippetTranslation(
   snippet: string,
-  lineTranslations?: Array<{ original: string; english: string }>
+  lineTranslations?: DisplayLineTranslation[],
 ): string {
   if (!lineTranslations?.length) return "";
   // Try to match the first 1-2 lines
@@ -92,13 +97,21 @@ function getSnippetTranslation(
     if (translations.length >= 2) break;
     const cleanOriginal = lt.original
       .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/\*(.+?)\*/g, "$1");
+      .replace(/\*(.+?)\*/g, "$1")
+      .trim();
+    if (!cleanOriginal || !lt.english.trim()) {
+      continue;
+    }
     if (snippet.includes(cleanOriginal.substring(0, 20))) {
-      translations.push(lt.english);
+      translations.push(lt.english.trim());
     }
   }
   if (translations.length === 0 && lineTranslations.length > 0) {
-    return lineTranslations.slice(0, 2).map((lt) => lt.english).join(" ");
+    return lineTranslations
+      .slice(0, 2)
+      .map((lt) => lt.english.trim())
+      .filter(Boolean)
+      .join(" ");
   }
   return translations.join(" ");
 }
@@ -120,9 +133,14 @@ export function ShareStoryModal({
   const [copied, setCopied] = useState(false);
   const [shareMode, setShareMode] = useState<"sentence" | "paragraph">("sentence");
   const cardRef = useRef<HTMLDivElement>(null);
+  const safeStoryText = useMemo(() => safeString(storyText), [storyText]);
+  const safeLineTranslations = useMemo(
+    () => normalizeLineTranslations(lineTranslations),
+    [lineTranslations],
+  );
 
-  const snippet = extractSnippet(storyText, shareMode === "sentence" ? 2 : 4);
-  const translationSnippet = getSnippetTranslation(snippet, lineTranslations);
+  const snippet = extractSnippet(safeStoryText, shareMode === "sentence" ? 2 : 4);
+  const translationSnippet = getSnippetTranslation(snippet, safeLineTranslations);
   const langName = getLanguageName(language);
   const shareUrl = `${window.location.origin}/story/${storyId}`;
 
