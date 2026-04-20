@@ -75,6 +75,7 @@ import { MobileNav } from "@/components/MobileNav";
 import { ShareStoryModal } from "@/components/ShareStoryModal";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { Crown, Lock } from "lucide-react";
+import { normalizeStringArray, safeString } from "@/lib/contentDisplay";
 
 type FilmSubtitleSegment = {
   startTime: number;
@@ -392,7 +393,7 @@ export default function Content() {
       trackViewMutation.mutate({
         itemType: "story",
         itemId: content.id,
-        itemTitle: content.title || content.storyText?.substring(0, 100),
+        itemTitle: content.title || safeString(content.storyText).substring(0, 100),
         itemThumbnail: content.thumbnailUrl || undefined,
       });
     }
@@ -693,7 +694,8 @@ export default function Content() {
   console.log("Content page - content.vocabularyWords:", content?.vocabularyWords);
   console.log("Content page - content.vocabularyTranslations:", content?.vocabularyTranslations);
   
-  const vocabularyWords = (content?.vocabularyWords || []).map((word, idx) => ({
+  const vocabularyWordList = normalizeStringArray(content?.vocabularyWords);
+  const vocabularyWords = vocabularyWordList.map((word, idx) => ({
     word,
     translation: "", // Translation can be added later via API or user input
     timestamp: idx * 10, // Placeholder timestamps - can be enhanced with actual transcript timing
@@ -875,9 +877,9 @@ export default function Content() {
                   : "Great job! Keep learning and growing."}
               </p>
               {/* Stats */}
-              {content?.vocabularyWords && content.vocabularyWords.length > 0 && (
+              {vocabularyWordList.length > 0 && (
                 <p className="text-sm text-purple-600 font-medium">
-                  You learned {content.vocabularyWords.length} new words.
+                  You learned {vocabularyWordList.length} new words.
                 </p>
               )}
             </CardContent>
@@ -1189,7 +1191,7 @@ export default function Content() {
                 <SentenceDisplay
                   key={`${content.id}-${content.mode}`}
                   storyText={content.storyText}
-                  vocabularyWords={content.vocabularyWords || []}
+                  vocabularyWords={vocabularyWordList}
                   storyLanguage={content.targetLanguage}
                   lineTranslations={content.lineTranslations as any}
                   audioRef={content.mode === "podcast" ? audioRef : videoRef}
@@ -1445,7 +1447,7 @@ export default function Content() {
               <CardContent className="pt-6">
                 {vocabularyWords.length > 0 ? (
                   <VocabularyTable
-                    words={content?.vocabularyWords || []}
+                    words={vocabularyWordList}
                     targetLanguage={content?.targetLanguage || "Unknown"}
                     vocabularyTranslations={content?.vocabularyTranslations as any}
                   />
@@ -1700,11 +1702,11 @@ export default function Content() {
           onOpenChange={setShowShareModal}
           storyId={content.id}
           storyTitle={content.title || "My Story"}
-          storyText={content.storyText}
+          storyText={safeString(content.storyText)}
           titleTranslation={content.titleTranslation || undefined}
           lineTranslations={content.lineTranslations as any}
           language={content.targetLanguage}
-          wordsLearned={content.vocabularyWords?.length || 0}
+          wordsLearned={vocabularyWordList.length}
           thumbnailUrl={content.thumbnailUrl || undefined}
           genre={content.theme || undefined}
           cefrLevel={content.difficultyLevel || undefined}

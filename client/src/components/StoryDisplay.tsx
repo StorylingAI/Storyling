@@ -18,24 +18,17 @@ import {
   getCurrentWordIndex,
   type WordTimestamp,
 } from "@/utils/wordTimestamps";
-
-interface LineTranslation {
-  original: string;
-  pinyin?: string;
-  english: string;
-}
-
-interface VocabularyData {
-  word: string;
-  pinyin?: string;
-  translation: string;
-  exampleSentences?: string[];
-}
+import {
+  normalizeLineTranslations,
+  normalizeVocabularyTranslations,
+  safeString,
+  type DisplayVocabularyData,
+} from "@/lib/contentDisplay";
 
 interface StoryDisplayProps {
-  storyText: string;
-  lineTranslations?: LineTranslation[];
-  vocabularyTranslations?: Record<string, VocabularyData>;
+  storyText?: unknown;
+  lineTranslations?: unknown;
+  vocabularyTranslations?: unknown;
   targetLanguage?: string;
   audioRef?: React.RefObject<HTMLAudioElement | null>;
   isPlaying?: boolean;
@@ -59,6 +52,16 @@ export function StoryDisplay({
   const [audioCache, setAudioCache] = useState<Record<string, string>>({});
   const storyContainerRef = useRef<HTMLDivElement>(null);
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
+  const safeStoryText = useMemo(() => safeString(storyText), [storyText]);
+  const safeLineTranslations = useMemo(
+    () => normalizeLineTranslations(lineTranslations),
+    [lineTranslations],
+  );
+  const safeVocabularyTranslations = useMemo(
+    () => normalizeVocabularyTranslations(vocabularyTranslations),
+    [vocabularyTranslations],
+  );
+  const hasVocabularyTranslations = Object.keys(safeVocabularyTranslations).length > 0;
   
   // Toggle states for pinyin and translation visibility
   const [showPinyin, setShowPinyin] = useState(() => {
@@ -174,7 +177,7 @@ export function StoryDisplay({
   const currentWordCount = todayVocabData?.count ?? 0;
   const FREE_VOCAB_LIMIT = todayVocabData?.limit ?? 3;
 
-  const handleSaveWord = (word: string, vocabData: VocabularyData) => {
+  const handleSaveWord = (word: string, vocabData: DisplayVocabularyData) => {
     // Upgrade Trigger #3: Check vocabulary limit for free users
     if (authUser?.subscriptionTier === "free" && currentWordCount >= FREE_VOCAB_LIMIT) {
       setShowVocabLimitSheet(true);
@@ -191,13 +194,13 @@ export function StoryDisplay({
 
   // Generate word timestamps when audio is loaded
   useEffect(() => {
-    if (audioRef?.current && storyText) {
+    if (audioRef?.current && safeStoryText) {
       const audio = audioRef.current;
       
       const handleLoadedMetadata = () => {
         const duration = audio.duration;
         if (duration && duration > 0) {
-          const timestamps = generateWordTimestamps(storyText, duration);
+          const timestamps = generateWordTimestamps(safeStoryText, duration);
           setWordTimestamps(timestamps);
         }
       };
@@ -209,7 +212,7 @@ export function StoryDisplay({
         return () => audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       }
     }
-  }, [audioRef, storyText]);
+  }, [audioRef, safeStoryText]);
 
   // Update current word index based on audio time
   useEffect(() => {
@@ -255,7 +258,7 @@ export function StoryDisplay({
     // Clean the word (remove punctuation for lookup)
     // Include accented characters for Romance languages
     const cleanWord = word.replace(/[^\w\s\u00C0-\u024F\u4e00-\u9fff]/g, "");
-    const vocabData = vocabularyTranslations?.[cleanWord];
+    const vocabData = safeVocabularyTranslations[cleanWord];
 
     // Check if word is bolded (vocabulary word)
     const isBold = word.startsWith("**") && word.endsWith("**");
@@ -358,10 +361,6 @@ export function StoryDisplay({
     // Parse bold markdown **word** and create tooltips
     const parts: React.ReactNode[] = [];
     let currentIndex = 0;
-    let wordIndex = 0; // Track word index for highlighting
-    
-    // Split text into words for highlighting
-    const allWords = text.match(/\S+/g) || [];
     
     // Regex to match **word** patterns
     const boldRegex = /\*\*([^*]+)\*\*/g;
@@ -371,7 +370,6 @@ export function StoryDisplay({
       // Add text before the bold word (with highlighting support)
       if (match.index > currentIndex) {
         const beforeText = text.substring(currentIndex, match.index);
-        const beforeWords = beforeText.match(/\S+/g) || [];
         
         // Just render plain text before bold words
         parts.push(
@@ -385,7 +383,7 @@ export function StoryDisplay({
       const word = match[1];
       // Include accented characters when cleaning
       const cleanWord = word.replace(/[^\w\s\u00C0-\u024F\u4e00-\u9fff]/g, "");
-      const vocabData = vocabularyTranslations?.[cleanWord];
+      const vocabData = safeVocabularyTranslations[cleanWord];
       
       if (vocabData) {
         const isSaved = savedWords.has(cleanWord);
@@ -509,7 +507,7 @@ export function StoryDisplay({
       // Check if it's a vocabulary word (bold)
       // Include accented characters when cleaning
       const cleanToken = token.replace(/[^\w\s\u00C0-\u024F\u4e00-\u9fff]/g, "");
-      const vocabData = vocabularyTranslations?.[cleanToken];
+      const vocabData = safeVocabularyTranslations[cleanToken];
       const isBold = vocabData !== undefined;
       
       return (
@@ -530,7 +528,7 @@ export function StoryDisplay({
   };
 
   // If we have line translations, display with translations
-  if (lineTranslations && lineTranslations.length > 0) {
+  if (safeLineTranslations.length > 0) {
     return (
       <div className="space-y-4 text-gray-900 [&_blockquote]:border-lime-500 [&_blockquote]:bg-lime-50 [&_blockquote]:text-gray-900 [&_blockquote_*]:text-gray-900 [&_mark]:bg-lime-100 [&_mark]:text-gray-900 [&_mark_*]:text-gray-900">
         {/* Toggle Controls */}
@@ -572,7 +570,7 @@ export function StoryDisplay({
         </div>
         
         <div ref={storyContainerRef} className="space-y-6">
-          {lineTranslations.map((line, index) => {
+          {safeLineTranslations.map((line, index) => {
             const isRevealed = revealedSentences.has(index);
             const shouldShowPinyin = practiceMode ? isRevealed : showPinyin;
             const shouldShowTranslation = practiceMode ? isRevealed : showTranslation;
@@ -632,9 +630,9 @@ export function StoryDisplay({
       className="prose max-w-none text-gray-900 [&_blockquote]:border-lime-500 [&_blockquote]:bg-lime-50 [&_blockquote]:text-gray-900 [&_blockquote_*]:text-gray-900 [&_mark]:bg-lime-100 [&_mark]:text-gray-900 [&_mark_*]:text-gray-900 [&_p]:text-gray-900 [&_strong]:text-gray-900"
     >
       <p className="text-base leading-relaxed">
-        {vocabularyTranslations
-          ? renderTextWithTooltips(storyText)
-          : storyText || "Transcript will appear here once the story is generated..."}
+        {hasVocabularyTranslations && safeStoryText
+          ? renderTextWithTooltips(safeStoryText)
+          : safeStoryText || "Transcript will appear here once the story is generated..."}
       </p>
       {/* Upgrade Trigger #3: Vocabulary Limit Bottom Sheet */}
       <VocabularyLimitSheet

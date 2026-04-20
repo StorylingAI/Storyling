@@ -6,6 +6,11 @@ import { VocabularyLimitSheet } from "@/components/upgrade/VocabularyLimitSheet"
 import { PaywallModal } from "@/components/upgrade/PaywallModal";
 import { trpc } from "@/lib/trpc";
 import { pairPinyinWithChinese } from "@/lib/pinyinUtils";
+import {
+  normalizeLineTranslations,
+  normalizeStringArray,
+  safeString,
+} from "@/lib/contentDisplay";
 
 // Audio alignment data from ElevenLabs with-timestamps endpoint
 interface AudioAlignment {
@@ -26,10 +31,10 @@ interface TimedSubtitleSegment {
 }
 
 interface SentenceDisplayProps {
-  storyText: string;
-  vocabularyWords?: string[];
+  storyText?: unknown;
+  vocabularyWords?: unknown;
   storyLanguage?: string;
-  lineTranslations?: Array<{ original: string; english: string; pinyin?: string }>;
+  lineTranslations?: unknown;
   audioRef?: StoryMediaRef;
   isPlaying?: boolean;
   onSentenceChange?: (sentenceIndex: number) => void;
@@ -39,15 +44,24 @@ interface SentenceDisplayProps {
 
 export function SentenceDisplay({
   storyText,
-  vocabularyWords = [],
+  vocabularyWords,
   storyLanguage = "unknown",
-  lineTranslations = [],
+  lineTranslations,
   audioRef,
   isPlaying,
   onSentenceChange,
   audioAlignment,
   subtitleSegments,
 }: SentenceDisplayProps) {
+  const safeStoryText = useMemo(() => safeString(storyText), [storyText]);
+  const safeVocabularyWords = useMemo(
+    () => normalizeStringArray(vocabularyWords),
+    [vocabularyWords],
+  );
+  const safeLineTranslations = useMemo(
+    () => normalizeLineTranslations(lineTranslations),
+    [lineTranslations],
+  );
   
   const { data: user } = trpc.auth.me.useQuery();
   const [showVocabLimitSheet, setShowVocabLimitSheet] = useState(false);
@@ -83,7 +97,7 @@ export function SentenceDisplay({
       .map((segment) => ({
         startTime: Number(segment.startTime),
         endTime: Number(segment.endTime),
-        text: segment.text.replace(/\s+/g, ' ').trim(),
+        text: safeString(segment.text).replace(/\s+/g, ' ').trim(),
       }))
       .filter(
         (segment) =>
@@ -120,7 +134,7 @@ export function SentenceDisplay({
     }
 
     // Split by sentence boundaries (English: . ! ? and Chinese: 。！？)
-    const sentenceArray = storyText
+    const sentenceArray = safeStoryText
       .split(/([.!?。！？]+)/)
       .reduce((acc: string[], curr, idx, arr) => {
         if (idx % 2 === 0 && curr.trim()) {
@@ -131,21 +145,21 @@ export function SentenceDisplay({
       }, [])
       .filter((s) => s.length > 0);
     
-    return sentenceArray.length > 0 ? sentenceArray : [storyText];
-  }, [storyText, timedSubtitleSegments]);
+    return sentenceArray.length > 0 ? sentenceArray : [safeStoryText];
+  }, [safeStoryText, timedSubtitleSegments]);
 
   // Build a clean text version that matches what ElevenLabs received
   const cleanStoryText = useMemo(() => {
     const timingText = timedSubtitleSegments.length > 0
       ? timedSubtitleSegments.map((segment) => segment.text).join(' ')
-      : storyText;
+      : safeStoryText;
 
     return timingText
       .replace(/\*\*(.+?)\*\*/g, '$1')
       .replace(/\*(.+?)\*/g, '$1')
       .replace(/_(.+?)_/g, '$1')
       .replace(/~~(.+?)~~/g, '$1');
-  }, [storyText, timedSubtitleSegments]);
+  }, [safeStoryText, timedSubtitleSegments]);
 
   const safeAudioAlignment = useMemo(() => {
     if (
@@ -307,7 +321,7 @@ export function SentenceDisplay({
     });
     
     return timestamps;
-  }, [sentences, storyText, cleanStoryText, audioDuration, safeAudioAlignment, timedSubtitleSegments]);
+  }, [sentences, cleanStoryText, audioDuration, safeAudioAlignment, timedSubtitleSegments]);
 
 
   // Update current sentence based on audio time
@@ -366,24 +380,24 @@ export function SentenceDisplay({
   // Find the matching translation for the current sentence
   // Match by content (ignoring asterisks and extra whitespace)
   const currentTranslation = useMemo(() => {
-    if (!lineTranslations || lineTranslations.length === 0) return null;
+    if (safeLineTranslations.length === 0) return null;
     
     // Clean the current sentence for matching (remove asterisks and normalize whitespace)
     const cleanSentence = currentSentence.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
     
     // Find translation where the original text matches (also cleaned)
-    const match = lineTranslations.find(t => {
+    const match = safeLineTranslations.find(t => {
       const cleanOriginal = t.original.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim();
       return cleanOriginal === cleanSentence || cleanOriginal.includes(cleanSentence) || cleanSentence.includes(cleanOriginal);
     });
     
-    return match || lineTranslations[currentSentenceIndex] || null;
-  }, [currentSentence, currentSentenceIndex, lineTranslations]);
+    return match || safeLineTranslations[currentSentenceIndex] || null;
+  }, [currentSentence, currentSentenceIndex, safeLineTranslations]);
 
   // Helper function to check if a word is in vocabulary list
   const isVocabularyWord = (word: string): boolean => {
     const cleanWord = word.replace(/[.,!?;:"'\u00BF\u00A1*]/g, '').toLowerCase();
-    return vocabularyWords.some(vw => vw.toLowerCase() === cleanWord);
+    return safeVocabularyWords.some(vw => vw.toLowerCase() === cleanWord);
   };
 
   // Split current sentence into words
