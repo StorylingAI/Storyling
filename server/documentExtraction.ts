@@ -13,6 +13,7 @@ import { promisify } from "util";
 import { writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
 import path from "path";
+import os from "os";
 
 const execAsync = promisify(exec);
 
@@ -30,23 +31,61 @@ async function extractTextFromPDF(filePath: string): Promise<string> {
 }
 
 /**
- * Extract text from a Word document using python-docx
+ * Extract text from a Word document using Python's standard library.
  */
 async function extractTextFromDOCX(filePath: string): Promise<string> {
   try {
     // Create a temporary Python script to extract text
     const pythonScript = `
 import sys
-from docx import Document
+import zipfile
+import xml.etree.ElementTree as ET
 
-doc = Document(sys.argv[1])
-text = []
-for paragraph in doc.paragraphs:
-    text.append(paragraph.text)
-print('\\n'.join(text))
+WORD_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+def qname(name):
+    return "{%s}%s" % (WORD_NS, name)
+
+def collect_text(parent):
+    parts = []
+    for node in parent.iter():
+        if node.tag == qname("t"):
+            parts.append(node.text or "")
+        elif node.tag == qname("tab"):
+            parts.append("\\t")
+        elif node.tag == qname("br"):
+            parts.append("\\n")
+    return "".join(parts).strip()
+
+lines = []
+with zipfile.ZipFile(sys.argv[1]) as docx:
+    if "word/document.xml" not in docx.namelist():
+        raise ValueError("Missing word/document.xml")
+
+    root = ET.fromstring(docx.read("word/document.xml"))
+    body = root.find(qname("body"))
+    if body is not None:
+        for child in list(body):
+            if child.tag == qname("p"):
+                text = collect_text(child)
+                if text:
+                    lines.append(text)
+            elif child.tag == qname("tbl"):
+                for row in child.findall(".//" + qname("tr")):
+                    cells = []
+                    for cell in row.findall(qname("tc")):
+                        cell_text = " ".join(
+                            filter(None, (collect_text(paragraph) for paragraph in cell.findall(".//" + qname("p"))))
+                        )
+                        if cell_text:
+                            cells.append(cell_text)
+                    if cells:
+                        lines.append(", ".join(cells))
+
+print("\\n".join(lines))
 `;
     
-    const scriptPath = `/tmp/extract_docx_${randomBytes(8).toString("hex")}.py`;
+    const scriptPath = path.join(os.tmpdir(), `extract_docx_${randomBytes(8).toString("hex")}.py`);
     await writeFile(scriptPath, pythonScript);
     
     try {
@@ -146,7 +185,7 @@ with zipfile.ZipFile(sys.argv[1]) as workbook:
 print("\\n".join(sheet_rows))
 `;
 
-    const scriptPath = `/tmp/extract_xlsx_${randomBytes(8).toString("hex")}.py`;
+    const scriptPath = path.join(os.tmpdir(), `extract_xlsx_${randomBytes(8).toString("hex")}.py`);
     await writeFile(scriptPath, pythonScript);
 
     try {
@@ -188,8 +227,7 @@ export async function extractTextFromDocument(
   if (mimeType === "application/pdf") {
     return extractTextFromPDF(filePath);
   } else if (
-    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    mimeType === "application/msword"
+    mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     return extractTextFromDOCX(filePath);
   } else if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {

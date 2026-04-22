@@ -2,16 +2,15 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, FolderPlus, Folder, Edit, Trash2, ArrowLeft, Share2, Compass } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, FolderPlus, Folder, Edit, Trash2, Share2 } from "lucide-react";
 import { ShareCollectionModal } from "@/components/ShareCollectionModal";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
-import { APP_TITLE, APP_LOGO } from "@/const";
+import { APP_LOGO } from "@/const";
 import Breadcrumb from "@/components/Breadcrumb";
 import { CollectionsOnboardingTutorial } from "@/components/CollectionsOnboardingTutorial";
 import { MobileNav } from "@/components/MobileNav";
@@ -125,14 +124,26 @@ export default function Collections() {
           { label: "Library", href: "/library" },
           { label: "Collections" }
         ]} showHome={false} />
+
+        <div className="mb-6 flex justify-end">
+          <Button
+            type="button"
+            onClick={() => setIsCreateOpen(true)}
+            className="bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 border-0 shadow-sm"
+            data-tutorial="create-collection"
+          >
+            <FolderPlus className="mr-2 h-4 w-4" />
+            New Collection
+          </Button>
+        </div>
         
         {!collections || collections.length === 0 ? (
           <div className="flex items-center justify-center min-h-[60vh]">
-            <Card className="w-full max-w-md bg-white shadow-sm border border-border">
+            <Card className="w-full max-w-md bg-white shadow-sm border border-border" data-tutorial="collection-grid">
               <CardContent className="py-16 text-center space-y-6">
                 {/* Flip mascot */}
                 <div className="flex justify-center">
-                  <img src="/flip-mascot.png" alt="Flip" className="w-32 h-32 mx-auto" />
+                  <img src={APP_LOGO} alt="Storyling.ai" className="w-24 h-24 mx-auto object-contain" />
                 </div>
 
                 <div className="space-y-3">
@@ -147,6 +158,7 @@ export default function Collections() {
                 <Button 
                   onClick={() => setIsCreateOpen(true)}
                   className="bg-gradient-to-r from-blue-500 to-teal-500 text-white hover:from-blue-600 hover:to-teal-600 border-0 shadow-sm"
+                  data-tutorial="create-collection"
                 >
                   <FolderPlus className="mr-2 h-4 w-4" />
                   Create Your First Collection
@@ -243,6 +255,79 @@ export default function Collections() {
           onClose={() => setShareModalCollection(null)}
         />
       )}
+
+      <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create Collection</DialogTitle>
+            <DialogDescription>
+              Group related stories by theme, topic, or learning goal.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="collection-name">Name</Label>
+              <Input
+                id="collection-name"
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
+                placeholder="Travel phrases"
+                maxLength={200}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="collection-description">Description</Label>
+              <Textarea
+                id="collection-description"
+                value={newDescription}
+                onChange={(event) => setNewDescription(event.target.value)}
+                placeholder="Stories for a specific topic or goal"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex flex-wrap gap-2">
+                {colorOptions.map((color) => (
+                  <button
+                    key={color}
+                    type="button"
+                    className={`h-9 w-9 rounded-full border-2 transition ${
+                      newColor === color ? "border-gray-900 scale-105" : "border-transparent"
+                    }`}
+                    style={{ backgroundColor: color }}
+                    onClick={() => setNewColor(color)}
+                    aria-label={`Use collection color ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleCreate}
+              disabled={!newName.trim() || createMutation.isPending}
+            >
+              {createMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                "Create Collection"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     {showCollectionsTutorial && (
       <CollectionsOnboardingTutorial onComplete={handleCollectionsTutorialComplete} />

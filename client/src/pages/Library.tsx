@@ -384,9 +384,6 @@ export default function Library() {
     
     let filtered = library;
 
-    // Always hide failed stories - users can regenerate them instead
-    filtered = filtered.filter(content => content.status !== "failed");
-
     // Search by title
     if (searchQuery) {
       filtered = filtered.filter(content => {

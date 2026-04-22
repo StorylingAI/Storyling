@@ -4,6 +4,7 @@ import { TRPCError } from "@trpc/server";
 import { writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
 import path from "path";
+import os from "os";
 import { extractTextFromDocument, extractVocabularyFromText } from "./documentExtraction";
 
 export const documentRouter = router({
@@ -33,7 +34,6 @@ export const documentRouter = router({
       const supportedTypes = [
         "application/pdf",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/msword",
         "text/plain",
         "text/csv",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -42,7 +42,7 @@ export const documentRouter = router({
       if (!supportedTypes.includes(input.mimeType)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
-          message: "Unsupported file type. Please upload PDF, Word, Excel (.xlsx), TXT, or CSV files.",
+          message: "Unsupported file type. Please upload PDF, Word (.docx), Excel (.xlsx), TXT, or CSV files.",
         });
       }
 
@@ -61,7 +61,7 @@ export const documentRouter = router({
       try {
         // Save uploaded file to temporary location
         const fileExtension = path.extname(input.fileName) || ".tmp";
-        tempFilePath = `/tmp/upload_${randomBytes(8).toString("hex")}${fileExtension}`;
+        tempFilePath = path.join(os.tmpdir(), `upload_${randomBytes(8).toString("hex")}${fileExtension}`);
         
         // Decode base64 and write to file
         const fileBuffer = Buffer.from(input.fileData, "base64");
@@ -114,7 +114,7 @@ export const documentRouter = router({
         
         throw new TRPCError({
           code: "INTERNAL_SERVER_ERROR",
-          message: "Failed to process document",
+          message: error instanceof Error ? error.message : "Failed to process document",
           cause: error,
         });
       } finally {

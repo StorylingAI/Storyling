@@ -6,7 +6,7 @@ import {
   BookOpen, HelpCircle, Languages, Sparkles, MessageCircle,
   Star, ArrowRight, LogIn
 } from 'lucide-react';
-import { getLoginUrl, getSignUpUrl } from '@/const';
+import { APP_LOGO, getLoginUrl, getSignUpUrl } from '@/const';
 import {
   LATAM_SPANISH_LABEL,
   normalizeLearningLanguage,
@@ -478,7 +478,7 @@ export function Chatbot({ context }: ChatbotProps) {
         >
           <div className="relative">
             <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 via-violet-500 to-teal-500 shadow-lg shadow-purple-500/30 flex items-center justify-center hover:scale-110 transition-all duration-200 hover:shadow-xl hover:shadow-purple-500/40">
-              <span className="text-2xl">📖</span>
+              <img src={APP_LOGO} alt="" aria-hidden="true" className="h-10 w-10 rounded-full object-contain" />
             </div>
             {hasNewMessage && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-pulse" />
@@ -508,9 +508,9 @@ export function Chatbot({ context }: ChatbotProps) {
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
                 <img
-                  src="https://d2xsxph8kpxj0f.cloudfront.net/103676959/REBiP2ev8rqbpxn8LRb7vA/booki-pfp_7efb7238.png"
-                  alt="Booki"
-                  className="w-full h-full object-cover"
+                  src={APP_LOGO}
+                  alt="Storyling"
+                  className="w-full h-full object-contain bg-white"
                 />
               </div>
               <div>
@@ -596,7 +596,7 @@ export function Chatbot({ context }: ChatbotProps) {
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex flex-col items-center justify-center h-full text-center px-2">
-                    <div className="text-4xl mb-3">📖</div>
+                    <img src={APP_LOGO} alt="" aria-hidden="true" className="mb-3 h-14 w-14 rounded-full object-contain" />
                     <h4 className="font-semibold text-gray-800 text-sm mb-1">Hi, I'm Booki!</h4>
                     <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                       {emptyDescription}
@@ -643,8 +643,8 @@ export function Chatbot({ context }: ChatbotProps) {
                         className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}
                       >
                         {msg.role === 'assistant' && (
-                          <div className="w-6 h-6 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 flex items-center justify-center text-xs flex-shrink-0 mb-0.5">
-                            📖
+                          <div className="w-6 h-6 rounded-full bg-white border border-purple-100 flex items-center justify-center flex-shrink-0 mb-0.5 overflow-hidden">
+                            <img src={APP_LOGO} alt="" aria-hidden="true" className="h-full w-full object-contain" />
                           </div>
                         )}
                         <div

@@ -28,6 +28,15 @@ function maybeParseJson(value: unknown): unknown {
   }
 }
 
+const LIST_SEPARATOR_PATTERN = /[,;\n\r\uFF0C\u3001\uFF1B]+/;
+
+function splitListText(value: string): string[] {
+  return value
+    .split(LIST_SEPARATOR_PATTERN)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
 export function safeString(value: unknown, fallback = ""): string {
   if (typeof value === "string") {
     return value;
@@ -56,15 +65,12 @@ export function normalizeStringArray(value: unknown): string[] {
 
   if (Array.isArray(parsed)) {
     return parsed
-      .map((item) => safeString(item).trim())
+      .flatMap((item) => splitListText(safeString(item)))
       .filter(Boolean);
   }
 
   if (typeof parsed === "string") {
-    return parsed
-      .split(/[,\n]/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+    return splitListText(parsed);
   }
 
   return [];

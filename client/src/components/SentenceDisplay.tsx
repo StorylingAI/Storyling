@@ -42,6 +42,8 @@ interface SentenceDisplayProps {
   subtitleSegments?: TimedSubtitleSegment[];
 }
 
+const HIGHLIGHT_AUDIO_DELAY_SECONDS = 0.6;
+
 export function SentenceDisplay({
   storyText,
   vocabularyWords,
@@ -336,7 +338,7 @@ export function SentenceDisplay({
     const audio = audioRef.current;
     
     const updateSentenceIndex = () => {
-      const currentTime = audio.currentTime;
+      const currentTime = Math.max(0, audio.currentTime - HIGHLIGHT_AUDIO_DELAY_SECONDS);
       
       
       // Find the sentence that contains the current time
@@ -539,7 +541,7 @@ export function SentenceDisplay({
     const audio = audioRef.current;
 
     const updateWordIndex = () => {
-      const currentTime = audio.currentTime;
+      const currentTime = Math.max(0, audio.currentTime - HIGHLIGHT_AUDIO_DELAY_SECONDS);
       const newIndex = wordTimestamps.findIndex(
         (wt) => currentTime >= wt.startTime && currentTime < wt.endTime
       );
@@ -828,62 +830,60 @@ export function SentenceDisplay({
 
       {/* Current sentence display with word-level highlighting */}
       <div className="text-center max-w-3xl w-full flex-1 flex flex-col items-center justify-center overflow-hidden">
-        {/* Show pinyin above Chinese text using proper ruby annotation */}
+        {/* Show pinyin above Chinese text with one explicit column per character. */}
         {showPinyin && hasPinyin && isChinese ? (
-          <div className="text-left mb-2 w-full max-w-full sm:max-w-4xl overflow-hidden">
-            {/* Use CSS ruby annotation for proper character-by-character alignment */}
-            <p 
-              className="text-lg sm:text-2xl md:text-3xl font-medium text-foreground"
-              style={{ 
-                lineHeight: '3',
-                rubyPosition: 'over',
-              }}
-            >
-              {pairPinyinWithChinese(currentSentence, currentTranslation.pinyin || '').map((pair, idx) => {
-                // Skip rendering empty pairs
-                if (!pair.chinese) return null;
-                
-                // Handle punctuation and spaces without ruby
-                if (!pair.pinyin) {
+          <div className="mb-2 w-full max-w-full sm:max-w-4xl overflow-hidden">
+            <div className="flex flex-wrap items-end justify-center gap-x-1 gap-y-3 text-lg sm:text-2xl md:text-3xl font-medium text-foreground leading-none">
+              {(() => {
+                let spokenIndex = -1;
+                return pairPinyinWithChinese(currentSentence, currentTranslation.pinyin || '').map((pair, idx) => {
+                  if (!pair.chinese) return null;
+
+                  const hasSpokenCharacter = pair.chinese.trim().length > 0;
+                  if (hasSpokenCharacter) {
+                    spokenIndex += 1;
+                  }
+
+                  if (!pair.pinyin) {
+                    return (
+                      <span key={idx} className="inline-flex min-h-[2.4em] items-end">
+                        {pair.chinese}
+                      </span>
+                    );
+                  }
+
+                  const isPlayingThis = playingCharacter === pair.chinese;
+                  const isHighlighted = spokenIndex === currentWordIndex && isPlaying;
+
                   return (
-                    <span key={idx}>{pair.chinese}</span>
-                  );
-                }
-                
-                const isPlayingThis = playingCharacter === pair.chinese;
-                const isHighlighted = idx === currentWordIndex && isPlaying;
-                
-                return (
-                  <ruby 
-                    key={idx} 
-                    style={{ 
-                      rubyAlign: 'center',
-                    }}
-                  >
-                    <span 
-                      className={`cursor-pointer transition-all duration-200 ${
-                        isHighlighted
-                          ? 'text-blue-500 font-bold underline decoration-2 underline-offset-4 bg-blue-50 rounded px-0.5'
-                          : isPlayingThis
-                          ? 'text-primary scale-110 bg-primary/10 rounded px-0.5' 
-                          : 'hover:text-primary hover:scale-105'
-                      }`}
-                      onClick={() => {
-                        handleWordClick(pair.chinese);
-                      }}
-                      onContextMenu={(e) => e.preventDefault()}
-                    >
-                      {pair.chinese}
+                    <span key={idx} className="inline-flex min-w-[1.3em] flex-col items-center">
+                      <span
+                        className={`mb-1 text-[0.45em] leading-none font-medium whitespace-nowrap transition-colors ${
+                          isHighlighted ? 'text-blue-500' : isPlayingThis ? 'text-primary' : 'text-amber-600'
+                        }`}
+                      >
+                        {pair.pinyin.replace(/\*\*/g, '')}
+                      </span>
+                      <span
+                        className={`cursor-pointer transition-all duration-200 ${
+                          isHighlighted
+                            ? 'text-blue-500 font-bold underline decoration-2 underline-offset-4 bg-blue-50 rounded px-0.5'
+                            : isPlayingThis
+                            ? 'text-primary scale-110 bg-primary/10 rounded px-0.5'
+                            : 'hover:text-primary hover:scale-105'
+                        }`}
+                        onClick={() => {
+                          handleWordClick(pair.chinese);
+                        }}
+                        onContextMenu={(e) => e.preventDefault()}
+                      >
+                        {pair.chinese}
+                      </span>
                     </span>
-                    <rp>(</rp>
-                    <rt className={`text-sm font-medium transition-colors ${
-                      isHighlighted ? 'text-blue-500' : isPlayingThis ? 'text-primary' : 'text-amber-600'
-                    }`} style={{ textAlign: 'center' }}>{pair.pinyin.replace(/\*\*/g, '')}</rt>
-                    <rp>)</rp>
-                  </ruby>
-                );
-              })}
-            </p>
+                  );
+                });
+              })()}
+            </div>
           </div>
         ) : (
           <p className="text-base sm:text-2xl md:text-3xl leading-relaxed font-medium text-foreground" style={{ overflowWrap: 'anywhere', wordBreak: 'normal', hyphens: 'auto' } as React.CSSProperties}>

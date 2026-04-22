@@ -84,19 +84,17 @@ export function DashboardOnboardingTutorial({ onComplete }: DashboardOnboardingT
           const rect = element.getBoundingClientRect();
           setTargetRect(rect);
 
-          const scrollY = window.scrollY || window.pageYOffset;
-          const scrollX = window.scrollX || window.pageXOffset;
-
-          let top = rect.bottom + scrollY + 16;
-          let left = rect.left + scrollX + rect.width / 2;
+          let top = rect.bottom + 16;
+          let left = rect.left + rect.width / 2;
 
           if (step.position === "top") {
-            top = rect.top + scrollY - 220;
+            top = rect.top - 220;
           }
 
           const maxLeft = window.innerWidth - 220;
           const minLeft = 220;
           left = Math.max(minLeft, Math.min(maxLeft, left));
+          top = Math.max(16, Math.min(window.innerHeight - 240, top));
 
           setTooltipPosition({ top, left });
         };
@@ -193,11 +191,11 @@ export function DashboardOnboardingTutorial({ onComplete }: DashboardOnboardingT
 
       <Card
         className={cn(
-          "fixed z-[1003] w-[400px] shadow-2xl",
-          step.position === "center" && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          "fixed z-[1003] w-[400px] max-w-[calc(100vw-2rem)] shadow-2xl",
+          (step.position === "center" || !targetRect) && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
         )}
         style={
-          step.position !== "center"
+          step.position !== "center" && targetRect
             ? { top: `${tooltipPosition.top}px`, left: `${tooltipPosition.left}px`, transform: "translateX(-50%)" }
             : undefined
         }

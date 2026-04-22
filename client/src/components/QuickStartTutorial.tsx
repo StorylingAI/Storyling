@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { X, ArrowRight, ArrowLeft, Sparkles } from "lucide-react";
-import { tutorialSounds } from "@/lib/tutorialSounds";
 import { TutorialCompletionCelebration } from "@/components/TutorialCompletionCelebration";
 
 interface TutorialStep {
@@ -175,8 +174,6 @@ export function QuickStartTutorial({
           setTimeout(() => {
             const rect = target.getBoundingClientRect();
             setHighlightRect(rect);
-            // Play pop sound when cursor appears
-            tutorialSounds.playPopSound();
           }, updateDelay);
         } else {
           console.warn(`Tutorial: Element not found for selector: ${selector}`);
@@ -208,21 +205,18 @@ export function QuickStartTutorial({
   }, [autoScrollTargets, currentStep, isActive, step.targetSelector]);
 
   const handleNext = () => {
-    tutorialSounds.playClickSound();
     if (currentStep < tutorialSteps.length - 1) {
       setCurrentStep(currentStep + 1);
     }
   };
 
   const handlePrevious = () => {
-    tutorialSounds.playClickSound();
     if (currentStep > 0) {
       setCurrentStep(currentStep - 1);
     }
   };
 
   const completeTutorial = () => {
-    tutorialSounds.playCelebrationSound();
     localStorage.setItem("hasSeenQuickStartTutorial", "true");
     setIsActive(false);
     setShowCelebration(true);

@@ -407,8 +407,12 @@ async function materializeReplicateImagePrediction(
   persistToStorage = true,
 ): Promise<ReplicateImageResponse> {
   if (prediction.status === "failed" || prediction.status === "canceled") {
+    const detail =
+      formatReplicateErrorDetail(prediction.error) ||
+      prediction.logs?.trim() ||
+      `Replicate image prediction ${prediction.status}`;
     throw new Error(
-      formatReplicateErrorDetail(prediction.error) || `Replicate image prediction ${prediction.status}`,
+      `Replicate image prediction failed${prediction.id ? ` (${prediction.id})` : ""}: ${detail}`,
     );
   }
 

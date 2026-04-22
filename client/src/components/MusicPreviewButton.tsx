@@ -28,9 +28,15 @@ export function MusicPreviewButton({
   });
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentTrackIdRef = useRef(trackId);
+  const pendingPreviewTrackIdRef = useRef<string | null>(null);
+  const suppressAudioErrorRef = useRef(false);
   
   const generatePreviewMutation = trpc.music.generatePreview.useMutation({
     onSuccess: (data) => {
+      if (pendingPreviewTrackIdRef.current !== currentTrackIdRef.current) {
+        return;
+      }
       setPreviewUrl(data.previewUrl);
       playAudio(data.previewUrl);
     },
@@ -39,6 +45,11 @@ export function MusicPreviewButton({
       console.error("Music preview error:", error);
     },
   });
+
+  const requestPreview = (previewTrackId = trackId) => {
+    pendingPreviewTrackIdRef.current = previewTrackId;
+    generatePreviewMutation.mutate({ trackId: previewTrackId });
+  };
 
   // Initialize audio element
   useEffect(() => {
@@ -53,6 +64,10 @@ export function MusicPreviewButton({
       });
       
       audioRef.current.addEventListener("error", () => {
+        if (suppressAudioErrorRef.current) {
+          suppressAudioErrorRef.current = false;
+          return;
+        }
         setIsPlaying(false);
         toast.error("Error playing audio preview");
       });
@@ -60,6 +75,7 @@ export function MusicPreviewButton({
 
     return () => {
       if (audioRef.current) {
+        suppressAudioErrorRef.current = true;
         audioRef.current.pause();
         audioRef.current.src = "";
       }
@@ -74,6 +90,29 @@ export function MusicPreviewButton({
     // Save volume to localStorage
     localStorage.setItem("musicPreviewVolume", volume.toString());
   }, [volume, isMuted]);
+
+  useEffect(() => {
+    if (currentTrackIdRef.current === trackId) {
+      return;
+    }
+
+    const wasPlaying = isPlaying;
+    currentTrackIdRef.current = trackId;
+    pendingPreviewTrackIdRef.current = null;
+    setPreviewUrl(null);
+    setIsPlaying(false);
+
+    if (audioRef.current) {
+      suppressAudioErrorRef.current = true;
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+    }
+
+    if (wasPlaying) {
+      requestPreview(trackId);
+    }
+  }, [trackId]);
 
   // Stop other playing audio when this one starts
   useEffect(() => {
@@ -102,6 +141,7 @@ export function MusicPreviewButton({
     if (!audioRef.current) return;
 
     try {
+      suppressAudioErrorRef.current = false;
       audioRef.current.src = url;
       audioRef.current.volume = isMuted ? 0 : volume;
       await audioRef.current.play();
@@ -122,7 +162,7 @@ export function MusicPreviewButton({
       if (previewUrl) {
         playAudio(previewUrl);
       } else {
-        generatePreviewMutation.mutate({ trackId });
+        requestPreview(trackId);
       }
     }
   };

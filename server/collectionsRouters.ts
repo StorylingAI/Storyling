@@ -596,7 +596,7 @@ export const collectionsRouter = router({
         ...collection[0],
         items: items.map(({ item, content }) => ({
           ...item,
-          content: content ? {
+          content: content && content.status === "completed" ? {
             id: content.id,
             title: content.title,
             theme: content.theme,

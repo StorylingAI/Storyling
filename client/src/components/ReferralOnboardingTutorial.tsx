@@ -76,19 +76,17 @@ export function ReferralOnboardingTutorial({ referralCode, onComplete }: Referra
           const rect = element.getBoundingClientRect();
           setTargetRect(rect);
 
-          const scrollY = window.scrollY || window.pageYOffset;
-          const scrollX = window.scrollX || window.pageXOffset;
-
-          let top = rect.bottom + scrollY + 16;
-          let left = rect.left + scrollX + rect.width / 2;
+          let top = rect.bottom + 16;
+          let left = rect.left + rect.width / 2;
 
           if (step.position === "top") {
-            top = rect.top + scrollY - 220;
+            top = rect.top - 220;
           }
 
           const maxLeft = window.innerWidth - 220;
           const minLeft = 220;
           left = Math.max(minLeft, Math.min(maxLeft, left));
+          top = Math.max(16, Math.min(window.innerHeight - 240, top));
 
           setTooltipPosition({ top, left });
         };
@@ -233,13 +231,23 @@ export function ReferralOnboardingTutorial({ referralCode, onComplete }: Referra
 
       <div
         className="fixed z-[1003] animate-in zoom-in-95 slide-in-from-top-2"
-        style={{
-          top: `${tooltipPosition.top}px`,
-          left: `${tooltipPosition.left}px`,
-          transform: "translateX(-50%)",
-          maxWidth: "400px",
-          width: "90vw",
-        }}
+        style={
+          targetRect
+            ? {
+                top: `${tooltipPosition.top}px`,
+                left: `${tooltipPosition.left}px`,
+                transform: "translateX(-50%)",
+                maxWidth: "400px",
+                width: "90vw",
+              }
+            : {
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                maxWidth: "400px",
+                width: "90vw",
+              }
+        }
       >
         <Card className="shadow-2xl border-purple-200">
           <CardContent className="pt-4">

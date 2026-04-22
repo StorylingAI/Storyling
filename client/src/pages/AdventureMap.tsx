@@ -1355,7 +1355,7 @@ export default function AdventureMap() {
                 <motion.div variants={fadeSlideUp} className="mb-4 flex items-center justify-between gap-4">
                   <div className="flex items-center gap-3">
                     <h2 className="text-[1.65rem] font-semibold leading-none text-[#231532] xl:text-[1.78rem] 2xl:text-[1.9rem]">
-                      Explore new stories
+                      See what others are creating
                     </h2>
                   </div>
                   <button

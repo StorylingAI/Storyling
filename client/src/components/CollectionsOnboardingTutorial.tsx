@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, ArrowRight, FolderOpen, Search, Plus, Share2 } from "lucide-react";
+import { X, ArrowRight, FolderOpen, Plus, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -15,14 +15,6 @@ const tutorialSteps = [
     description: "Organize your stories into collections and discover curated content from other learners.",
     icon: FolderOpen,
     position: "center" as "center" | "bottom" | "top",
-  },
-  {
-    id: "search-filter",
-    title: "Search and Filter Collections",
-    description: "Use the search bar and filters to find collections by language, difficulty, or theme.",
-    icon: Search,
-    targetSelector: '[data-tutorial="collections-search"]',
-    position: "bottom" as "center" | "bottom" | "top",
   },
   {
     id: "create-collection",
@@ -82,19 +74,17 @@ export function CollectionsOnboardingTutorial({ onComplete }: CollectionsOnboard
           const rect = element.getBoundingClientRect();
           setTargetRect(rect);
 
-          const scrollY = window.scrollY || window.pageYOffset;
-          const scrollX = window.scrollX || window.pageXOffset;
-
-          let top = rect.bottom + scrollY + 16;
-          let left = rect.left + scrollX + rect.width / 2;
+          let top = rect.bottom + 16;
+          let left = rect.left + rect.width / 2;
 
           if (step.position === "top") {
-            top = rect.top + scrollY - 220;
+            top = rect.top - 220;
           }
 
           const maxLeft = window.innerWidth - 220;
           const minLeft = 220;
           left = Math.max(minLeft, Math.min(maxLeft, left));
+          top = Math.max(16, Math.min(window.innerHeight - 240, top));
 
           setTooltipPosition({ top, left });
         };
@@ -191,11 +181,11 @@ export function CollectionsOnboardingTutorial({ onComplete }: CollectionsOnboard
 
       <Card
         className={cn(
-          "fixed z-[1003] w-[400px] shadow-2xl",
-          step.position === "center" && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+          "fixed z-[1003] w-[400px] max-w-[calc(100vw-2rem)] shadow-2xl",
+          (step.position === "center" || !targetRect) && "top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
         )}
         style={
-          step.position !== "center"
+          step.position !== "center" && targetRect
             ? { top: `${tooltipPosition.top}px`, left: `${tooltipPosition.left}px`, transform: "translateX(-50%)" }
             : undefined
         }

@@ -30,6 +30,8 @@ import {
   classMembers,
   assignments,
   assignmentSubmissions,
+  collections,
+  collectionItems,
   organizationAdmins,
   users,
 } from "../drizzle/schema";
@@ -120,6 +122,14 @@ const AVATAR_UPLOAD_SCHEMA = z
   );
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const VOCABULARY_LIST_SEPARATOR = /[,;\n\r\uFF0C\u3001\uFF1B]+/;
+
+function splitVocabularyInput(value?: string | null): string[] {
+  return (value || "")
+    .split(VOCABULARY_LIST_SEPARATOR)
+    .map(word => word.trim())
+    .filter(Boolean);
+}
 
 function buildCuteStoryThumbnailPrompt(theme?: string | null, title?: string | null): string {
   const safeTheme = theme?.toLowerCase() || "adventure";
@@ -140,6 +150,25 @@ async function generateStoryThumbnailImage(theme?: string | null, title?: string
     aspectRatio: "16:9",
   });
   return url;
+}
+
+async function isContentSharedViaPublicCollection(contentId: number): Promise<boolean> {
+  const db = await getDb();
+  if (!db) return false;
+
+  const rows = await db
+    .select({ id: collectionItems.id })
+    .from(collectionItems)
+    .innerJoin(collections, eq(collections.id, collectionItems.collectionId))
+    .where(
+      and(
+        eq(collectionItems.contentId, contentId),
+        eq(collections.isPublic, true)
+      )
+    )
+    .limit(1);
+
+  return rows.length > 0;
 }
 
 export const appRouter = router({
@@ -501,10 +530,7 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ input }) => {
-        const vocabularyWords = input.vocabularyText
-          .split(/[,\n]/)
-          .map(w => w.trim())
-          .filter(Boolean);
+        const vocabularyWords = splitVocabularyInput(input.vocabularyText);
 
         const preview = await generatePreview({
           targetLanguage: input.targetLanguage,
@@ -600,10 +626,7 @@ export const appRouter = router({
 
         // A1-only restriction removed — free users can access all CEFR levels
 
-        const vocabularyWords = input.vocabularyText
-          .split(/[,\n]/)
-          .map(w => w.trim())
-          .filter(Boolean);
+        const vocabularyWords = splitVocabularyInput(input.vocabularyText);
 
         const vocabList = await createVocabularyList({
           userId: ctx.user.id,
@@ -636,6 +659,12 @@ export const appRouter = router({
           input.mode === "film"
             ? filmNarration?.narratorGender
             : input.narratorGender;
+        const resolvedSelectedMusicTrack =
+          input.mode === "film" &&
+          input.backgroundMusic &&
+          input.backgroundMusic !== "none"
+            ? input.selectedMusicTrack || `${input.backgroundMusic}-1`
+            : undefined;
 
         const content = await createGeneratedContent({
           userId: ctx.user.id,
@@ -647,6 +676,13 @@ export const appRouter = router({
           voiceType: effectiveVoiceType,
           narratorGender: effectiveNarratorGender,
           cinematicStyle: input.cinematicStyle,
+          musicVolume:
+            input.mode === "film" &&
+            input.backgroundMusic &&
+            input.backgroundMusic !== "none"
+              ? input.musicVolume
+              : undefined,
+          selectedMusicTrack: resolvedSelectedMusicTrack,
           storyText: "",
           status: "generating",
         });
@@ -786,7 +822,7 @@ export const appRouter = router({
                   targetVideoDuration: input.videoDuration,
                   backgroundMusic: input.backgroundMusic,
                   musicVolume: input.musicVolume,
-                  selectedMusicTrack: input.selectedMusicTrack,
+                  selectedMusicTrack: resolvedSelectedMusicTrack,
                   addSubtitles: input.addSubtitles,
                   subtitleFontSize: input.subtitleFontSize,
                   subtitlePosition: input.subtitlePosition,
@@ -1113,7 +1149,11 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input }) => {
         const content = await getGeneratedContentById(input.id);
-        if (!content || content.status !== "completed" || !content.isPublic) {
+        if (!content || content.status !== "completed") {
+          throw new Error("Story not found");
+        }
+
+        if (!content.isPublic && !(await isContentSharedViaPublicCollection(input.id))) {
           throw new Error("Story not found");
         }
         // Return limited preview data — first 3 sentences, title, thumbnail, metadata
@@ -1204,7 +1244,16 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(async ({ input, ctx }) => {
         const content = await getGeneratedContentById(input.id);
-        if (!content || (content.userId !== ctx.user.id && !content.isPublic)) {
+        if (!content) {
+          throw new Error("Content not found");
+        }
+
+        const canAccess =
+          content.userId === ctx.user.id ||
+          content.isPublic ||
+          (await isContentSharedViaPublicCollection(input.id));
+
+        if (!canAccess) {
           throw new Error("Content not found");
         }
 
@@ -1222,10 +1271,7 @@ export const appRouter = router({
         );
 
         const vocabularyWords = matchingList?.words
-          ? matchingList.words
-              .split(",")
-              .map(w => w.trim())
-              .filter(w => w.length > 0)
+          ? splitVocabularyInput(matchingList.words)
           : [];
 
         console.log("[getById] vocabularyWords after split:", vocabularyWords);
@@ -1800,10 +1846,7 @@ export const appRouter = router({
             input.contentId
           );
 
-          const words = vocabList.words
-            .split(/[,，、\n]/)
-            .map((w: string) => w.trim())
-            .filter(Boolean);
+          const words = splitVocabularyInput(vocabList.words);
 
           // First generate the story content
           const storyResult = await generateStory({
@@ -1871,10 +1914,7 @@ export const appRouter = router({
           );
           const { invokeLLM } = await import("./_core/llm");
 
-          const words = vocabList.words
-            .split(/[,，、\n]/)
-            .map((w: string) => w.trim())
-            .filter(Boolean);
+          const words = splitVocabularyInput(vocabList.words);
 
           // Generate a new title based on the story content
           const titlePrompt = `Generate a creative, engaging title in ${vocabList.targetLanguage} for a ${content.theme.toLowerCase()} story that uses these vocabulary words: ${words.join(", ")}. The title should be concise (3-8 words), memorable, and capture the essence of a ${content.theme.toLowerCase()} story. Return ONLY the title text, nothing else.`;
@@ -2021,10 +2061,7 @@ export const appRouter = router({
 
           // Generate vocabulary translations if missing
           if (!hasVocabTranslations) {
-            const words = vocabList.words
-              .split(/[,，、\n]/)
-              .map((w: string) => w.trim())
-              .filter(Boolean);
+            const words = splitVocabularyInput(vocabList.words);
             console.log(
               "[backfillVocabularyTranslations] Processing",
               words.length,
@@ -2270,10 +2307,7 @@ Return a JSON array where each element has:
         const targetLanguage = matchingList?.targetLanguage || "Unknown";
         const proficiencyLevel = matchingList?.proficiencyLevel || "B1";
         const vocabularyWords = matchingList?.words
-          ? matchingList.words
-              .split(",")
-              .map((w: string) => w.trim())
-              .filter(Boolean)
+          ? splitVocabularyInput(matchingList.words)
           : [];
 
         // Calculate difficulty level
@@ -2756,7 +2790,7 @@ Return a JSON array where each element has:
           throw new Error("Vocabulary list not found");
         }
 
-        const words = matchingList.words.split(", ").filter(Boolean);
+        const words = splitVocabularyInput(matchingList.words);
         const { invokeLLM } = await import("./_core/llm");
         const { getDb } = await import("./db");
         const { wordMastery } = await import("../drizzle/schema");

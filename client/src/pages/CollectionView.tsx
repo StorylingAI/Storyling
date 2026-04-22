@@ -1,10 +1,10 @@
 import { useAuth } from "@/_core/hooks/useAuth";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Loader2, ArrowLeft, Plus, X, Play, Clock, GripVertical } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Plus, X, Play, Clock, GripVertical, BookOpen } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
 import { APP_LOGO } from "@/const";
@@ -12,7 +12,7 @@ import Breadcrumb from "@/components/Breadcrumb";
 import { MobileNav } from "@/components/MobileNav";
 
 export default function CollectionView() {
-  const { user, isAuthenticated } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [, setLocation] = useLocation();
   const params = useParams();
   const collectionId = parseInt(params.id || "0");
@@ -66,7 +66,9 @@ export default function CollectionView() {
 
   // Get stories not in this collection
   const availableStories = library?.filter(
-    story => !collection?.items.some(item => item.contentId === story.id)
+    story =>
+      story.status === "completed" &&
+      !collection?.items.some(item => item.contentId === story.id)
   ) || [];
 
   const handleDragStart = (itemId: number) => {
@@ -177,6 +179,29 @@ export default function CollectionView() {
 
 
       <section className="container py-12">
+        <Breadcrumb items={[
+          { label: "Library", href: "/library" },
+          { label: "Collections", href: "/collections" },
+          { label: collection.name },
+        ]} showHome={false} />
+
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-foreground">{collection.name}</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {collection.items.length} {collection.items.length === 1 ? "story" : "stories"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => setIsAddStoryOpen(true)}
+            className="rounded-button gradient-primary text-white hover-lift active-scale border-0"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Story
+          </Button>
+        </div>
+
         {collection.description && (
           <p className="text-muted-foreground mb-8 text-lg">{collection.description}</p>
         )}
@@ -203,7 +228,7 @@ export default function CollectionView() {
         ) : (
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              💡 Drag and drop to reorder stories
+              Tip: Drag and drop to reorder stories
             </p>
             {collection.items.map(item => (
               <Card
@@ -284,6 +309,78 @@ export default function CollectionView() {
           </div>
         )}
       </section>
+
+      <Dialog open={isAddStoryOpen} onOpenChange={setIsAddStoryOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Story</DialogTitle>
+            <DialogDescription>
+              Choose a completed story from your library to add to this collection.
+            </DialogDescription>
+          </DialogHeader>
+
+          {availableStories.length === 0 ? (
+            <div className="py-10 text-center">
+              <img src={APP_LOGO} alt="Storyling.ai" className="mx-auto mb-4 h-16 w-16 object-contain" />
+              <p className="font-medium">No available stories</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Completed stories that are not already in this collection will appear here.
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[60vh] space-y-3 overflow-y-auto pr-1">
+              {availableStories.map((story) => (
+                <div
+                  key={story.id}
+                  className="flex items-center gap-3 rounded-lg border bg-white p-3"
+                >
+                  <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-purple-100 via-teal-100 to-pink-100">
+                    {story.thumbnailUrl ? (
+                      <img src={story.thumbnailUrl} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <BookOpen className="h-7 w-7 text-purple-300" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">
+                      {story.title || `${story.theme} Story`}
+                    </p>
+                    <div className="mt-1 flex flex-wrap gap-2">
+                      <Badge variant="outline" className="text-xs">{story.theme}</Badge>
+                      <Badge variant="secondary" className="text-xs">{story.mode}</Badge>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      addToCollectionMutation.mutate({
+                        collectionId,
+                        contentId: story.id,
+                      });
+                    }}
+                    disabled={addToCollectionMutation.isPending}
+                    className="rounded-button"
+                  >
+                    {addToCollectionMutation.isPending ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="mr-2 h-4 w-4" />
+                    )}
+                    Add
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsAddStoryOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

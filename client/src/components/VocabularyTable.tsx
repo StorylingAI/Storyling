@@ -8,11 +8,12 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Volume2, BookmarkPlus, BookmarkCheck } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { VocabularyLimitSheet } from "@/components/upgrade/VocabularyLimitSheet";
+import { normalizeStringArray, normalizeVocabularyTranslations } from "@/lib/contentDisplay";
 
 interface VocabularyWord {
   word: string;
@@ -30,9 +31,9 @@ interface VocabularyData {
 }
 
 interface VocabularyTableProps {
-  words: string[];
+  words: unknown;
   targetLanguage: string;
-  vocabularyTranslations?: Record<string, VocabularyData>;
+  vocabularyTranslations?: unknown;
 }
 
 export function VocabularyTable({
@@ -40,10 +41,12 @@ export function VocabularyTable({
   targetLanguage,
   vocabularyTranslations,
 }: VocabularyTableProps) {
-  console.log("VocabularyTable received words:", words);
-  console.log("VocabularyTable words type:", typeof words, Array.isArray(words));
-  console.log("VocabularyTable vocabularyTranslations:", vocabularyTranslations);
-  
+  const safeWords = useMemo(() => normalizeStringArray(words), [words]);
+  const safeVocabularyTranslations = useMemo(
+    () => normalizeVocabularyTranslations(vocabularyTranslations),
+    [vocabularyTranslations],
+  );
+
   const [playingWord, setPlayingWord] = useState<string | null>(null);
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set());
   const [showVocabLimitSheet, setShowVocabLimitSheet] = useState(false);
@@ -108,7 +111,7 @@ export function VocabularyTable({
       return;
     }
 
-    const vocabData = vocabularyTranslations?.[word];
+    const vocabData = safeVocabularyTranslations[word];
     
     // Allow saving even without full vocab data - use word itself as fallback
     saveWordMutation.mutate({
@@ -133,8 +136,8 @@ export function VocabularyTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {words.map((word, idx) => {
-              const vocabData = vocabularyTranslations?.[word];
+            {safeWords.map((word, idx) => {
+              const vocabData = safeVocabularyTranslations[word];
               const translation = vocabData?.translation || "—";
               const pinyin = vocabData?.pinyin || "—";
               const isSaved = savedWords.has(word);

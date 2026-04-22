@@ -104,6 +104,15 @@ const CINEMATIC_STYLES = [
   "Cinematic Film",
 ];
 
+const VOCABULARY_LIST_SEPARATOR = /[,;\n\r\uFF0C\u3001\uFF1B]+/;
+
+function splitVocabularyText(value: string): string[] {
+  return value
+    .split(VOCABULARY_LIST_SEPARATOR)
+    .map((word) => word.trim())
+    .filter(Boolean);
+}
+
 /* ─── Step Indicator ─── */
 function StepIndicator({
   number,
@@ -297,7 +306,7 @@ export default function CreateStory() {
       targetLanguage &&
       hasDialect &&
       proficiencyLevel &&
-      vocabularyText.trim().split(/[,，、\n]/).map(w => w.trim()).filter(Boolean).length >= 5
+      splitVocabularyText(vocabularyText).length >= 5
     );
   }, [targetLanguage, spanishDialect, proficiencyLevel, vocabularyText]);
 
@@ -622,10 +631,7 @@ export default function CreateStory() {
     }
 
     setVocabularyText(prev => {
-      const existingWords = prev
-        .split(/[,ï¼Œã€\n]/)
-        .map(word => word.trim())
-        .filter(Boolean);
+      const existingWords = splitVocabularyText(prev);
 
       return Array.from(new Set([...existingWords, ...cleanedWords])).join(", ");
     });
@@ -634,18 +640,12 @@ export default function CreateStory() {
   };
 
   const getResolvedMimeType = (file: File) => {
-    if (file.type) {
-      return file.type;
-    }
-
     const extension = file.name.split(".").pop()?.toLowerCase();
     switch (extension) {
       case "pdf":
         return "application/pdf";
       case "docx":
         return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-      case "doc":
-        return "application/msword";
       case "txt":
         return "text/plain";
       case "csv":
@@ -665,14 +665,13 @@ export default function CreateStory() {
     const validTypes = [
       "application/pdf",
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/msword",
       "text/plain",
       "text/csv",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ];
 
     if (!validTypes.includes(mimeType)) {
-      toast.error("Please upload a PDF, Word, Excel (.xlsx), TXT, or CSV file");
+      toast.error("Please upload a PDF, Word (.docx), Excel (.xlsx), TXT, or CSV file");
       e.target.value = "";
       return;
     }
@@ -687,10 +686,7 @@ export default function CreateStory() {
     if (mimeType === "text/csv") {
       try {
         const text = await file.text();
-        const words = text
-          .split(/[,\n]/)
-          .map(word => word.trim())
-          .filter(Boolean);
+        const words = splitVocabularyText(text);
 
         if (words.length === 0) {
           toast.error("No words found in the CSV file");
@@ -843,6 +839,17 @@ export default function CreateStory() {
       setShowPaywallModal(true);
       return;
     }
+
+    if (previewAudio) {
+      previewAudio.pause();
+      previewAudio.currentTime = 0;
+      setPreviewAudio(null);
+      setPlayingPreview(null);
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("stopOtherAudio", { detail: { trackId: "content-generate" } })
+    );
 
     generateMutation.mutate({
       targetLanguage: effectiveLanguage,
@@ -1082,7 +1089,7 @@ export default function CreateStory() {
                   />
                   <div className="flex items-center justify-between text-xs text-gray-400">
                     <span>
-                      {vocabularyText.trim().split(/[,，、\n]/).map(w => w.trim()).filter(Boolean).length} words
+                      {splitVocabularyText(vocabularyText).length} words
                     </span>
                     <div className="grid w-full gap-2 sm:grid-cols-2">
                       <button
@@ -1098,7 +1105,7 @@ export default function CreateStory() {
                             <Camera className="h-4 w-4" />
                           )}
                         </div>
-                        <p className="text-sm font-semibold text-gray-800">Upload Photo</p>
+                        <p className="text-sm font-semibold text-gray-800">Upload Photos</p>
                         <p className="mt-1 text-xs text-gray-500">
                           Choose from your camera roll or take a new photo of notes, a worksheet, or a textbook page.
                         </p>
@@ -1119,7 +1126,7 @@ export default function CreateStory() {
                         </div>
                         <p className="text-sm font-semibold text-gray-800">Upload File</p>
                         <p className="mt-1 text-xs text-gray-500">
-                          Import vocabulary from PDF, Word, Excel (.xlsx), TXT, or CSV files.
+                          Import vocabulary from PDF, Word (.docx), Excel (.xlsx), TXT, or CSV files.
                         </p>
                       </button>
                     </div>
@@ -1127,7 +1134,7 @@ export default function CreateStory() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".pdf,.docx,.doc,.txt,.csv,.xlsx"
+                    accept=".pdf,.docx,.txt,.csv,.xlsx"
                     className="hidden"
                     onChange={handleFileUpload}
                   />

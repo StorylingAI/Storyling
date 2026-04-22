@@ -50,7 +50,7 @@ export function PageOnboardingTutorial({ storageKey, title, steps }: PageOnboard
         <Button
           type="button"
           onClick={restartTutorial}
-          className="fixed bottom-5 right-5 z-50 rounded-full bg-white text-purple-700 shadow-lg border border-purple-200 hover:bg-purple-50"
+          className="fixed bottom-36 right-4 z-50 rounded-full bg-white text-purple-700 shadow-lg border border-purple-200 hover:bg-purple-50 sm:bottom-24 sm:right-6"
           variant="outline"
         >
           <HelpCircle className="mr-2 h-4 w-4" />

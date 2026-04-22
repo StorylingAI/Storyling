@@ -60,4 +60,14 @@ describe("content display normalization", () => {
       "merci",
     ]);
   });
+
+  it("splits Chinese punctuation-separated vocabulary lists", () => {
+    expect(normalizeStringArray(["喜欢， 展会， 软件、成功；快乐"])).toEqual([
+      "喜欢",
+      "展会",
+      "软件",
+      "成功",
+      "快乐",
+    ]);
+  });
 });

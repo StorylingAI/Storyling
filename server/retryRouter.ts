@@ -28,6 +28,7 @@ async function retryStoryGeneration(contentId: number) {
   const { generatedContent, vocabularyLists } = await import("../drizzle/schema");
   const { eq } = await import("drizzle-orm");
   const { generateStory, generatePodcast, generateFilm } = await import("./contentGeneration");
+  const { getTrackById } = await import("./musicLibrary");
   
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -120,6 +121,14 @@ async function retryStoryGeneration(contentId: number) {
         content.voiceType,
         content.narratorGender,
       );
+      const selectedMusicTrack = content.selectedMusicTrack || undefined;
+      const selectedTrack =
+        selectedMusicTrack && !/^https?:\/\//i.test(selectedMusicTrack)
+          ? getTrackById(selectedMusicTrack)
+          : null;
+      const backgroundMusic = selectedMusicTrack
+        ? selectedTrack?.mood || selectedMusicTrack.split("-")[0] || "calm"
+        : "none";
       const film = await generateFilm(
         {
           targetLanguage: vocabList.targetLanguage,
@@ -130,6 +139,9 @@ async function retryStoryGeneration(contentId: number) {
           cinematicStyle: content.cinematicStyle,
           voiceType: filmNarration.voiceType,
           narratorGender: filmNarration.narratorGender,
+          backgroundMusic: backgroundMusic as any,
+          musicVolume: content.musicVolume ?? 20,
+          selectedMusicTrack,
           sceneBeats: story.visualBeats,
         },
         story.storyText
