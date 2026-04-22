@@ -975,6 +975,7 @@ export async function generateCharacterSheet(
   cinematicStyle: string,
   theme: string,
 ): Promise<string> {
+  const styleLock = buildFilmStyleLock(cinematicStyle);
   const systemPrompt = `You are a visual director. Extract character and setting information from a story to ensure visual consistency across multiple video scenes.
 
 Analyze the story and produce a CHARACTER & SETTING SHEET.
@@ -991,6 +992,8 @@ SETTING LOCK: [Primary location description with key visual elements that should
 CONTINUITY NOTES: [Key visual elements that must remain consistent across all scenes]
 
 IMPORTANT:
+- Immutable visual medium for every scene: ${styleLock}
+- Never change visual medium between clips. If the style is photorealistic, every scene must remain photorealistic live-action; if the style is animated/anime, every scene must remain drawn/animated.
 - Describe ALL characters as adults. No children or minors.
 - Keep descriptions visual only — no dialogue, no names from the story.
 - Limit recurring cast to 1-2 primary adults whenever possible.
@@ -1040,6 +1043,42 @@ const MAX_FILM_CLIP_TRANSIENT_RETRY_DELAY_MS = 120000;
 const DEFAULT_REPLICATE_FILM_CLIP_DURATION_SECONDS = 8;
 const DEFAULT_HIGGSFIELD_FILM_CLIP_DURATION_SECONDS = 10;
 type FilmClipDuration = 4 | 5 | 6 | 8 | 10 | 15;
+
+function buildFilmStyleLock(cinematicStyle: string): string {
+  const normalizedStyle = cinematicStyle.toLowerCase();
+
+  if (/\b(photo(?:realistic)?|photorealistic|realistic|live[-\s]?action|documentary)\b/.test(normalizedStyle)) {
+    return `${cinematicStyle}: photorealistic live-action cinema, real camera optics, natural materials and skin texture, realistic lighting, not illustrated, not cartoon, not anime, not 3D animation`;
+  }
+
+  if (/\b(anime|ghibli|manga|2d|drawn|illustration|illustrated)\b/.test(normalizedStyle)) {
+    return `${cinematicStyle}: hand-drawn 2D animated film look, painterly backgrounds, illustrated characters, not photorealistic, not live-action, not realistic photography, not CGI`;
+  }
+
+  if (/\b(animation|animated|cartoon|pixar|3d)\b/.test(normalizedStyle)) {
+    return `${cinematicStyle}: polished animated story-film look, stylized characters and cohesive animation materials, not photorealistic, not live-action, not realistic photography`;
+  }
+
+  return `${cinematicStyle}: one consistent cinematic visual medium, same rendering style, color treatment, lighting language, and material realism in every clip`;
+}
+
+function buildFilmKeyframeInstruction(cinematicStyle: string): string {
+  const styleLock = buildFilmStyleLock(cinematicStyle).toLowerCase();
+
+  if (styleLock.includes("photorealistic live-action")) {
+    return "Create a finished 16:9 photorealistic cinematic keyframe";
+  }
+
+  if (styleLock.includes("hand-drawn 2d")) {
+    return "Create a finished 16:9 hand-drawn animated cinematic keyframe";
+  }
+
+  if (styleLock.includes("animated story-film")) {
+    return "Create a finished 16:9 animated story-film keyframe";
+  }
+
+  return "Create a finished 16:9 cinematic keyframe";
+}
 
 function resolveIntegerEnv(
   name: string,
@@ -1127,6 +1166,7 @@ function resolveFilmVideoModel(): "standard" | "pro" {
 
 function buildFilmSceneStillPrompt(
   visualPrompt: string,
+  cinematicStyle: string,
   characterSheet: string,
   sceneIndex: number,
   totalScenes: number,
@@ -1140,7 +1180,8 @@ function buildFilmSceneStillPrompt(
     extractSheetField(characterSheet, "SETTING");
 
   return [
-    `Create a finished 16:9 cinematic animation keyframe for scene ${sceneIndex + 1}/${totalScenes}.`,
+    `${buildFilmKeyframeInstruction(cinematicStyle)} for scene ${sceneIndex + 1}/${totalScenes}.`,
+    `Immutable visual medium: ${buildFilmStyleLock(cinematicStyle)}. Use this exact visual medium for every scene and every retry.`,
     hasIdentityReference
       ? "Use the first provided reference image as the canonical identity anchor. Copy the exact same adult face, hairstyle, body proportions, outerwear, bottoms, shoes, and carried prop from that anchor."
       : "This first scene is the canonical identity anchor for the whole video. Create exactly one recurring adult from the character lock, with a clear face, hairstyle, outfit, shoes, and carried prop that can be reused unchanged in later scenes.",
@@ -1151,17 +1192,18 @@ function buildFilmSceneStillPrompt(
     characterLock ? `Character lock: ${characterLock}.` : "",
     settingLock ? `Setting continuity: ${settingLock}.` : "",
     `Scene action: ${visualPrompt}`,
-    "Do not swap a backpack into a satchel or a satchel into a backpack. Do not change jacket cut, pants length, boot color, hair volume, facial structure, age impression, or illustration style between scenes.",
+    "Do not swap a backpack into a satchel or a satchel into a backpack. Do not change jacket cut, pants length, boot color, hair volume, facial structure, age impression, or visual medium between scenes.",
     "Frame like a clean educational story video, with one clear subject and one simple action. Avoid chaotic motion, crowds, complex hand poses, object juggling, warped faces, extra limbs, duplicated bodies, glitches, horror mood, text, captions, logos, and watermarks.",
   ].filter(Boolean).join(" ");
 }
 
-function buildFilmMotionPrompt(visualPrompt: string): string {
+function buildFilmMotionPrompt(visualPrompt: string, cinematicStyle: string): string {
   return [
+    `Immutable visual medium: ${buildFilmStyleLock(cinematicStyle)}. Keep this exact medium from the source image through the full clip.`,
     visualPrompt,
-    "Animate the provided keyframe as a polished short language-learning story clip.",
-    "Preserve exact character identity, outfit, face, hairstyle, body proportions, background layout, and scene composition from the source image.",
-    "Do not redesign the person, change the bag or backpack, change clothing, change facial structure, switch art style, or introduce a different character.",
+    "Turn the provided keyframe into a polished short language-learning story clip.",
+    "Preserve exact character identity, outfit, face, hairstyle, body proportions, background layout, scene composition, lighting treatment, and visual medium from the source image.",
+    "Do not redesign the person, change the bag or backpack, change clothing, change facial structure, switch art style, switch between realistic and illustrated rendering, or introduce a different character.",
     "Use subtle natural motion, gentle camera push-in or pan, clean stable anatomy, no morphing, no new characters, no text, no subtitles, no logo.",
   ].join(" ");
 }
@@ -1369,6 +1411,7 @@ function formatGenerationError(error: unknown): string {
 
 async function generateFilmSceneStill(params: {
   visualPrompt: string;
+  cinematicStyle: string;
   characterSheet: string;
   identityReferenceImageUrl?: string;
   previousSceneImageUrl?: string;
@@ -1390,6 +1433,7 @@ async function generateFilmSceneStill(params: {
     const result = await generateImage({
       prompt: buildFilmSceneStillPrompt(
         params.visualPrompt,
+        params.cinematicStyle,
         params.characterSheet,
         params.sceneIndex,
         params.totalScenes,
@@ -1424,7 +1468,7 @@ function buildFallbackVisualPrompt(
       ? FILM_LANDSCAPE_STABILITY_GUIDANCE
       : FILM_SUBJECT_STABILITY_GUIDANCE;
 
-  return `${cinematicStyle} cinematic scene ${sceneIndex + 1}/${totalScenes}, ${theme.toLowerCase()} mood, ${guidance}.`;
+  return `Immutable visual medium: ${buildFilmStyleLock(cinematicStyle)}. ${cinematicStyle} cinematic scene ${sceneIndex + 1}/${totalScenes}, ${theme.toLowerCase()} mood, same visual medium as every other clip, ${guidance}.`;
 }
 
 function finalizeVisualPrompt(
@@ -1445,8 +1489,10 @@ function finalizeVisualPrompt(
     extractSheetField(characterSheet, "SETTING");
   const continuityNotes = extractSheetField(characterSheet, "CONTINUITY NOTES");
   const previousShotReference = summarizePromptForContinuity(previousScenePrompt);
+  const immutableStyleDirective =
+    `Immutable visual medium: ${buildFilmStyleLock(cinematicStyle)}. Keep this exact medium in this clip and all other clips; never switch between photorealistic, illustrated, anime, cartoon, or 3D looks. `;
   const styleDirective =
-    visualStyleLock && retryLevel < 2
+    visualStyleLock
       ? `Keep the same palette, lighting, and overall visual treatment: ${visualStyleLock.replace(/[.\s]+$/g, "")}. `
       : "";
   const recurringSubjectLock =
@@ -1466,7 +1512,7 @@ function finalizeVisualPrompt(
       ? `Direct continuation of the previous shot: ${previousShotReference}. `
       : "";
 
-  return `${cinematicStyle}. ${styleDirective}${recurringSubjectLock}${settingDirective}${continuityDirective}${previousShotDirective}${visualText.replace(/[.\s]+$/g, "")}. ${guidance}.`;
+  return `${cinematicStyle}. ${immutableStyleDirective}${styleDirective}${recurringSubjectLock}${settingDirective}${continuityDirective}${previousShotDirective}${visualText.replace(/[.\s]+$/g, "")}. ${guidance}.`;
 }
 
 function extractSheetField(characterSheet: string | undefined, label: string): string {
@@ -1603,6 +1649,9 @@ export async function convertToVisualPrompt(
   const systemPrompt = `You are a cinematographic prompt engineer. Convert the following narrative text into a visual-only cinematic description in English for AI video generation.
 
 ${levelRules[retryLevel]}
+IMMUTABLE VISUAL MEDIUM:
+${buildFilmStyleLock(cinematicStyle)}
+Never change this medium between scenes or retries. Do not reinterpret a photorealistic style as drawn animation, and do not reinterpret an animated/anime style as live-action photography.
 ${consistencyBlock}
 ${previousSceneBlock}
 Scene context: ${cinematicStyle} style, ${theme.toLowerCase()} theme, scene ${sceneIndex + 1}/${totalScenes}
@@ -1886,6 +1935,7 @@ export async function generateFilm(
       console.log(`[Film Generation] Generating clip ${i + 1}/${scenes.length}:`, visualPrompt.substring(0, 80) + '...');
       let sceneImageUrl = await generateFilmSceneStill({
         visualPrompt,
+        cinematicStyle,
         characterSheet,
         identityReferenceImageUrl,
         previousSceneImageUrl,
@@ -1893,7 +1943,7 @@ export async function generateFilm(
         totalScenes: scenes.length,
         seed: consistentSeed,
       });
-      let videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
+      let videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt, cinematicStyle) : visualPrompt;
 
       let result: Awaited<ReturnType<typeof generateVideo>> | undefined;
       let clipAttempt = 0;
@@ -1933,6 +1983,7 @@ export async function generateFilm(
               );
               sceneImageUrl = await generateFilmSceneStill({
                 visualPrompt,
+                cinematicStyle,
                 characterSheet,
                 identityReferenceImageUrl,
                 previousSceneImageUrl,
@@ -1940,7 +1991,7 @@ export async function generateFilm(
                 totalScenes: scenes.length,
                 seed: consistentSeed,
               });
-              videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
+              videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt, cinematicStyle) : visualPrompt;
               continue;
             }
 
@@ -1967,6 +2018,7 @@ export async function generateFilm(
             );
             sceneImageUrl = await generateFilmSceneStill({
               visualPrompt,
+              cinematicStyle,
               characterSheet,
               identityReferenceImageUrl,
               previousSceneImageUrl,
@@ -1974,7 +2026,7 @@ export async function generateFilm(
               totalScenes: scenes.length,
               seed: consistentSeed,
             });
-            videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt) : visualPrompt;
+            videoPrompt = sceneImageUrl ? buildFilmMotionPrompt(visualPrompt, cinematicStyle) : visualPrompt;
           } else {
             break;
           }

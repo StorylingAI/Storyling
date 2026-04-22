@@ -98,6 +98,8 @@ describe('convertToVisualPrompt', () => {
     expect(result).not.toContain('Lucie');
     expect(result).not.toContain('enfants');
     expect(result).toContain('Playful Animation');
+    expect(result).toContain('Immutable visual medium');
+    expect(result).toContain('polished animated story-film look');
     expect(result).toContain('stable anatomy');
     expect(mockedInvokeLLM).toHaveBeenCalledOnce();
 
@@ -106,6 +108,7 @@ describe('convertToVisualPrompt', () => {
     const systemMsg = callArgs.messages.find((m: any) => m.role === 'system');
     expect(systemMsg?.content).toContain('visual-only');
     expect(systemMsg?.content).toContain('English');
+    expect(systemMsg?.content).toContain('IMMUTABLE VISUAL MEDIUM');
     expect(systemMsg?.content).toContain('NO dialogue');
     expect(systemMsg?.content).toContain('ONE simple action beat');
   });
@@ -186,9 +189,44 @@ describe('convertToVisualPrompt', () => {
     );
 
     expect(result).toContain('Dramatic');
+    expect(result).toContain('Immutable visual medium');
     expect(result).toContain('cinematic scene 3/5');
     expect(result).toContain('romance');
     expect(result).toContain('stable anatomy');
+  });
+
+  it('should lock photorealistic styles away from animation across retries', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant' as const,
+          content: 'A traveler crosses a rain-slick city street under soft neon reflections',
+        },
+        finish_reason: 'stop',
+      }],
+    });
+
+    const result = await convertToVisualPrompt(
+      'Un voyageur traverse la ville sous la pluie.',
+      'Photorealistic Drama',
+      'Mystery',
+      1,
+      4,
+      2,
+    );
+
+    expect(result).toContain('photorealistic live-action cinema');
+    expect(result).toContain('not illustrated');
+    expect(result).toContain('not anime');
+
+    const callArgs = mockedInvokeLLM.mock.calls[0][0];
+    const systemMsg = callArgs.messages.find((m: any) => m.role === 'system');
+    expect(systemMsg?.content).toContain('Photorealistic Drama: photorealistic live-action cinema');
+    expect(systemMsg?.content).toContain('Do not reinterpret a photorealistic style as drawn animation');
   });
 
   it('should include character sheet in system prompt when provided', async () => {
@@ -541,6 +579,7 @@ describe('generateFilm NSFW retry', () => {
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );
+    expect(mockedGenerateVideo.mock.calls[0]?.[0]?.prompt).toContain('hand-drawn 2D animated film look');
     expect(mockedGenerateVideo).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
@@ -550,6 +589,7 @@ describe('generateFilm NSFW retry', () => {
         prompt: expect.stringContaining('Same recurring adult in every human scene'),
       }),
     );
+    expect(mockedGenerateStillImage.mock.calls[0]?.[0]?.prompt).toContain('Immutable visual medium');
     expect(mockedGenerateVideo.mock.calls[1]?.[0]?.prompt).toContain('Direct continuation of the previous shot');
     expect(mockedGenerateVideo.mock.calls[1]?.[0]?.prompt).toContain('snowy alpine forest near a rustic chalet');
   });
