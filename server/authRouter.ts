@@ -10,6 +10,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import * as crypto from "crypto";
 import { sendEmail } from "./_core/email";
 import { verificationEmail } from "./emailTemplates";
+import { sendWelcomeEmail } from "./welcomeEmail";
 
 // Password hashing utilities
 async function hashPassword(password: string): Promise<string> {
@@ -84,7 +85,10 @@ export const authRouter = router({
       });
 
       // Send verification email
-      const baseUrl = process.env.BASE_URL || `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      const baseUrl =
+        process.env.VITE_APP_URL ||
+        process.env.BASE_URL ||
+        `${ctx.req.protocol}://${ctx.req.get("host")}`;
       const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
 
       try {
@@ -174,7 +178,7 @@ export const authRouter = router({
 
   verifyEmail: publicProcedure
     .input(z.object({ token: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -182,6 +186,8 @@ export const authRouter = router({
       const [user] = await db
         .select({
           id: users.id,
+          name: users.name,
+          email: users.email,
           verificationTokenExpiry: users.verificationTokenExpiry,
         })
         .from(users)
@@ -210,6 +216,17 @@ export const authRouter = router({
           verificationTokenExpiry: null,
         })
         .where(eq(users.id, user.id));
+
+      const baseUrl =
+        process.env.VITE_APP_URL ||
+        process.env.BASE_URL ||
+        `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      await sendWelcomeEmail({
+        to: user.email,
+        name: user.name,
+        baseUrl,
+        context: "email verification",
+      });
 
       return { success: true };
     }),
@@ -249,7 +266,10 @@ export const authRouter = router({
         .where(eq(users.id, user.id));
 
       // Send verification email
-      const baseUrl = process.env.BASE_URL || `${ctx.req.protocol}://${ctx.req.get("host")}`;
+      const baseUrl =
+        process.env.VITE_APP_URL ||
+        process.env.BASE_URL ||
+        `${ctx.req.protocol}://${ctx.req.get("host")}`;
       const verificationUrl = `${baseUrl}/verify-email?token=${verificationToken}`;
 
       await sendEmail({

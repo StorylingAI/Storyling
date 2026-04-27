@@ -6,6 +6,7 @@ import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
 import { ENV } from "./env";
+import { sendWelcomeEmail } from "../welcomeEmail";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -160,19 +161,42 @@ export function registerOAuthRoutes(app: Express) {
       const tokens = await exchangeGoogleCode(code, redirectUri);
       const googleUser = await getGoogleUserInfo(tokens.access_token);
 
+      const googleOpenId = `google_${googleUser.sub}`;
       const existingUser = googleUser.email
         ? await db.getUserByEmail(googleUser.email)
         : undefined;
-      const openId = existingUser?.openId || `google_${googleUser.sub}`;
+      const existingGoogleUser = existingUser
+        ? undefined
+        : await db.getUserByOpenId(googleOpenId);
+      const currentUser = existingUser || existingGoogleUser;
+      const isNewGoogleUser = !currentUser;
+      const openId = currentUser?.openId || googleOpenId;
 
       await db.upsertUser({
         openId,
-        name: existingUser?.name || googleUser.name || null,
-        email: existingUser?.email || googleUser.email || null,
-        avatarUrl: existingUser?.avatarUrl || googleUser.picture || null,
-        loginMethod: existingUser?.loginMethod || "google",
+        name: currentUser?.name || googleUser.name || null,
+        email: currentUser?.email || googleUser.email || null,
+        avatarUrl: currentUser?.avatarUrl || googleUser.picture || null,
+        loginMethod: currentUser?.loginMethod || "google",
         lastSignedIn: new Date(),
       });
+
+      const createdGoogleUser = isNewGoogleUser
+        ? await db.getUserByOpenId(openId)
+        : undefined;
+
+      if (createdGoogleUser) {
+        const baseUrl =
+          process.env.VITE_APP_URL ||
+          process.env.BASE_URL ||
+          `${req.protocol}://${req.get("host")}`;
+        await sendWelcomeEmail({
+          to: googleUser.email,
+          name: googleUser.name,
+          baseUrl,
+          context: "google signup",
+        });
+      }
 
       const sessionToken = await sdk.createSessionToken(openId, {
         name: googleUser.name || googleUser.email || "User",

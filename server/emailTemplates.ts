@@ -156,7 +156,46 @@ ${ctaButton('Verify Email Address', verificationUrl)}
   });
 }
 
-// ─── Contact Form Notification ────────────────────────────────
+// --- Welcome Email ---
+
+export function welcomeEmail(params: {
+  name?: string | null;
+  appUrl: string;
+}): string {
+  const greeting = params.name ? `Hi ${params.name},` : "Hi there,";
+
+  const content = `
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700; color: #111827;">
+  Welcome to Storyling AI
+</h1>
+<p style="margin: 0 0 20px 0; font-size: 15px; color: #6b7280; line-height: 1.6;">
+  ${greeting}
+</p>
+<p style="margin: 0 0 20px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+  Your account is ready. You can now create personalized stories, practice vocabulary, and build a learning library around the languages you care about.
+</p>
+<p style="margin: 0 0 28px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+  Start with a story topic you like, choose your target language, and let Storyling turn it into reading and listening practice.
+</p>
+
+${ctaButton("Start Learning", params.appUrl)}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 24px;">
+  <tr>
+    <td style="background-color: #f9fafb; border-radius: 8px; padding: 16px;">
+      <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 1.5;">
+        Tip: Save useful words as you read so you can review them later from your vocabulary bank.
+      </p>
+    </td>
+  </tr>
+</table>`;
+
+  return baseLayout(content, {
+    preheader: "Your Storyling AI account is ready",
+  });
+}
+
+// --- Premium Welcome Email ---
 
 export function premiumWelcomeEmail(params: {
   name?: string | null;
@@ -191,6 +230,8 @@ ${ctaButton("Open Premium Walkthrough", params.appUrl)}
     preheader: "Your Storyling AI Premium upgrade is active",
   });
 }
+
+// --- Contact Form Notification ---
 
 export function contactFormEmail(data: {
   name: string;
