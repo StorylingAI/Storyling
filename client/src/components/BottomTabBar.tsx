@@ -1,17 +1,17 @@
 import { useLocation } from "wouter";
 import {
-  BookOpen,
   CirclePlus,
-  Home,
+  HelpCircle,
   MessageCircleMore,
+  Settings,
   User,
 } from "lucide-react";
 
 const TABS = [
-  { id: "home", label: "Home", icon: Home, path: "/app" },
-  { id: "create", label: "Create", icon: CirclePlus, path: "/create" },
-  { id: "library", label: "Library", icon: BookOpen, path: "/library" },
+  { id: "tutorial", label: "Show Tutorial", icon: HelpCircle, path: null },
   { id: "chat", label: "Chat", icon: MessageCircleMore, path: null, badge: true },
+  { id: "create", label: "Create", icon: CirclePlus, path: "/create" },
+  { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
   { id: "profile", label: "Profile", icon: User, path: null },
 ] as const;
 
@@ -19,12 +19,16 @@ export function BottomTabBar() {
   const [location, setLocation] = useLocation();
 
   const handleTab = (tab: (typeof TABS)[number]) => {
+    if (tab.id === "tutorial") {
+      window.dispatchEvent(new CustomEvent("quickstart-tutorial:restart"));
+      return;
+    }
     if (tab.id === "chat") {
       window.dispatchEvent(new CustomEvent("open-booki-chat"));
       return;
     }
     if (tab.id === "profile") {
-      setLocation("/settings");
+      setLocation("/settings#profile-settings");
       return;
     }
     if (tab.path) {
@@ -33,8 +37,6 @@ export function BottomTabBar() {
   };
 
   const isActive = (tab: (typeof TABS)[number]) => {
-    if (tab.id === "home")
-      return location === "/app" || location === "/dashboard";
     if (tab.path) return location === tab.path;
     return false;
   };

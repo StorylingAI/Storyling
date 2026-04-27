@@ -229,6 +229,8 @@ export async function generateWordAudioGoogleCloud(
       },
       audioConfig: {
         audioEncoding: "MP3",
+        speakingRate: 0.9,
+        pitch: 0,
       },
     };
 

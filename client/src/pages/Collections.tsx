@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, FolderPlus, Folder, Edit, Trash2, Share2 } from "lucide-react";
+import { Loader2, FolderPlus, Folder, Edit, Trash2, Share2, Globe2, Lock } from "lucide-react";
 import { ShareCollectionModal } from "@/components/ShareCollectionModal";
 import { trpc } from "@/lib/trpc";
 import { useLocation } from "wouter";
@@ -44,6 +44,11 @@ export default function Collections() {
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
   const [newColor, setNewColor] = useState("#8B5CF6");
+  const [editingCollection, setEditingCollection] = useState<any>(null);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editColor, setEditColor] = useState("#8B5CF6");
+  const [editIsPublic, setEditIsPublic] = useState(false);
   const [shareModalCollection, setShareModalCollection] = useState<{
     id: number;
     name: string;
@@ -71,6 +76,19 @@ export default function Collections() {
     },
   });
 
+  const togglePublicMutation = trpc.collections.togglePublicSharing.useMutation({
+    onSuccess: () => {
+      utils.collections.getMyCollections.invalidate();
+    },
+  });
+
+  const updateMutation = trpc.collections.updateCollection.useMutation({
+    onSuccess: () => {
+      utils.collections.getMyCollections.invalidate();
+      setEditingCollection(null);
+    },
+  });
+
   const handleCreate = () => {
     if (!newName.trim()) return;
     createMutation.mutate({
@@ -78,6 +96,33 @@ export default function Collections() {
       description: newDescription || undefined,
       color: newColor,
     });
+  };
+
+  const handleOpenEdit = (collection: any) => {
+    setEditingCollection(collection);
+    setEditName(collection.name || "");
+    setEditDescription(collection.description || "");
+    setEditColor(collection.color || "#8B5CF6");
+    setEditIsPublic(Boolean(collection.isPublic));
+  };
+
+  const handleUpdate = async () => {
+    if (!editingCollection || !editName.trim()) return;
+
+    await updateMutation.mutateAsync({
+      id: editingCollection.id,
+      name: editName.trim(),
+      description: editDescription.trim(),
+      color: editColor,
+    });
+
+    if (editIsPublic !== Boolean(editingCollection.isPublic)) {
+      await togglePublicMutation.mutateAsync({
+        collectionId: editingCollection.id,
+        isPublic: editIsPublic,
+      });
+      utils.collections.getMyCollections.invalidate();
+    }
   };
 
   const colorOptions = ["#8B5CF6", "#EC4899", "#14B8A6", "#F59E0B", "#84CC16", "#3B82F6"];
@@ -201,11 +246,11 @@ export default function Collections() {
                       className="flex-1 rounded-button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        setLocation(`/collection/${collection.id}`);
+                        handleOpenEdit(collection);
                       }}
                     >
                       <Edit className="mr-2 h-3 w-3" />
-                      Manage
+                      Edit
                     </Button>
                     <Button
                       variant="ghost"
@@ -222,6 +267,26 @@ export default function Collections() {
                       }}
                     >
                       <Share2 className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        togglePublicMutation.mutate({
+                          collectionId: collection.id,
+                          isPublic: !collection.isPublic,
+                        });
+                      }}
+                      disabled={togglePublicMutation.isPending}
+                      title={collection.isPublic ? "Unpublish" : "Publish"}
+                    >
+                      {collection.isPublic ? (
+                        <Lock className="h-3 w-3" />
+                      ) : (
+                        <Globe2 className="h-3 w-3" />
+                      )}
                     </Button>
                     <Button
                       variant="ghost"
@@ -324,6 +389,79 @@ export default function Collections() {
               ) : (
                 "Create Collection"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingCollection)} onOpenChange={(open) => !open && setEditingCollection(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Collection</DialogTitle>
+            <DialogDescription>
+              Change the title, description, color, and publishing status.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Title</Label>
+              <Input
+                id="edit-name"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-description">Description</Label>
+              <Textarea
+                id="edit-description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Color</Label>
+              <div className="flex gap-2">
+                {colorOptions.map(color => (
+                  <button
+                    key={color}
+                    type="button"
+                    onClick={() => setEditColor(color)}
+                    className={`h-8 w-8 rounded-full border-2 ${editColor === color ? "border-foreground" : "border-transparent"}`}
+                    style={{ backgroundColor: color }}
+                    aria-label={`Select color ${color}`}
+                  />
+                ))}
+              </div>
+            </div>
+            <label className="flex items-center justify-between rounded-lg border p-3">
+              <span>
+                <span className="block text-sm font-medium">Publish collection</span>
+                <span className="block text-xs text-muted-foreground">Make this collection public.</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={editIsPublic}
+                onChange={(event) => setEditIsPublic(event.target.checked)}
+                className="h-5 w-5"
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingCollection(null)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleUpdate}
+              disabled={!editName.trim() || updateMutation.isPending || togglePublicMutation.isPending}
+            >
+              {(updateMutation.isPending || togglePublicMutation.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

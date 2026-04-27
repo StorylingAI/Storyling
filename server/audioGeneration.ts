@@ -27,10 +27,10 @@ export async function generateChineseToneAudioElevenLabs(
           model_id: "eleven_turbo_v2_5", // Use Turbo v2.5 for better Chinese support
           language_code: "zh", // Explicitly specify Chinese
           voice_settings: {
-            stability: 0.70,
-            similarity_boost: 0.90,
-            style: 0.20,
-            use_speaker_boost: true,
+            stability: 0.82,
+            similarity_boost: 0.82,
+            style: 0,
+            use_speaker_boost: false,
           },
         }),
       }
@@ -149,10 +149,10 @@ export async function generateWordAudio(
           text: word,
           model_id: "eleven_multilingual_v2",
           voice_settings: {
-            stability: 0.60,
-            similarity_boost: 0.85,
-            style: 0.30,
-            use_speaker_boost: true,
+            stability: 0.82,
+            similarity_boost: 0.82,
+            style: 0,
+            use_speaker_boost: false,
           },
         }),
       }

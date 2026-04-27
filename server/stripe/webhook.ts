@@ -3,6 +3,8 @@ import Stripe from "stripe";
 import { getDb } from "../db";
 import { organizations, users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
+import { sendEmail } from "../_core/email";
+import { premiumWelcomeEmail } from "../emailTemplates";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
@@ -11,6 +13,28 @@ function getStripe() {
 }
 
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+
+async function sendPremiumUpgradeEmail(userId: number) {
+  const db = await getDb();
+  if (!db) return;
+
+  const [user] = await db
+    .select({ email: users.email, name: users.name })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+
+  if (!user?.email) return;
+
+  await sendEmail({
+    to: user.email,
+    subject: "Your Storyling AI Premium upgrade is active",
+    html: premiumWelcomeEmail({
+      name: user.name,
+      appUrl: `${process.env.VITE_APP_URL || process.env.BASE_URL || "https://storyling.ai"}/app?premium_walkthrough=1`,
+    }),
+  });
+}
 
 /**
  * Stripe webhook handler
@@ -100,6 +124,17 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     console.log(`[Webhook] Processing individual subscription for user ${userId}`);
     
     const userTier = (tier === "premium" || tier === "free") ? tier : "premium";
+    const [existingUser] = await db
+      .select({
+        subscriptionTier: users.subscriptionTier,
+        subscriptionStatus: users.subscriptionStatus,
+      })
+      .from(users)
+      .where(eq(users.id, parseInt(userId)))
+      .limit(1);
+    const shouldSendUpgradeEmail =
+      existingUser?.subscriptionTier !== "premium" ||
+      existingUser?.subscriptionStatus !== "active";
     
     await db
       .update(users)
@@ -111,6 +146,9 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
       .where(eq(users.id, parseInt(userId)));
 
     console.log(`[Webhook] Updated user ${userId} with subscription ${subscriptionId}`);
+    if (shouldSendUpgradeEmail) {
+      await sendPremiumUpgradeEmail(parseInt(userId));
+    }
     
     // Track referral conversion if referral code was used
     if (referralCodeId) {

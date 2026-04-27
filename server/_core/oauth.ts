@@ -160,14 +160,17 @@ export function registerOAuthRoutes(app: Express) {
       const tokens = await exchangeGoogleCode(code, redirectUri);
       const googleUser = await getGoogleUserInfo(tokens.access_token);
 
-      const openId = `google_${googleUser.sub}`;
+      const existingUser = googleUser.email
+        ? await db.getUserByEmail(googleUser.email)
+        : undefined;
+      const openId = existingUser?.openId || `google_${googleUser.sub}`;
 
       await db.upsertUser({
         openId,
-        name: googleUser.name || null,
-        email: googleUser.email ?? null,
-        avatarUrl: googleUser.picture ?? null,
-        loginMethod: "google",
+        name: existingUser?.name || googleUser.name || null,
+        email: existingUser?.email || googleUser.email || null,
+        avatarUrl: existingUser?.avatarUrl || googleUser.picture || null,
+        loginMethod: existingUser?.loginMethod || "google",
         lastSignedIn: new Date(),
       });
 
@@ -206,15 +209,24 @@ export function registerOAuthRoutes(app: Express) {
         return;
       }
 
+      const existingUser = userInfo.email
+        ? await db.getUserByEmail(userInfo.email)
+        : undefined;
+      const openId = existingUser?.openId || userInfo.openId;
+
       await db.upsertUser({
-        openId: userInfo.openId,
-        name: userInfo.name || null,
-        email: userInfo.email ?? null,
-        loginMethod: userInfo.loginMethod ?? userInfo.platform ?? null,
+        openId,
+        name: existingUser?.name || userInfo.name || null,
+        email: existingUser?.email || userInfo.email || null,
+        loginMethod:
+          existingUser?.loginMethod ||
+          userInfo.loginMethod ||
+          userInfo.platform ||
+          null,
         lastSignedIn: new Date(),
       });
 
-      const sessionToken = await sdk.createSessionToken(userInfo.openId, {
+      const sessionToken = await sdk.createSessionToken(openId, {
         name: userInfo.name || "",
         expiresInMs: ONE_YEAR_MS,
       });

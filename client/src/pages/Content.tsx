@@ -202,6 +202,10 @@ export default function Content() {
     { id: contentId },
     { enabled: isAuthenticated && contentId > 0 }
   );
+  const { data: wordbankWords = [] } = trpc.wordbank.getMyWords.useQuery(undefined, {
+    enabled: isAuthenticated && contentId > 0,
+    refetchInterval: 5000,
+  });
 
   const filmSubtitleSegments = useMemo(
     () => (content?.mode === "film" ? parseFilmSubtitleSegments(content.transcript) : []),
@@ -695,10 +699,43 @@ export default function Content() {
   console.log("Content page - content.vocabularyTranslations:", content?.vocabularyTranslations);
   
   const vocabularyWordList = normalizeStringArray(content?.vocabularyWords);
+  const wordMasteryByKey = useMemo(() => {
+    const map = new Map<string, (typeof wordbankWords)[number]>();
+    for (const word of wordbankWords) {
+      map.set(`${word.word.toLowerCase()}::${(word.targetLanguage || "").toLowerCase()}`, word);
+    }
+    return map;
+  }, [wordbankWords]);
+  const getVocabularyMastery = (word: string) => {
+    const targetLanguage = (content?.targetLanguage || "").toLowerCase();
+    const savedWord = wordMasteryByKey.get(`${word.toLowerCase()}::${targetLanguage}`);
+    if (!savedWord) return { percent: 0, label: "New" };
+
+    const correct = savedWord.correctCount ?? 0;
+    const incorrect = savedWord.incorrectCount ?? 0;
+    const totalReviews = correct + incorrect;
+    const interval = savedWord.interval ?? 0;
+    const repetitions = savedWord.repetitions ?? 0;
+    const isMastered = (savedWord.easinessFactor ?? 0) >= 2500 && interval >= 30;
+
+    if (isMastered) return { percent: 100, label: "Mastered" };
+    if (totalReviews === 0) return { percent: 10, label: "Saved" };
+
+    const accuracy = correct / Math.max(1, totalReviews);
+    const reviewProgress = Math.min(1, repetitions / 5);
+    const intervalProgress = Math.min(1, interval / 30);
+    const percent = Math.round((accuracy * 0.55 + reviewProgress * 0.30 + intervalProgress * 0.15) * 100);
+
+    return {
+      percent: Math.max(10, Math.min(99, percent)),
+      label: `${Math.max(10, Math.min(99, percent))}%`,
+    };
+  };
   const vocabularyWords = vocabularyWordList.map((word, idx) => ({
     word,
     translation: "", // Translation can be added later via API or user input
     timestamp: idx * 10, // Placeholder timestamps - can be enhanced with actual transcript timing
+    mastery: getVocabularyMastery(word),
   }));
 
   if (!isAuthenticated) {
@@ -1294,11 +1331,11 @@ export default function Content() {
                   <div className="mt-2 h-1.5 rounded-full bg-gray-100 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-purple-500 to-teal-400"
-                      style={{ width: `${Math.min(100, Math.max(10, (idx * 20) % 100 + 10))}%` }}
+                      style={{ width: `${vocab.mastery.percent}%` }}
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground mt-1 text-right">
-                    {idx === 0 ? 'New' : idx < 3 ? `${(idx * 20 + 10)}%` : 'Learning'}
+                    {vocab.mastery.label}
                   </p>
                 </div>
               ))}

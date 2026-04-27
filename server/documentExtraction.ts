@@ -8,7 +8,7 @@
  * - Plain text files (TXT / CSV)
  */
 
-import { exec } from "child_process";
+import { exec, execFile } from "child_process";
 import { promisify } from "util";
 import { writeFile, unlink } from "fs/promises";
 import { randomBytes } from "crypto";
@@ -16,6 +16,23 @@ import path from "path";
 import os from "os";
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
+
+async function runPythonScript(scriptPath: string, filePath: string): Promise<string> {
+  const commands = ["python3", "python"];
+  let lastError: unknown;
+
+  for (const command of commands) {
+    try {
+      const { stdout } = await execFileAsync(command, [scriptPath, filePath]);
+      return stdout.trim();
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error("Python is not available");
+}
 
 /**
  * Extract text from a PDF file using pdftotext (poppler-utils)
@@ -89,8 +106,7 @@ print("\\n".join(lines))
     await writeFile(scriptPath, pythonScript);
     
     try {
-      const { stdout } = await execAsync(`python3 "${scriptPath}" "${filePath}"`);
-      return stdout.trim();
+      return await runPythonScript(scriptPath, filePath);
     } finally {
       await unlink(scriptPath);
     }
@@ -189,8 +205,7 @@ print("\\n".join(sheet_rows))
     await writeFile(scriptPath, pythonScript);
 
     try {
-      const { stdout } = await execAsync(`python3 "${scriptPath}" "${filePath}"`);
-      return stdout.trim();
+      return await runPythonScript(scriptPath, filePath);
     } finally {
       await unlink(scriptPath);
     }
@@ -247,6 +262,78 @@ interface VocabularyWord {
   level?: number;
   frequency?: string;
   translation?: string;
+  toString?: () => string;
+}
+
+function createVocabularyWord(data: VocabularyWord): VocabularyWord {
+  return {
+    ...data,
+    toString() {
+      return data.word;
+    },
+  };
+}
+
+const COMMON_WORDS = new Set([
+  "the", "and", "for", "that", "with", "this", "from", "are", "was", "were",
+  "have", "has", "had", "you", "your", "they", "their", "them", "she", "her",
+  "his", "him", "but", "not", "all", "can", "will", "would", "there", "then",
+  "than", "into", "about", "after", "before", "because", "como", "para", "por",
+  "que", "con", "una", "uno", "les", "des", "dans", "pour", "est", "sont",
+]);
+
+function extractHeuristicVocabularyFromText(
+  text: string,
+  targetLanguage: string,
+  maxWords: number,
+): VocabularyWord[] {
+  const normalizedLanguage = targetLanguage.toLowerCase();
+  const patterns: RegExp[] = [];
+
+  if (normalizedLanguage.includes("chinese") || normalizedLanguage.includes("mandarin")) {
+    patterns.push(/[\u4e00-\u9fff]{1,4}/g);
+  } else if (normalizedLanguage.includes("japanese")) {
+    patterns.push(/[\u3040-\u30ff\u4e00-\u9fff]{1,8}/g);
+  } else if (normalizedLanguage.includes("korean")) {
+    patterns.push(/[\uac00-\ud7af]{1,8}/g);
+  } else if (normalizedLanguage.includes("arabic")) {
+    patterns.push(/[\u0600-\u06ff]{2,}/g);
+  } else if (normalizedLanguage.includes("hebrew")) {
+    patterns.push(/[\u0590-\u05ff]{2,}/g);
+  } else if (normalizedLanguage.includes("russian")) {
+    patterns.push(/[\u0400-\u04ff]{3,}/g);
+  }
+
+  patterns.push(/[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]+(?:['-][A-Za-zÀ-ÖØ-öø-ÿĀ-ž]+)*/g);
+
+  const counts = new Map<string, { word: string; count: number; firstIndex: number }>();
+  for (const pattern of patterns) {
+    pattern.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+      const word = match[0].trim();
+      const key = word.toLocaleLowerCase();
+      if (!word || /^\d+$/.test(word)) continue;
+      if (/^[A-Za-zÀ-ÖØ-öø-ÿĀ-ž]/.test(word) && word.length < 3) continue;
+      if (COMMON_WORDS.has(key)) continue;
+
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, {
+          word,
+          count: 1,
+          firstIndex: match.index ?? Number.MAX_SAFE_INTEGER,
+        });
+      }
+    }
+  }
+
+  return Array.from(counts.values())
+    .sort((a, b) => b.count - a.count || a.firstIndex - b.firstIndex)
+    .slice(0, maxWords)
+    .map(({ word }) => createVocabularyWord({ word, translation: "" }));
 }
 
 export async function extractVocabularyFromText(
@@ -262,70 +349,83 @@ export async function extractVocabularyFromText(
     maxWords,
   });
   
-  const response = await invokeLLM({
-    messages: [
-      {
-        role: "system",
-        content: `You are a language learning assistant. Extract key vocabulary words from the provided text that would be useful for language learners. Focus on:
+  try {
+    const response = await invokeLLM({
+      messages: [
+        {
+          role: "system",
+          content: `You are a language learning assistant. Extract key vocabulary words from the provided text that would be useful for language learners. Focus on:
 - Content words (nouns, verbs, adjectives, adverbs)
 - Words that appear multiple times or are central to the text
 - Words that are appropriate for the target language level
 - Exclude common function words (the, a, is, etc.)
 - Return unique words only (no duplicates)`,
-      },
-      {
-        role: "user",
-        content: `Extract up to ${maxWords} key vocabulary words from this ${targetLanguage} text:\n\n${text.substring(0, 5000)}`,
-      },
-    ],
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "vocabulary_extraction",
-        strict: true,
-        schema: {
-          type: "object",
-          properties: {
-            words: {
-              type: "array",
-              description: "List of extracted vocabulary words with metadata",
-              items: {
-                type: "object",
-                properties: {
-                  word: { type: "string", description: "The vocabulary word" },
-                  translation: { type: "string", description: "English translation of the word" },
+        },
+        {
+          role: "user",
+          content: `Extract up to ${maxWords} key vocabulary words from this ${targetLanguage} text:\n\n${text.substring(0, 5000)}`,
+        },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "vocabulary_extraction",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: {
+              words: {
+                type: "array",
+                description: "List of extracted vocabulary words with metadata",
+                items: {
+                  type: "object",
+                  properties: {
+                    word: { type: "string", description: "The vocabulary word" },
+                    translation: { type: "string", description: "English translation of the word" },
+                  },
+                  required: ["word", "translation"],
+                  additionalProperties: false,
                 },
-                required: ["word", "translation"],
-                additionalProperties: false,
               },
             },
+            required: ["words"],
+            additionalProperties: false,
           },
-          required: ["words"],
-          additionalProperties: false,
         },
       },
-    },
-  });
-  
-  const content = response.choices[0].message.content;
-  if (!content) {
-    throw new Error("No content returned from LLM");
+    });
+    
+    const content = response.choices[0].message.content;
+    if (!content) {
+      throw new Error("No content returned from LLM");
+    }
+    
+    const result = JSON.parse(typeof content === "string" ? content : "{}");
+    console.log("[extractVocabularyFromText] Extracted words:", result.words);
+    
+    // Enrich words with level and frequency data from vocabulary database
+    const { getWordLevel } = await import("./vocabularyDatabase");
+    const enrichedWords: VocabularyWord[] = (result.words || [])
+      .slice(0, maxWords)
+      .map((item: any) => {
+        const levelInfo = getWordLevel(item.word, targetLanguage);
+        return createVocabularyWord({
+          word: item.word,
+          translation: item.translation,
+          level: levelInfo?.level,
+          frequency: levelInfo?.frequency,
+        });
+      });
+    
+    if (enrichedWords.length > 0) {
+      return enrichedWords;
+    }
+  } catch (error) {
+    console.warn(
+      "[extractVocabularyFromText] LLM extraction failed, using heuristic fallback:",
+      error instanceof Error ? error.message : String(error),
+    );
   }
-  
-  const result = JSON.parse(typeof content === "string" ? content : "{}");
-  console.log("[extractVocabularyFromText] Extracted words:", result.words);
-  
-  // Enrich words with level and frequency data from vocabulary database
-  const { getWordLevel } = await import("./vocabularyDatabase");
-  const enrichedWords: VocabularyWord[] = (result.words || []).map((item: any) => {
-    const levelInfo = getWordLevel(item.word, targetLanguage);
-    return {
-      word: item.word,
-      translation: item.translation,
-      level: levelInfo?.level,
-      frequency: levelInfo?.frequency,
-    };
-  });
-  
-  return enrichedWords;
+
+  return extractHeuristicVocabularyFromText(text, targetLanguage, maxWords);
 }

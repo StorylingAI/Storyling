@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const FROM_EMAIL = process.env.EMAIL_FROM || "Storyling AI <onboarding@resend.dev>";
+const FROM_EMAIL = process.env.EMAIL_FROM || "Storyling AI <noreply@storyling.ai>";
+let resend: Resend | null = null;
 
 interface SendEmailParams {
   to: string;
@@ -18,6 +18,7 @@ export async function sendEmail(params: SendEmailParams): Promise<boolean> {
   }
 
   try {
+    resend ??= new Resend(process.env.RESEND_API_KEY);
     const { error } = await resend.emails.send({
       from: FROM_EMAIL,
       to: params.to,

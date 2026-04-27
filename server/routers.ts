@@ -627,6 +627,17 @@ export const appRouter = router({
         // A1-only restriction removed — free users can access all CEFR levels
 
         const vocabularyWords = splitVocabularyInput(input.vocabularyText);
+        if (input.translationLanguage) {
+          const preferenceDb = await getDb();
+          if (preferenceDb) {
+            await preferenceDb
+              .update(users)
+              .set({
+                preferredTranslationLanguage: normalizeLearningLanguage(input.translationLanguage),
+              })
+              .where(eq(users.id, ctx.user.id));
+          }
+        }
 
         const vocabList = await createVocabularyList({
           userId: ctx.user.id,
@@ -1194,13 +1205,28 @@ export const appRouter = router({
           if (userResult[0]?.name) authorName = userResult[0].name;
         }
 
+        let thumbnailUrl: string | null | undefined = content.thumbnailUrl;
+        if (!thumbnailUrl) {
+          try {
+            thumbnailUrl = await generateStoryThumbnailImage(content.theme, content.title);
+            if (thumbnailUrl) {
+              await updateGeneratedContent(content.id, {
+                thumbnailUrl,
+                thumbnailStyle: "pixar" as any,
+              });
+            }
+          } catch (error) {
+            console.error("[Public Preview] Failed to generate missing thumbnail:", error);
+          }
+        }
+
         return {
           id: content.id,
           title: content.title || "Untitled Story",
           titleTranslation: content.titleTranslation,
           previewText,
           previewTranslations,
-          thumbnailUrl: content.thumbnailUrl,
+          thumbnailUrl,
           theme: content.theme,
           difficultyLevel: content.difficultyLevel,
           mode: content.mode,
@@ -2791,6 +2817,11 @@ Return a JSON array where each element has:
         }
 
         const words = splitVocabularyInput(matchingList.words);
+        const translationLanguage = normalizeLearningLanguage(
+          ctx.user.preferredTranslationLanguage ||
+          ctx.user.preferredLanguage ||
+          "English",
+        );
         const { invokeLLM } = await import("./_core/llm");
         const { getDb } = await import("./db");
         const { wordMastery } = await import("../drizzle/schema");
@@ -2840,16 +2871,16 @@ Return a JSON array where each element has:
           messages: [
             {
               role: "system",
-              content: `You are a language learning quiz generator. Generate multiple-choice questions to test vocabulary comprehension in ${matchingList.targetLanguage} at ${matchingList.proficiencyLevel} level.`,
+              content: `You are a language learning quiz generator. Generate multiple-choice questions to test vocabulary comprehension in ${matchingList.targetLanguage} at ${matchingList.proficiencyLevel} level. Write every question, answer option, and explanation in ${translationLanguage}.`,
             },
             {
               role: "user",
-              content: `Generate 5 multiple-choice questions based on these vocabulary words: ${selectedWords.join(", ")}. Each question should test understanding of word meaning, usage, or context. Return JSON with this structure:
+              content: `Generate 5 multiple-choice questions based on these vocabulary words: ${selectedWords.join(", ")}. Each question should test understanding of word meaning, usage, or context. Translate meanings into ${translationLanguage}; do not default to English unless ${translationLanguage} is English. Return JSON with this structure:
 {
   "questions": [
     {
       "word": "vocabulary word",
-      "question": "What does [word] mean in this context?",
+      "question": "Question written in ${translationLanguage}",
       "options": ["option1", "option2", "option3", "option4"],
       "correctIndex": 0,
       "explanation": "Brief explanation of the correct answer"

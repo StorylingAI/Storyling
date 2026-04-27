@@ -103,7 +103,11 @@ export const collectionsRouter = router({
         color: input.color || "#8B5CF6",
       });
 
-      return { success: true, collectionId: Number((result as any).insertId) };
+      const insertId =
+        (result as any)?.insertId ??
+        (Array.isArray(result) ? (result as any)[0]?.insertId : undefined);
+
+      return { success: true, collectionId: Number(insertId) };
     }),
 
   // Update a collection

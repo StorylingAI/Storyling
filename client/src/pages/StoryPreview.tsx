@@ -1,6 +1,8 @@
 import { useRoute, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
+import { useState } from "react";
+import { APP_LOGO } from "@/const";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,6 +34,7 @@ export default function StoryPreview() {
   const storyId = params?.id ? parseInt(params.id) : 0;
   const [, setLocation] = useLocation();
   const { isAuthenticated } = useAuth();
+  const [coverFailed, setCoverFailed] = useState(false);
 
   const { data: story, isLoading, error } = trpc.content.getPublicPreview.useQuery(
     { id: storyId },
@@ -73,6 +76,8 @@ export default function StoryPreview() {
   }
 
   const langName = getLanguageName(story.targetLanguage);
+  const coverSrc = story.thumbnailUrl && !coverFailed ? story.thumbnailUrl : APP_LOGO;
+  const hasStoryCover = Boolean(story.thumbnailUrl && !coverFailed);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50">
@@ -80,22 +85,25 @@ export default function StoryPreview() {
       <div className="relative overflow-hidden">
         {/* Background */}
         <div className="absolute inset-0">
-          {story.thumbnailUrl ? (
+          {story.thumbnailUrl && !coverFailed ? (
             <>
               <img
                 src={story.thumbnailUrl}
                 alt=""
                 className="w-full h-full object-cover"
+                onError={() => setCoverFailed(true)}
               />
               <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-purple-900/90" />
             </>
           ) : (
-            <div className="w-full h-full bg-gradient-to-br from-purple-900 via-purple-700 to-blue-800" />
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-purple-900 via-purple-700 to-blue-800">
+              <img src={APP_LOGO} alt="" className="h-28 w-28 opacity-25" />
+            </div>
           )}
         </div>
 
         {/* Content */}
-        <div className="relative z-10 max-w-3xl mx-auto px-6 pt-16 pb-20">
+        <div className="relative z-10 max-w-5xl mx-auto px-6 pt-16 pb-20">
           {/* Logo */}
           <div className="flex items-center gap-2 mb-10">
             <Sparkles className="h-5 w-5 text-yellow-300" />
@@ -107,48 +115,74 @@ export default function StoryPreview() {
             </span>
           </div>
 
-          {/* Metadata badges */}
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            {story.difficultyLevel && (
-              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
-                {story.difficultyLevel}
-              </Badge>
-            )}
-            {story.theme && (
-              <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
-                {story.theme}
-              </Badge>
-            )}
-            <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
-              <Globe className="h-3 w-3 mr-1" />
-              {langName}
-            </Badge>
-            <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
-              {story.mode === "film" ? (
-                <><Play className="h-3 w-3 mr-1" /> Film</>
-              ) : (
-                <><BookOpen className="h-3 w-3 mr-1" /> Podcast</>
+          <div className="grid gap-8 md:grid-cols-[1fr_280px] md:items-end">
+            <div>
+              {/* Metadata badges */}
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                {story.difficultyLevel && (
+                  <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
+                    {story.difficultyLevel}
+                  </Badge>
+                )}
+                {story.theme && (
+                  <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
+                    {story.theme}
+                  </Badge>
+                )}
+                <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
+                  <Globe className="h-3 w-3 mr-1" />
+                  {langName}
+                </Badge>
+                <Badge className="bg-white/20 text-white border-0 backdrop-blur-sm text-xs">
+                  {story.mode === "film" ? (
+                    <><Play className="h-3 w-3 mr-1" /> Film</>
+                  ) : (
+                    <><BookOpen className="h-3 w-3 mr-1" /> Podcast</>
+                  )}
+                </Badge>
+              </div>
+
+              {/* Title */}
+              <h1
+                className="text-3xl sm:text-4xl font-bold text-white mb-2 leading-tight"
+                style={{ fontFamily: "Fredoka, sans-serif" }}
+              >
+                {story.title}
+              </h1>
+              {story.titleTranslation && (
+                <p className="text-lg text-white/60 mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
+                  {story.titleTranslation}
+                </p>
               )}
-            </Badge>
+
+              {/* Author */}
+              <div className="flex items-center gap-2 text-white/50 text-sm">
+                <User className="h-4 w-4" />
+                <span style={{ fontFamily: "Outfit, sans-serif" }}>Created by {story.authorName}</span>
+              </div>
+            </div>
+
+            <div className="hidden md:block">
+              <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm">
+                <img
+                  src={coverSrc}
+                  alt={hasStoryCover ? `${story.title} cover` : ""}
+                  className={hasStoryCover ? "h-full w-full object-cover" : "h-full w-full object-contain p-10 opacity-70"}
+                  onError={() => setCoverFailed(true)}
+                />
+              </div>
+            </div>
           </div>
 
-          {/* Title */}
-          <h1
-            className="text-3xl sm:text-4xl font-bold text-white mb-2 leading-tight"
-            style={{ fontFamily: "Fredoka, sans-serif" }}
-          >
-            {story.title}
-          </h1>
-          {story.titleTranslation && (
-            <p className="text-lg text-white/60 mb-6" style={{ fontFamily: "Outfit, sans-serif" }}>
-              {story.titleTranslation}
-            </p>
-          )}
-
-          {/* Author */}
-          <div className="flex items-center gap-2 text-white/50 text-sm mb-8">
-            <User className="h-4 w-4" />
-            <span style={{ fontFamily: "Outfit, sans-serif" }}>Created by {story.authorName}</span>
+          <div className="mt-8 md:hidden">
+            <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/20 bg-white/10 shadow-2xl backdrop-blur-sm">
+              <img
+                src={coverSrc}
+                alt={hasStoryCover ? `${story.title} cover` : ""}
+                className={hasStoryCover ? "h-full w-full object-cover" : "h-full w-full object-contain p-10 opacity-70"}
+                onError={() => setCoverFailed(true)}
+              />
+            </div>
           </div>
         </div>
       </div>

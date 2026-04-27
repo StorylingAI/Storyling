@@ -223,7 +223,7 @@ export function StoryDisplay({
     const audio = audioRef.current;
     
     const updateWordIndex = () => {
-      const newIndex = getCurrentWordIndex(wordTimestamps, audio.currentTime);
+      const newIndex = getCurrentWordIndex(wordTimestamps, Math.max(0, audio.currentTime - 0.9));
       if (newIndex !== currentWordIndex) {
         setCurrentWordIndex(newIndex);
         

@@ -3,8 +3,12 @@ import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Plus, X, Play, Clock, GripVertical, BookOpen } from "lucide-react";
+import { Loader2, Plus, X, Play, Clock, GripVertical, BookOpen, Edit, Globe2, Lock } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useLocation, useParams } from "wouter";
 import { APP_LOGO } from "@/const";
@@ -19,6 +23,10 @@ export default function CollectionView() {
   const utils = trpc.useUtils();
 
   const [isAddStoryOpen, setIsAddStoryOpen] = useState(false);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editIsPublic, setEditIsPublic] = useState(false);
   const [draggedItemId, setDraggedItemId] = useState<number | null>(null);
   const dragJustEndedRef = React.useRef(false);
 
@@ -49,12 +57,28 @@ export default function CollectionView() {
       utils.collections.getCollectionById.invalidate({ id: collectionId });
     },
   });
+  const updateCollectionMutation = trpc.collections.updateCollection.useMutation({
+    onSuccess: () => {
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getMyCollections.invalidate();
+      setIsEditOpen(false);
+    },
+  });
+  const togglePublicMutation = trpc.collections.togglePublicSharing.useMutation({
+    onSuccess: () => {
+      utils.collections.getCollectionById.invalidate({ id: collectionId });
+      utils.collections.getMyCollections.invalidate();
+    },
+  });
   
   // Track view for recently viewed
   const trackViewMutation = trpc.recentlyViewed.trackView.useMutation();
   
   React.useEffect(() => {
     if (collection) {
+      setEditName(collection.name || "");
+      setEditDescription(collection.description || "");
+      setEditIsPublic(Boolean(collection.isPublic));
       trackViewMutation.mutate({
         itemType: "collection",
         itemId: collection.id,
@@ -127,6 +151,23 @@ export default function CollectionView() {
     }
   };
 
+  const handleSaveCollection = async () => {
+    if (!collection || !editName.trim()) return;
+
+    await updateCollectionMutation.mutateAsync({
+      id: collection.id,
+      name: editName.trim(),
+      description: editDescription.trim(),
+    });
+
+    if (editIsPublic !== Boolean(collection.isPublic)) {
+      await togglePublicMutation.mutateAsync({
+        collectionId: collection.id,
+        isPublic: editIsPublic,
+      });
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 via-teal-50 to-pink-50 flex items-center justify-center p-4">
@@ -192,14 +233,44 @@ export default function CollectionView() {
               {collection.items.length} {collection.items.length === 1 ? "story" : "stories"}
             </p>
           </div>
-          <Button
-            type="button"
-            onClick={() => setIsAddStoryOpen(true)}
-            className="rounded-button gradient-primary text-white hover-lift active-scale border-0"
-          >
-            <Plus className="mr-2 h-4 w-4" />
-            Add Story
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsEditOpen(true)}
+              className="rounded-button"
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                togglePublicMutation.mutate({
+                  collectionId,
+                  isPublic: !collection.isPublic,
+                });
+              }}
+              disabled={togglePublicMutation.isPending}
+              className="rounded-button"
+            >
+              {collection.isPublic ? (
+                <Lock className="mr-2 h-4 w-4" />
+              ) : (
+                <Globe2 className="mr-2 h-4 w-4" />
+              )}
+              {collection.isPublic ? "Unpublish" : "Publish"}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setIsAddStoryOpen(true)}
+              className="rounded-button gradient-primary text-white hover-lift active-scale border-0"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add Story
+            </Button>
+          </div>
         </div>
 
         {collection.description && (
@@ -377,6 +448,67 @@ export default function CollectionView() {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setIsAddStoryOpen(false)}>
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Collection</DialogTitle>
+            <DialogDescription>
+              Update the collection title, description, and public visibility.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="collection-title">Title</Label>
+              <Input
+                id="collection-title"
+                value={editName}
+                onChange={(event) => setEditName(event.target.value)}
+                maxLength={200}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="collection-description">Description</Label>
+              <Textarea
+                id="collection-description"
+                value={editDescription}
+                onChange={(event) => setEditDescription(event.target.value)}
+                rows={4}
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div>
+                <Label htmlFor="collection-public">Publish collection</Label>
+                <p className="text-sm text-muted-foreground">
+                  Public collections can be discovered and shared.
+                </p>
+              </div>
+              <Switch
+                id="collection-public"
+                checked={editIsPublic}
+                onCheckedChange={setEditIsPublic}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleSaveCollection}
+              disabled={!editName.trim() || updateCollectionMutation.isPending || togglePublicMutation.isPending}
+            >
+              {(updateCollectionMutation.isPending || togglePublicMutation.isPending) ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

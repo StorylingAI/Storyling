@@ -103,7 +103,15 @@ async function startServer() {
 
   // Serve uploaded files (local storage backend)
   const uploadsDir = process.env.UPLOADS_DIR || "uploads";
-  app.use("/uploads", express.static(uploadsDir));
+  app.use(
+    "/uploads",
+    express.static(uploadsDir, {
+      // Missing media must stay a 404. If this falls through, the SPA
+      // fallback returns index.html with 200 and browsers try to play HTML
+      // as audio/video.
+      fallthrough: false,
+    })
+  );
 
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {

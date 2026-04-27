@@ -42,7 +42,7 @@ interface SentenceDisplayProps {
   subtitleSegments?: TimedSubtitleSegment[];
 }
 
-const HIGHLIGHT_AUDIO_DELAY_SECONDS = 0.6;
+const HIGHLIGHT_AUDIO_DELAY_SECONDS = 0.9;
 
 export function SentenceDisplay({
   storyText,
@@ -135,6 +135,10 @@ export function SentenceDisplay({
       return timedSubtitleSegments.map((segment) => segment.text);
     }
 
+    if (safeLineTranslations.length > 0) {
+      return safeLineTranslations.map((line) => line.original);
+    }
+
     // Split by sentence boundaries (English: . ! ? and Chinese: 。！？)
     const sentenceArray = safeStoryText
       .split(/([.!?。！？]+)/)
@@ -148,7 +152,7 @@ export function SentenceDisplay({
       .filter((s) => s.length > 0);
     
     return sentenceArray.length > 0 ? sentenceArray : [safeStoryText];
-  }, [safeStoryText, timedSubtitleSegments]);
+  }, [safeLineTranslations, safeStoryText, timedSubtitleSegments]);
 
   // Build a clean text version that matches what ElevenLabs received
   const cleanStoryText = useMemo(() => {
@@ -562,7 +566,7 @@ export function SentenceDisplay({
 
   // Fetch word translation when selected
   // targetLanguage should be the user's preferred language (the language to translate TO)
-  const userLanguage = user?.preferredLanguage || "en";
+  const userLanguage = user?.preferredTranslationLanguage || user?.preferredLanguage || "en";
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const { data: wordData, isLoading: isLoadingWord, error: wordError } = trpc.wordbank.translateWord.useQuery(
     { word: selectedWord || "", targetLanguage: userLanguage, timezone },

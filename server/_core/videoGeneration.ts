@@ -33,12 +33,21 @@ export function resolveVideoProvider(): VideoProvider {
     return "higgsfield";
   }
 
-  if (provider === "replicate" || provider === "veo3" || provider === "veo-3") {
+  if (
+    provider === "replicate" ||
+    provider === "replicate-veo3" ||
+    provider === "veo" ||
+    provider === "veo3" ||
+    provider === "veo-3" ||
+    provider === "google" ||
+    provider === "google-veo3" ||
+    provider === "google-veo-3"
+  ) {
     return "replicate";
   }
 
   throw new Error(
-    `Unsupported VIDEO_PROVIDER "${provider}". Use "replicate" or "higgsfield".`,
+    `Unsupported VIDEO_PROVIDER "${provider}". Use "replicate", "veo3", or "higgsfield".`,
   );
 }
 

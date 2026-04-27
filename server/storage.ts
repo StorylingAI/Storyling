@@ -2,10 +2,17 @@
 
 import fs from "fs";
 import path from "path";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { ENV } from "./_core/env";
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve("uploads");
 const BASE_URL = ENV.isProduction ? process.env.BASE_URL || "" : "";
+const S3_BUCKET = process.env.S3_BUCKET || process.env.AWS_S3_BUCKET;
+const S3_REGION = process.env.S3_REGION || process.env.AWS_REGION || "us-east-1";
+const S3_ENDPOINT = process.env.S3_ENDPOINT;
+const S3_PUBLIC_BASE_URL =
+  process.env.S3_PUBLIC_BASE_URL || process.env.STORAGE_PUBLIC_BASE_URL;
+let s3Client: S3Client | null = null;
 
 // Ensure uploads directory exists
 function ensureUploadsDir() {
@@ -39,6 +46,84 @@ function buildLocalStorageCapacityError(
   wrapped.cause = error;
 
   return wrapped;
+}
+
+function hasS3Creds(): boolean {
+  return Boolean(S3_BUCKET);
+}
+
+function getS3Client(): S3Client {
+  if (s3Client) return s3Client;
+
+  const accessKeyId = process.env.S3_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+  const forcePathStyle = process.env.S3_FORCE_PATH_STYLE === "true" || Boolean(S3_ENDPOINT);
+
+  s3Client = new S3Client({
+    region: S3_REGION,
+    endpoint: S3_ENDPOINT,
+    forcePathStyle,
+    credentials:
+      accessKeyId && secretAccessKey
+        ? { accessKeyId, secretAccessKey }
+        : undefined,
+  });
+
+  return s3Client;
+}
+
+function encodeStorageKey(key: string): string {
+  return key.split("/").map(encodeURIComponent).join("/");
+}
+
+function getS3PublicUrl(key: string): string {
+  const encodedKey = encodeStorageKey(key);
+  if (S3_PUBLIC_BASE_URL) {
+    return `${S3_PUBLIC_BASE_URL.replace(/\/+$/, "")}/${encodedKey}`;
+  }
+
+  if (S3_ENDPOINT) {
+    throw new Error(
+      "S3_PUBLIC_BASE_URL is required when S3_ENDPOINT is configured so uploaded media can be served publicly.",
+    );
+  }
+
+  return `https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${encodedKey}`;
+}
+
+async function s3Put(
+  relKey: string,
+  data: Buffer | Uint8Array | string,
+  contentType: string,
+): Promise<{ key: string; url: string }> {
+  if (!S3_BUCKET) {
+    throw new Error("S3_BUCKET is not configured");
+  }
+
+  const key = normalizeKey(relKey);
+  const body =
+    typeof data === "string"
+      ? Buffer.from(data)
+      : Buffer.isBuffer(data)
+        ? data
+        : Buffer.from(data);
+
+  await getS3Client().send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+      CacheControl: "public, max-age=31536000, immutable",
+    }),
+  );
+
+  return { key, url: getS3PublicUrl(key) };
+}
+
+async function s3Get(relKey: string): Promise<{ key: string; url: string }> {
+  const key = normalizeKey(relKey);
+  return { key, url: getS3PublicUrl(key) };
 }
 
 // ── Manus proxy backend (used inside Manus sandbox) ──
@@ -151,6 +236,9 @@ export async function storagePut(
   if (hasManusCreds()) {
     return manusPut(relKey, data, contentType);
   }
+  if (hasS3Creds()) {
+    return s3Put(relKey, data, contentType);
+  }
   return localPut(relKey, data, contentType);
 }
 
@@ -159,6 +247,9 @@ export async function storageGet(
 ): Promise<{ key: string; url: string }> {
   if (hasManusCreds()) {
     return manusGet(relKey);
+  }
+  if (hasS3Creds()) {
+    return s3Get(relKey);
   }
   return localGet(relKey);
 }

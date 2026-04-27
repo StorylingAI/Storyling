@@ -236,6 +236,12 @@ export function QuickStartTutorial({
     setIsActive(true);
   };
 
+  useEffect(() => {
+    const handleRestart = () => restartTutorial();
+    window.addEventListener("quickstart-tutorial:restart", handleRestart);
+    return () => window.removeEventListener("quickstart-tutorial:restart", handleRestart);
+  }, []);
+
   if (!isActive) {
     return hasSeenTutorial ? (
       <Button

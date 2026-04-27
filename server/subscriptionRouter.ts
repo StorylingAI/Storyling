@@ -32,14 +32,19 @@ export const subscriptionRouter = router({
       throw new TRPCError({ code: "NOT_FOUND", message: "User not found" });
     }
 
-    // If no Stripe subscription, return free tier info
+    // If no Stripe subscription, return the persisted account tier. Some
+    // premium users are granted by webhook/session reconciliation before a
+    // subscription id is available, or by manual/admin migration.
     if (!user.stripeSubscriptionId) {
+      const isPremium =
+        user.subscriptionTier === "premium" ||
+        user.subscriptionTier === "premium_plus";
       return {
         tier: user.subscriptionTier,
-        status: "active" as const,
-        isPremium: false,
+        status: user.subscriptionStatus || "active",
+        isPremium,
         billingPeriod: null,
-        currentPeriodEnd: null,
+        currentPeriodEnd: user.subscriptionCurrentPeriodEnd,
         cancelAtPeriodEnd: false,
         paymentMethod: null,
       };

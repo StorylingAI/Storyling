@@ -94,7 +94,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
     const updateSet: Record<string, unknown> = {};
 
-    const textFields = ["name", "email", "loginMethod", "avatarUrl"] as const;
+    const textFields = ["name", "email", "loginMethod"] as const;
     type TextField = (typeof textFields)[number];
 
     const assignNullable = (field: TextField) => {
@@ -106,6 +106,13 @@ export async function upsertUser(user: InsertUser): Promise<void> {
     };
 
     textFields.forEach(assignNullable);
+
+    // Keep a custom uploaded avatar intact across sign-ins. OAuth/dev-login can
+    // provide a provider avatar for inserts, but should not overwrite one on
+    // duplicate-key updates.
+    if (user.avatarUrl !== undefined) {
+      values.avatarUrl = user.avatarUrl ?? null;
+    }
 
     if (user.lastSignedIn !== undefined) {
       values.lastSignedIn = user.lastSignedIn;
@@ -144,6 +151,25 @@ export async function getUserByOpenId(openId: string) {
   }
 
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserByEmail(email: string) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return undefined;
+
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user by email: database not available");
+    return undefined;
+  }
+
+  const result = await db
+    .select()
+    .from(users)
+    .where(sql`LOWER(${users.email}) = ${normalizedEmail}`)
+    .limit(1);
 
   return result.length > 0 ? result[0] : undefined;
 }

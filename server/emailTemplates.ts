@@ -158,6 +158,40 @@ ${ctaButton('Verify Email Address', verificationUrl)}
 
 // ─── Contact Form Notification ────────────────────────────────
 
+export function premiumWelcomeEmail(params: {
+  name?: string | null;
+  appUrl: string;
+}): string {
+  const greeting = params.name ? `Hi ${params.name},` : "Hi there,";
+
+  const content = `
+<h1 style="margin: 0 0 8px 0; font-size: 22px; font-weight: 700; color: #111827;">
+  Your Premium upgrade is active
+</h1>
+<p style="margin: 0 0 20px 0; font-size: 15px; color: #6b7280; line-height: 1.6;">
+  ${greeting}
+</p>
+<p style="margin: 0 0 24px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+  Thanks for upgrading. You can now create unlimited stories, generate films, use priority generation, and access premium learning tools.
+</p>
+
+${ctaButton("Open Premium Walkthrough", params.appUrl)}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top: 24px;">
+  <tr>
+    <td style="background-color: #f9fafb; border-radius: 8px; padding: 16px;">
+      <p style="margin: 0; font-size: 13px; color: #6b7280; line-height: 1.5;">
+        The walkthrough will appear in your dashboard after checkout so you can review your new features.
+      </p>
+    </td>
+  </tr>
+</table>`;
+
+  return baseLayout(content, {
+    preheader: "Your Storyling AI Premium upgrade is active",
+  });
+}
+
 export function contactFormEmail(data: {
   name: string;
   email: string;

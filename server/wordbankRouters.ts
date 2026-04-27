@@ -18,6 +18,7 @@ import {
   removeWordFromWordbank,
 } from "./wordbankDb";
 import { isDueForReview, getDaysUntilReview } from "./srsAlgorithm";
+import { normalizeLearningLanguage } from "@shared/languagePreferences";
 
 export const wordbankRouter = router({
   checkWordExists: protectedProcedure
@@ -53,6 +54,11 @@ export const wordbankRouter = router({
         skipped: 0,
         errors: [] as string[],
       };
+      const translationLanguage = normalizeLearningLanguage(
+        ctx.user.preferredTranslationLanguage ||
+        ctx.user.preferredLanguage ||
+        "English",
+      );
 
       for (const word of input.words) {
         try {
@@ -95,7 +101,7 @@ export const wordbankRouter = router({
               },
               {
                 role: "user",
-                content: `Translate the word "${trimmedWord}" to ${ctx.user.preferredLanguage || "English"}. Provide the translation and a brief definition.`,
+                content: `Translate the word "${trimmedWord}" to ${translationLanguage}. Provide the translation and a brief definition.`,
               },
             ],
             response_format: {
@@ -997,6 +1003,11 @@ Return in JSON format.`,
 
     // Get target language from first word (all should be same language in a session)
     const targetLanguage = dueWords[0].targetLanguage;
+    const translationLanguage = normalizeLearningLanguage(
+      ctx.user.preferredTranslationLanguage ||
+      ctx.user.preferredLanguage ||
+      "English",
+    );
 
     // Generate quiz questions using AI
     const wordList = dueWords.map(w => w.word).join(", ");
@@ -1004,11 +1015,11 @@ Return in JSON format.`,
       messages: [
         {
           role: "system",
-          content: `You are a language learning quiz generator. Generate multiple-choice questions to test vocabulary comprehension in ${targetLanguage}.`,
+          content: `You are a language learning quiz generator. Generate multiple-choice questions to test vocabulary comprehension in ${targetLanguage}. Questions, answer options, and explanations must be written in ${translationLanguage}.`,
         },
         {
           role: "user",
-          content: `Generate ${dueWords.length} multiple-choice questions based on these vocabulary words: ${wordList}. Each question should test understanding of word meaning, usage, or context. Return JSON with this structure:
+          content: `Generate ${dueWords.length} multiple-choice questions based on these vocabulary words: ${wordList}. Each question should test understanding of word meaning, usage, or context. Translate meanings into ${translationLanguage}; do not default to English unless ${translationLanguage} is English. Return JSON with this structure:
 {
   "questions": [
     {

@@ -16,6 +16,7 @@ import {
   Coins,
   Flame,
   Gem,
+  Loader2,
   Sparkles,
 } from "lucide-react";
 import { BottomTabBar } from "@/components/BottomTabBar";
@@ -28,6 +29,8 @@ type ContinueItem = {
   thumbnailUrl?: string | null;
   targetLanguage?: string | null;
   progressPercent: number;
+  status?: string | null;
+  progressStage?: string | null;
 };
 
 type ExploreAvatar = {
@@ -648,6 +651,9 @@ function ContinueCard({
   item: ContinueItem;
   onClick: () => void;
 }) {
+  const isGenerating = item.status === "generating";
+  const progressPercent = Math.max(0, Math.min(100, item.progressPercent));
+
   return (
     <motion.button
       type="button"
@@ -691,10 +697,24 @@ function ContinueCard({
                 {item.targetLanguage || "Language"}
               </span>
             </span>
-            <span className="text-[0.66rem] sm:text-[0.78rem]">
-              {item.progressPercent}%
+            <span className="inline-flex items-center gap-1 text-[0.66rem] sm:text-[0.78rem]">
+              {isGenerating ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+              {progressPercent}%
             </span>
           </div>
+          {isGenerating ? (
+            <div className="mt-2">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/45">
+                <div
+                  className="h-full rounded-full bg-white transition-all duration-500"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+              <p className="mt-1 line-clamp-1 text-[0.6rem] font-medium text-[#5F4780] sm:text-[0.7rem]">
+                {item.progressStage || "Generating..."}
+              </p>
+            </div>
+          ) : null}
         </div>
       </div>
     </motion.button>
@@ -745,6 +765,8 @@ export default function AdventureMap() {
   const [, setLocation] = useLocation();
   const utils = trpc.useUtils();
   const [showPremiumWelcome, setShowPremiumWelcome] = useState(false);
+  const verifyCheckoutMutation = trpc.checkout.verifyCheckout.useMutation();
+  const completePremiumOnboardingMutation = trpc.auth.completePremiumOnboarding.useMutation();
 
   useChallengeDetection();
 
@@ -781,6 +803,10 @@ export default function AdventureMap() {
   );
   const { data: library } = trpc.content.getLibrary.useQuery(undefined, {
     enabled: isAuthenticated,
+    refetchInterval: (query) => {
+      const stories = query.state.data ?? [];
+      return stories.some(story => story.status === "generating") ? 3000 : false;
+    },
   });
   const { data: recentlyWatched } =
     trpc.storyProgress.getRecentlyWatched.useQuery(undefined, {
@@ -800,13 +826,20 @@ export default function AdventureMap() {
     if (!user || !isAuthenticated) return;
 
     const params = new URLSearchParams(window.location.search);
-    if (params.get("subscription") !== "success") return;
+    const shouldShowPremiumWalkthrough =
+      params.get("subscription") === "success" ||
+      params.get("premium_walkthrough") === "1";
+    if (!shouldShowPremiumWalkthrough) return;
 
     window.history.replaceState({}, "", "/app");
+    const sessionId = params.get("session_id") || undefined;
 
     let attempts = 0;
     const pollInterval = window.setInterval(async () => {
       attempts += 1;
+      if (sessionId || attempts === 1) {
+        await verifyCheckoutMutation.mutateAsync({ sessionId }).catch(() => null);
+      }
       await utils.auth.me.invalidate();
       const updatedUser = await utils.auth.me.fetch();
 
@@ -825,7 +858,15 @@ export default function AdventureMap() {
     }, 1000);
 
     return () => window.clearInterval(pollInterval);
-  }, [isAuthenticated, user, utils]);
+  }, [isAuthenticated, user, utils, verifyCheckoutMutation]);
+
+  const handlePremiumWelcomeClose = async () => {
+    setShowPremiumWelcome(false);
+    if (!user?.premiumOnboardingCompleted) {
+      await completePremiumOnboardingMutation.mutateAsync().catch(() => null);
+      await utils.auth.me.invalidate();
+    }
+  };
 
   const displayName = getDisplayName(user?.name || user?.email);
   const initials = getInitials(user?.name || user?.email);
@@ -847,20 +888,48 @@ export default function AdventureMap() {
   }, [library]);
 
   const continueWatching = useMemo<ContinueItem[]>(() => {
-    if (recentlyWatched && recentlyWatched.length > 0) {
-      return recentlyWatched.slice(0, 2).map((item, index) => ({
+    const generatingItems = (library ?? [])
+      .filter(item => item.status === "generating")
+      .map(item => ({
+        id: item.id,
+        title: getStoryTitle(item),
+        subtitle: item.titleTranslation,
+        thumbnailUrl: item.thumbnailUrl,
+        targetLanguage: item.targetLanguage || null,
+        progressPercent: Math.max(0, Math.min(99, item.progress ?? 0)),
+        status: item.status,
+        progressStage: item.progressStage,
+      }));
+
+    const recentlyWatchedItems = (recentlyWatched ?? []).map((item, index) => ({
         id: item?.id ?? index,
         title: getStoryTitle(item || {}),
         subtitle: item?.titleTranslation || null,
         thumbnailUrl: item?.thumbnailUrl,
         targetLanguage: libraryLanguageById.get(item?.id ?? -1) || null,
         progressPercent: item?.progress?.progressPercent ?? 0,
+        status: "completed",
+        progressStage: null,
       }));
+
+    if (generatingItems.length > 0 || recentlyWatchedItems.length > 0) {
+      const seenIds = new Set<number>();
+      return [...generatingItems, ...recentlyWatchedItems]
+        .filter((item) => {
+          if (seenIds.has(item.id)) return false;
+          seenIds.add(item.id);
+          return true;
+        })
+        .slice(0, 2);
     }
 
     if (library && library.length > 0) {
       return library
-        .filter(item => item.status === "completed")
+        .filter(item => item.status === "generating" || item.status === "completed")
+        .sort((a, b) => {
+          const priority = (status?: string | null) => status === "generating" ? 0 : 1;
+          return priority(a.status) - priority(b.status);
+        })
         .slice(0, 2)
         .map(item => ({
           id: item.id,
@@ -868,7 +937,9 @@ export default function AdventureMap() {
           subtitle: item.titleTranslation,
           thumbnailUrl: item.thumbnailUrl,
           targetLanguage: item.targetLanguage || null,
-          progressPercent: 100,
+          progressPercent: item.status === "completed" ? 100 : Math.max(0, Math.min(99, item.progress ?? 0)),
+          status: item.status,
+          progressStage: item.progressStage,
         }));
     }
 
@@ -1079,7 +1150,7 @@ export default function AdventureMap() {
       <WeeklyGoalOnboarding />
       <PremiumWelcomeModal
         open={showPremiumWelcome}
-        onClose={() => setShowPremiumWelcome(false)}
+        onClose={handlePremiumWelcomeClose}
       />
 
       <BottomTabBar />

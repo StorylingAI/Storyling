@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BookOpen, Search, Trophy, TrendingUp, Trash2, Volume2, Play, X, BarChart3, ArrowLeft, Download, FileDown, Upload, Dumbbell, CheckSquare, Square, CheckCircle2, Sparkles, Wand2, Pencil } from "lucide-react";
+import { BookOpen, Search, Trophy, TrendingUp, Trash2, Volume2, Play, X, BarChart3, ArrowLeft, Download, FileDown, Upload, Dumbbell, CheckSquare, Square, CheckCircle2, Sparkles, Wand2, Pencil, Camera, FileText, Loader2 } from "lucide-react";
 import { PersonalizedStoryOverlay } from "@/components/upgrade/PersonalizedStoryOverlay";
 import { useAuth } from "@/_core/hooks/useAuth";
 import Breadcrumb from "@/components/Breadcrumb";
@@ -65,9 +65,13 @@ export default function Wordbank() {
   const [isExportingCSV, setIsExportingCSV] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [importText, setImportText] = useState("");
+  const [isProcessingImportFile, setIsProcessingImportFile] = useState(false);
+  const [isProcessingImportPhoto, setIsProcessingImportPhoto] = useState(false);
+  const [uploadedImportFileName, setUploadedImportFileName] = useState<string | null>(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedWords, setSelectedWords] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
   const [, setLocation] = useLocation();
   const { user: authUser } = useAuth();
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
@@ -153,6 +157,8 @@ export default function Wordbank() {
   });
 
   const generateAudio = trpc.audio.generateWordAudio.useMutation();
+  const uploadDocumentMutation = trpc.document.uploadAndExtractVocabulary.useMutation();
+  const ocrMutation = trpc.ocr.extractVocabularyFromImage.useMutation();
 
   // Export mutations
   const exportCSVMutation = trpc.wordbank.exportToCSV.useQuery(
@@ -249,7 +255,7 @@ export default function Wordbank() {
     try {
       const result = await generateAudio.mutateAsync({ word, targetLanguage });
       const audio = new Audio(result.audioUrl);
-      audio.play();
+      await audio.play();
     } catch (error) {
       toast.error("Failed to play audio");
     }
@@ -313,17 +319,145 @@ export default function Wordbank() {
     }
   };
 
+  const appendImportWords = (newWords: string[]) => {
+    const cleanedWords = newWords.map((word) => word.trim()).filter(Boolean);
+    if (cleanedWords.length === 0) return;
+
+    setImportText((current) => {
+      const separator = current.trim() ? "\n" : "";
+      return `${current.trimEnd()}${separator}${cleanedWords.join("\n")}`;
+    });
+  };
+
+  const readFileAsBase64 = (file: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64Data = reader.result?.toString().split(",")[1];
+        if (!base64Data) {
+          reject(new Error("Failed to read file"));
+          return;
+        }
+        resolve(base64Data);
+      };
+      reader.onerror = () => reject(new Error("Failed to read file"));
+      reader.readAsDataURL(file);
+    });
+
+  const getResolvedMimeType = (file: File) => {
+    if (file.type) return file.type;
+    const extension = file.name.split(".").pop()?.toLowerCase();
+    switch (extension) {
+      case "pdf":
+        return "application/pdf";
+      case "docx":
+        return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      case "xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+      case "txt":
+        return "text/plain";
+      case "csv":
+        return "text/csv";
+      default:
+        return "";
+    }
+  };
+
   // Import handlers
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      setImportText(text);
-    };
-    reader.readAsText(file);
+    const mimeType = getResolvedMimeType(file);
+    const validTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "text/plain",
+      "text/csv",
+    ];
+
+    if (!validTypes.includes(mimeType)) {
+      toast.error("Please upload a PDF, Word (.docx), Excel (.xlsx), TXT, or CSV file");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be less than 10MB");
+      event.target.value = "";
+      return;
+    }
+
+    setIsProcessingImportFile(true);
+    setUploadedImportFileName(file.name);
+
+    try {
+      if (mimeType === "text/plain" || mimeType === "text/csv") {
+        appendImportWords((await file.text()).split(/[\n,，、;；]+/));
+        toast.success(`Loaded words from ${file.name}`);
+      } else {
+        const base64Data = await readFileAsBase64(file);
+        const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
+        const data = await uploadDocumentMutation.mutateAsync({
+          fileData: base64Data,
+          fileName: file.name,
+          mimeType,
+          targetLanguage,
+          maxWords: 100,
+        });
+        appendImportWords(data.vocabularyWords.map((item) => item.word));
+        toast.success(`Extracted ${data.totalWords} words from ${file.name}`);
+      }
+    } catch (error) {
+      toast.error("Failed to extract vocabulary: " + (error instanceof Error ? error.message : String(error)));
+      setUploadedImportFileName(null);
+    } finally {
+      setIsProcessingImportFile(false);
+      event.target.value = "";
+    }
+  };
+
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+
+    const invalidFile = files.find(file => !file.type.startsWith("image/") || file.size > 10 * 1024 * 1024);
+    if (invalidFile) {
+      toast.error("Please upload image files under 10MB each");
+      event.target.value = "";
+      return;
+    }
+
+    setIsProcessingImportPhoto(true);
+
+    try {
+      const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
+      const extractedWords: string[] = [];
+
+      for (const file of files) {
+        const base64Data = await readFileAsBase64(file);
+        const data = await ocrMutation.mutateAsync({
+          imageBase64: base64Data,
+          mimeType: file.type || "image/jpeg",
+          targetLanguage,
+        });
+        extractedWords.push(...data.vocabulary);
+      }
+
+      if (extractedWords.length === 0) {
+        toast.error("No vocabulary found in the selected photo.");
+        return;
+      }
+
+      appendImportWords(extractedWords);
+      toast.success(`Extracted ${extractedWords.length} words from ${files.length} photo${files.length > 1 ? "s" : ""}`);
+    } catch (error) {
+      toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setIsProcessingImportPhoto(false);
+      event.target.value = "";
+    }
   };
 
   const handleImportPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
@@ -351,8 +485,9 @@ export default function Wordbank() {
       return;
     }
 
+    const normalizedImportText = importText.replace(/[，、；]/g, ",");
     const words = Array.from(new Set(
-      importText
+      normalizedImportText
         .split(/[\n,，、;]+/)
         .map((word) => word.trim())
         .filter(Boolean)
@@ -937,7 +1072,7 @@ export default function Wordbank() {
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">Bulk Import Words</DialogTitle>
               <DialogDescription>
-                Import multiple words at once. Enter one word per line, or upload a text file.
+                Import multiple words at once. Paste words, upload a file, or extract vocabulary from photos.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
@@ -965,29 +1100,70 @@ export default function Wordbank() {
                 <span className="text-sm text-gray-400">OR</span>
                 <div className="flex-1 border-t border-gray-200" />
               </div>
-              <div>
+              <div className="grid gap-3 sm:grid-cols-2">
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".txt,.csv"
+                  accept=".pdf,.docx,.xlsx,.txt,.csv"
                   onChange={handleFileUpload}
+                  className="hidden"
+                />
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoUpload}
                   className="hidden"
                 />
                 <Button
                   variant="outline"
+                  type="button"
+                  disabled={isProcessingImportFile}
                   onClick={() => fileInputRef.current?.click()}
-                  className="w-full rounded-xl border-gray-300"
+                  className="h-auto w-full justify-start rounded-xl border-gray-300 px-4 py-3 text-left"
                 >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Text File
+                  {isProcessingImportFile ? (
+                    <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                  ) : (
+                    <FileText className="mr-3 h-5 w-5" />
+                  )}
+                  <span>
+                    <span className="block font-semibold">Upload File</span>
+                    <span className="block text-xs text-muted-foreground">PDF, Word, Excel, TXT, CSV</span>
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  disabled={isProcessingImportPhoto}
+                  onClick={() => photoInputRef.current?.click()}
+                  className="h-auto w-full justify-start rounded-xl border-gray-300 px-4 py-3 text-left"
+                >
+                  {isProcessingImportPhoto ? (
+                    <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+                  ) : (
+                    <Camera className="mr-3 h-5 w-5" />
+                  )}
+                  <span>
+                    <span className="block font-semibold">Upload Photo</span>
+                    <span className="block text-xs text-muted-foreground">Notes, worksheets, textbook pages</span>
+                  </span>
                 </Button>
               </div>
+              {uploadedImportFileName && (
+                <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-700">
+                  <FileText className="h-4 w-4" />
+                  <span className="min-w-0 flex-1 truncate">{uploadedImportFileName}</span>
+                </div>
+              )}
               <div className="flex gap-3 justify-end">
                 <Button
                   variant="outline"
                   onClick={() => {
                     setShowImportDialog(false);
                     setImportText("");
+                    setUploadedImportFileName(null);
                   }}
                   className="rounded-xl"
                 >
@@ -995,7 +1171,7 @@ export default function Wordbank() {
                 </Button>
                 <Button
                   onClick={handleImport}
-                  disabled={bulkImportWords.isPending || !importText.trim()}
+                  disabled={bulkImportWords.isPending || isProcessingImportFile || isProcessingImportPhoto || !importText.trim()}
                   className="rounded-xl bg-purple-600 hover:bg-purple-700 text-white"
                 >
                   {bulkImportWords.isPending ? "Importing..." : "Import Words"}

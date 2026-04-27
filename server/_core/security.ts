@@ -46,8 +46,15 @@ const paymentLimiter = rateLimit({
 // Global error handler: suppress stack traces in production
 function globalErrorHandler(err: Error, _req: Request, res: Response, _next: NextFunction) {
   console.error("[Error]", isProd ? err.message : err);
-  res.status(500).json({
-    error: isProd ? "Internal server error" : err.message,
+  const status =
+    typeof (err as any).status === "number"
+      ? (err as any).status
+      : typeof (err as any).statusCode === "number"
+        ? (err as any).statusCode
+        : 500;
+
+  res.status(status).json({
+    error: isProd && status >= 500 ? "Internal server error" : err.message,
     ...(isProd ? {} : { stack: err.stack }),
   });
 }

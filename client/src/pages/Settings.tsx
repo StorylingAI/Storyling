@@ -889,7 +889,7 @@ export function Settings() {
         <WeeklyGoalBadges />
 
         {/* Account Settings */}
-        <Card>
+        <Card id="profile-settings">
           <CardHeader>
             <CardTitle>Account Settings</CardTitle>
             <CardDescription>

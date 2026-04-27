@@ -7,11 +7,33 @@ import { getDb } from "../db";
 import { organizations, organizationAdmins, users } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { calculateMonthlyCost, getStripePriceId, SUBSCRIPTION_PRODUCTS, getPremiumMonthlyPriceId, getPremiumAnnualPriceId, getBasicPriceId, getPremiumSchoolPriceId } from "./products";
+import { sendEmail } from "../_core/email";
+import { premiumWelcomeEmail } from "../emailTemplates";
 
 function getStripe() {
   const key = process.env.STRIPE_SECRET_KEY;
   if (!key) throw new Error("STRIPE_SECRET_KEY is not configured");
   return new Stripe(key);
+}
+
+function getAppUrl(req: { headers: { origin?: string } }) {
+  return req.headers.origin || process.env.VITE_APP_URL || process.env.BASE_URL || "https://storyling.ai";
+}
+
+async function sendPremiumUpgradeEmail(user: {
+  email?: string | null;
+  name?: string | null;
+}) {
+  if (!user.email) return;
+
+  await sendEmail({
+    to: user.email,
+    subject: "Your Storyling AI Premium upgrade is active",
+    html: premiumWelcomeEmail({
+      name: user.name,
+      appUrl: `${process.env.VITE_APP_URL || process.env.BASE_URL || "https://storyling.ai"}/app?premium_walkthrough=1`,
+    }),
+  });
 }
 
 export const checkoutRouter = router({
@@ -116,7 +138,7 @@ export const checkoutRouter = router({
       }
 
       // Create checkout session
-      const origin = ctx.req.headers.origin || process.env.VITE_APP_URL || "https://storyling.ai";
+      const origin = getAppUrl(ctx.req);
       const sessionConfig: Stripe.Checkout.SessionCreateParams = {
         customer: stripeCustomerId,
         client_reference_id: user.id.toString(),
@@ -140,7 +162,7 @@ export const checkoutRouter = router({
             tier: "premium",
           },
         },
-        success_url: `${origin}/dashboard?subscription=success`,
+        success_url: `${origin}/app?subscription=success&session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${origin}/pricing?subscription=cancelled`,
       };
 
@@ -165,7 +187,7 @@ export const checkoutRouter = router({
    */
   verifyCheckout: protectedProcedure
     .input(z.object({ sessionId: z.string().optional() }).optional())
-    .mutation(async ({ ctx }) => {
+    .mutation(async ({ ctx, input }) => {
       const db = await getDb();
       if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
 
@@ -184,8 +206,48 @@ export const checkoutRouter = router({
         return { updated: false, tier: "premium" };
       }
 
-      // Check Stripe for active subscriptions for this customer
+      const activatePremium = async (subscriptionId: string) => {
+        await db
+          .update(users)
+          .set({
+            stripeSubscriptionId: subscriptionId,
+            subscriptionTier: "premium",
+            subscriptionStatus: "active",
+          })
+          .where(eq(users.id, ctx.user.id));
+
+        await sendPremiumUpgradeEmail(user);
+        console.log(`[Stripe] Verified and activated premium for user ${ctx.user.id}`);
+        return { updated: true, tier: "premium" };
+      };
+
+      // Prefer verifying the exact checkout session returned by Stripe.
       try {
+        if (input?.sessionId) {
+          const session = await getStripe().checkout.sessions.retrieve(input.sessionId);
+          const sessionCustomerId =
+            typeof session.customer === "string" ? session.customer : session.customer?.id;
+          const subscriptionId =
+            typeof session.subscription === "string"
+              ? session.subscription
+              : session.subscription?.id;
+
+          const belongsToUser =
+            session.client_reference_id === String(ctx.user.id) ||
+            session.metadata?.userId === String(ctx.user.id) ||
+            sessionCustomerId === user.stripeCustomerId;
+
+          if (
+            belongsToUser &&
+            session.payment_status === "paid" &&
+            session.status === "complete" &&
+            subscriptionId
+          ) {
+            return activatePremium(subscriptionId);
+          }
+        }
+
+        // Fallback when the checkout session id was dropped by the browser.
         const subscriptions = await getStripe().subscriptions.list({
           customer: user.stripeCustomerId,
           status: "active",
@@ -194,17 +256,7 @@ export const checkoutRouter = router({
 
         if (subscriptions.data.length > 0) {
           const sub = subscriptions.data[0];
-          await db
-            .update(users)
-            .set({
-              stripeSubscriptionId: sub.id,
-              subscriptionTier: "premium",
-              subscriptionStatus: "active",
-            })
-            .where(eq(users.id, ctx.user.id));
-
-          console.log(`[Stripe] Verified and activated premium for user ${ctx.user.id}`);
-          return { updated: true, tier: "premium" };
+          return activatePremium(sub.id);
         }
 
         return { updated: false, tier: user.subscriptionTier };
@@ -327,7 +379,7 @@ export const checkoutRouter = router({
       }
 
       // Create checkout session
-      const origin = ctx.req.headers.origin || process.env.VITE_APP_URL || "https://storyling.ai";
+      const origin = getAppUrl(ctx.req);
       const session = await getStripe().checkout.sessions.create({
         customer: stripeCustomerId,
         client_reference_id: org.id.toString(),

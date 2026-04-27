@@ -225,6 +225,7 @@ export default function CreateStory() {
 
   // Get user's preferred translation language
   const { data: userData } = trpc.auth.me.useQuery();
+  const updatePreferredTranslationLanguage = trpc.auth.updatePreferredTranslationLanguage.useMutation();
   
   // Set translation language from user preference on mount
   useEffect(() => {
@@ -828,7 +829,7 @@ export default function CreateStory() {
     });
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!isAuthenticated) {
       toast.error("Please sign in to generate content");
       return;
@@ -850,6 +851,10 @@ export default function CreateStory() {
     window.dispatchEvent(
       new CustomEvent("stopOtherAudio", { detail: { trackId: "content-generate" } })
     );
+
+    if (translationLanguage && translationLanguage !== userData?.preferredTranslationLanguage) {
+      await updatePreferredTranslationLanguage.mutateAsync({ language: translationLanguage }).catch(() => null);
+    }
 
     generateMutation.mutate({
       targetLanguage: effectiveLanguage,
