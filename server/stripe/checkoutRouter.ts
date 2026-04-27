@@ -21,12 +21,13 @@ function getAppUrl(req: { headers: { origin?: string } }) {
 }
 
 async function sendPremiumUpgradeEmail(user: {
+  id?: number;
   email?: string | null;
   name?: string | null;
 }) {
   if (!user.email) return;
 
-  await sendEmail({
+  const sent = await sendEmail({
     to: user.email,
     subject: "Your Storyling AI Premium upgrade is active",
     html: premiumWelcomeEmail({
@@ -34,6 +35,10 @@ async function sendPremiumUpgradeEmail(user: {
       appUrl: `${process.env.VITE_APP_URL || process.env.BASE_URL || "https://storyling.ai"}/app?premium_walkthrough=1`,
     }),
   });
+
+  if (!sent) {
+    console.error(`[Stripe] Failed to send premium upgrade email for user ${user.id ?? "unknown"}`);
+  }
 }
 
 export const checkoutRouter = router({

@@ -16,7 +16,10 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET!;
 
 async function sendPremiumUpgradeEmail(userId: number) {
   const db = await getDb();
-  if (!db) return;
+  if (!db) {
+    console.error("[Webhook] Cannot send premium upgrade email: database unavailable");
+    return false;
+  }
 
   const [user] = await db
     .select({ email: users.email, name: users.name })
@@ -24,9 +27,12 @@ async function sendPremiumUpgradeEmail(userId: number) {
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (!user?.email) return;
+  if (!user?.email) {
+    console.warn(`[Webhook] Cannot send premium upgrade email for user ${userId}: missing email`);
+    return false;
+  }
 
-  await sendEmail({
+  const sent = await sendEmail({
     to: user.email,
     subject: "Your Storyling AI Premium upgrade is active",
     html: premiumWelcomeEmail({
@@ -34,6 +40,12 @@ async function sendPremiumUpgradeEmail(userId: number) {
       appUrl: `${process.env.VITE_APP_URL || process.env.BASE_URL || "https://storyling.ai"}/app?premium_walkthrough=1`,
     }),
   });
+
+  if (!sent) {
+    console.error(`[Webhook] Failed to send premium upgrade email for user ${userId}`);
+  }
+
+  return sent;
 }
 
 /**
@@ -199,6 +211,22 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     console.log(`[Webhook] Updating individual subscription for user ${userId}`);
     
     const userTier = (tier === "premium" || tier === "free") ? tier : "premium";
+    const parsedUserId = parseInt(userId);
+    const [existingUser] = await db
+      .select({
+        subscriptionTier: users.subscriptionTier,
+        subscriptionStatus: users.subscriptionStatus,
+      })
+      .from(users)
+      .where(eq(users.id, parsedUserId))
+      .limit(1);
+    const shouldSendUpgradeEmail =
+      userTier === "premium" &&
+      subscription.status === "active" &&
+      (
+        existingUser?.subscriptionTier !== "premium" ||
+        existingUser?.subscriptionStatus !== "active"
+      );
     
     await db
       .update(users)
@@ -207,9 +235,12 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
         subscriptionTier: userTier,
         subscriptionStatus: subscription.status as "active" | "canceled" | "past_due" | "incomplete",
       })
-      .where(eq(users.id, parseInt(userId)));
+      .where(eq(users.id, parsedUserId));
 
     console.log(`[Webhook] Updated user ${userId} subscription status: ${subscription.status}`);
+    if (shouldSendUpgradeEmail) {
+      await sendPremiumUpgradeEmail(parsedUserId);
+    }
     return;
   }
 
