@@ -42,7 +42,7 @@ interface SentenceDisplayProps {
   subtitleSegments?: TimedSubtitleSegment[];
 }
 
-const HIGHLIGHT_AUDIO_DELAY_SECONDS = 0.9;
+const ESTIMATED_TIMING_HIGHLIGHT_DELAY_SECONDS = 0.35;
 
 export function SentenceDisplay({
   storyText,
@@ -69,7 +69,7 @@ export function SentenceDisplay({
   const [showVocabLimitSheet, setShowVocabLimitSheet] = useState(false);
   const [showLookupLimitPaywall, setShowLookupLimitPaywall] = useState(false);
   const [currentSentenceIndex, setCurrentSentenceIndex] = useState(0);
-  const [currentWordIndex, setCurrentWordIndex] = useState(0);
+  const [currentWordIndex, setCurrentWordIndex] = useState(-1);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [showVocabPopup, setShowVocabPopup] = useState(false);
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
@@ -197,6 +197,14 @@ export function SentenceDisplay({
         .map((value) => Number(value)),
     };
   }, [audioAlignment]);
+
+  const sentenceHighlightDelaySeconds =
+    timedSubtitleSegments.length > 0 || safeAudioAlignment
+      ? 0
+      : ESTIMATED_TIMING_HIGHLIGHT_DELAY_SECONDS;
+  const wordHighlightDelaySeconds = safeAudioAlignment
+    ? 0
+    : ESTIMATED_TIMING_HIGHLIGHT_DELAY_SECONDS;
 
   // Calculate sentence timestamps using real alignment data or improved weighted fallback
   const sentenceTimestamps = useMemo(() => {
@@ -342,7 +350,7 @@ export function SentenceDisplay({
     const audio = audioRef.current;
     
     const updateSentenceIndex = () => {
-      const currentTime = Math.max(0, audio.currentTime - HIGHLIGHT_AUDIO_DELAY_SECONDS);
+      const currentTime = Math.max(0, audio.currentTime - sentenceHighlightDelaySeconds);
       
       
       // Find the sentence that contains the current time
@@ -376,7 +384,7 @@ export function SentenceDisplay({
 
     const interval = setInterval(updateSentenceIndex, 100);
     return () => clearInterval(interval);
-  }, [audioRef, isPlaying, sentenceTimestamps, currentSentenceIndex]);
+  }, [audioRef, isPlaying, sentenceTimestamps, currentSentenceIndex, sentenceHighlightDelaySeconds]);
 
   // Note: We don't reset sentence index when paused to maintain position
   // Only reset when audio actually ends (handled by onEnded event in parent)
@@ -545,23 +553,23 @@ export function SentenceDisplay({
     const audio = audioRef.current;
 
     const updateWordIndex = () => {
-      const currentTime = Math.max(0, audio.currentTime - HIGHLIGHT_AUDIO_DELAY_SECONDS);
+      const currentTime = Math.max(0, audio.currentTime - wordHighlightDelaySeconds);
       const newIndex = wordTimestamps.findIndex(
         (wt) => currentTime >= wt.startTime && currentTime < wt.endTime
       );
 
-      if (newIndex !== -1 && newIndex !== currentWordIndex) {
+      if (newIndex !== currentWordIndex) {
         setCurrentWordIndex(newIndex);
       }
     };
 
     const interval = setInterval(updateWordIndex, 50);
     return () => clearInterval(interval);
-  }, [audioRef, isPlaying, wordTimestamps, currentWordIndex]);
+  }, [audioRef, isPlaying, wordTimestamps, currentWordIndex, wordHighlightDelaySeconds]);
 
   // Reset word index when sentence changes
   useEffect(() => {
-    setCurrentWordIndex(0);
+    setCurrentWordIndex(-1);
   }, [currentSentenceIndex]);
 
   // Fetch word translation when selected
