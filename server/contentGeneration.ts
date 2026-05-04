@@ -860,14 +860,21 @@ export async function generatePodcast(
 
   try {
     if (isSpanishLanguage(params.targetLanguage)) {
-      const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
-      const audioUrl = await generateSpeechGoogleCloud(
-        cleanText,
-        params.targetLanguage,
-        gender
-      );
+      try {
+        const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
+        const audioUrl = await generateSpeechGoogleCloud(
+          cleanText,
+          params.targetLanguage,
+          gender
+        );
 
-      return { audioUrl, transcript: storyText };
+        return { audioUrl, transcript: storyText };
+      } catch (error) {
+        console.warn(
+          "[Podcast Generation] Google Cloud TTS failed for Spanish, falling back to ElevenLabs:",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
     }
 
     const voiceSettings = getVoiceSettings(params.voiceType);

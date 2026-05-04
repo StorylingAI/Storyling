@@ -38,6 +38,7 @@ export type PaywallHeadline =
   | "unlock_speed_control"
   | "unlock_offline"
   | "unlock_advanced"
+  | "unlock_film"
   | "generic";
 
 interface PaywallModalProps {
@@ -87,6 +88,10 @@ const HEADLINES: Record<PaywallHeadline, { title: string; subtitle: string }> = 
   unlock_advanced: {
     title: "Deeper comprehension tools.",
     subtitle: "Get sentence explanations, grammar help, and contextual insights.",
+  },
+  unlock_film: {
+    title: "Unlock Film mode.",
+    subtitle: "Film generation is included with Premium so your stories can become narrated short videos.",
   },
 };
 

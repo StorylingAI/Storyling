@@ -52,6 +52,10 @@ export const wordbankRouter = router({
         success: 0,
         failed: 0,
         skipped: 0,
+        duplicateSkipped: 0,
+        limitSkipped: 0,
+        emptySkipped: 0,
+        unsavedWords: [] as string[],
         errors: [] as string[],
       };
       const translationLanguage = normalizeLearningLanguage(
@@ -65,6 +69,7 @@ export const wordbankRouter = router({
           const trimmedWord = word.trim();
           if (!trimmedWord) {
             results.skipped++;
+            results.emptySkipped++;
             continue;
           }
 
@@ -77,6 +82,7 @@ export const wordbankRouter = router({
 
           if (exists) {
             results.skipped++;
+            results.duplicateSkipped++;
             results.errors.push(`"${trimmedWord}" already in wordbank`);
             continue;
           }
@@ -85,6 +91,8 @@ export const wordbankRouter = router({
             const dailySaves = await getDailyVocabSaveUsage(ctx.user.id, dailyWindow);
             if (dailySaves >= FREE_TIER_LIMITS.vocabSavesPerDay) {
               results.skipped++;
+              results.limitSkipped++;
+              results.unsavedWords.push(trimmedWord);
               results.errors.push(
                 `Daily vocabulary save limit reached (${FREE_TIER_LIMITS.vocabSavesPerDay}/day)`,
               );
@@ -139,6 +147,8 @@ export const wordbankRouter = router({
           results.success++;
         } catch (error) {
           results.failed++;
+          const trimmedWord = word.trim();
+          if (trimmedWord) results.unsavedWords.push(trimmedWord);
           results.errors.push(`"${word}": ${error instanceof Error ? error.message : "Unknown error"}`);
         }
       }

@@ -572,8 +572,15 @@ export async function generateVoicePreview(
   const previewText = getPreviewText(targetLanguage);
 
   if (isSpanishLanguage(targetLanguage)) {
-    const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
-    return generateSpeechGoogleCloud(previewText, targetLanguage, gender);
+    try {
+      const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
+      return await generateSpeechGoogleCloud(previewText, targetLanguage, gender);
+    } catch (error) {
+      console.warn(
+        "[Voice Preview] Google Cloud TTS failed for Spanish, falling back to ElevenLabs:",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
   }
 
   const voiceSettings = getVoiceSettings(voiceType);

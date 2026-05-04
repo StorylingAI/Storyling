@@ -30,6 +30,7 @@ import { PageOnboardingTutorial } from "@/components/PageOnboardingTutorial";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { MobileNav } from "@/components/MobileNav";
+import { trackContentGeneration, untrackContentGenerations } from "@/lib/generationTracking";
 
 
 const LANGUAGES = [
@@ -338,6 +339,7 @@ export default function CreateStory() {
     onSuccess: (data) => {
       setGeneratingContentId(data.contentId);
       completionToastShownRef.current = false;
+      trackContentGeneration(data.contentId);
       toast.success("Content generation started! This may take a few minutes.");
     },
     onError: (error) => {
@@ -384,6 +386,7 @@ export default function CreateStory() {
   // Navigate when content is ready
   useEffect(() => {
     if (generatingContent?.status === 'completed') {
+      untrackContentGenerations([generatingContent.id]);
       if (!completionToastShownRef.current) {
         completionToastShownRef.current = true;
         toast.success("Your content is ready!", {
@@ -392,6 +395,7 @@ export default function CreateStory() {
       }
       setLocation(`/content/${generatingContent.id}`);
     } else if (generatingContent?.status === 'failed') {
+      untrackContentGenerations([generatingContent.id]);
       toast.error("Content generation failed. Please try again.");
       setGeneratingContentId(null);
     }
@@ -400,9 +404,9 @@ export default function CreateStory() {
   /* ═══════════════════════════════════════════════════════
      GENERATING STATE — Magical full-screen experience
      ═══════════════════════════════════════════════════════ */
-  if (generatingContentId && generatingContent) {
-    const progress = generatingContent.progress || 0;
-    const stage = generatingContent.progressStage || "Starting...";
+  if (generatingContentId) {
+    const progress = generatingContent?.progress || 5;
+    const stage = generatingContent?.progressStage || "Starting...";
 
     const getEstimatedTime = () => {
       if (mode === "film") return "2-3 minutes";
@@ -631,13 +635,22 @@ export default function CreateStory() {
       return 0;
     }
 
+    let addedCount = 0;
     setVocabularyText(prev => {
       const existingWords = splitVocabularyText(prev);
+      const existingSet = new Set(existingWords.map(word => word.toLocaleLowerCase()));
+      const newUniqueWords = cleanedWords.filter((word) => {
+        const key = word.toLocaleLowerCase();
+        if (existingSet.has(key)) return false;
+        existingSet.add(key);
+        return true;
+      });
+      addedCount = newUniqueWords.length;
 
-      return Array.from(new Set([...existingWords, ...cleanedWords])).join(", ");
+      return [...existingWords, ...newUniqueWords].join(", ");
     });
 
-    return cleanedWords.length;
+    return addedCount;
   };
 
   const getResolvedMimeType = (file: File) => {
@@ -800,8 +813,12 @@ export default function CreateStory() {
         return;
       }
 
-      mergeVocabularyWords(collectedWords);
-      toast.success(`Extracted ${totalWords} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
+      const addedWords = mergeVocabularyWords(collectedWords);
+      if (addedWords === totalWords) {
+        toast.success(`Extracted ${totalWords} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
+      } else {
+        toast.success(`Extracted ${totalWords} words and added ${addedWords} new word${addedWords !== 1 ? "s" : ""} after removing duplicates.`);
+      }
     } catch (error) {
       toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
     } finally {
@@ -1750,7 +1767,7 @@ export default function CreateStory() {
         open={showFilmUpgradeModal}
         onOpenChange={setShowFilmUpgradeModal}
         trigger="locked_content"
-        headline="keep_going"
+        headline="unlock_film"
         skipToStep2
       />
 

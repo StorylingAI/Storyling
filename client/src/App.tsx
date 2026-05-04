@@ -6,6 +6,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { CookieConsent } from "./components/CookieConsent";
 import { OfflineBanner } from "./components/OfflineBanner";
+import { GenerationStatusWatcher } from "./components/GenerationStatusWatcher";
 import { Chatbot, BookiContext } from "./components/Chatbot";
 import { Footer } from "./components/Footer";
 import { ProtectedRoute } from "./components/ProtectedRoute";
@@ -173,6 +174,7 @@ function AppShell() {
   return (
     <>
       <OfflineBanner />
+      <GenerationStatusWatcher enabled={isAuthenticated} />
       <Router />
       {!isAuthPage && !isDashboardPage && <Footer />}
       <CookieConsent />

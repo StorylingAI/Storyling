@@ -75,6 +75,7 @@ export default function Wordbank() {
   const [, setLocation] = useLocation();
   const { user: authUser } = useAuth();
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
+  const utils = trpc.useUtils();
 
   // Handle "Create Story from My Words" CTA
   const handleCreateStoryFromWords = () => {
@@ -94,6 +95,7 @@ export default function Wordbank() {
   const { data: stats } = trpc.practice.getStats.useQuery();
   const { data: suggestions = [] } = trpc.wordbank.getMasterySuggestions.useQuery();
   const { data: reviewStats } = trpc.wordbank.getReviewStats.useQuery();
+  const { data: todayWordCount } = trpc.wordbank.getTodayWordCount.useQuery();
 
   // Use due words if filter is active, otherwise all words
   const wordsToDisplay = showDueOnly ? dueWords : words;
@@ -129,16 +131,38 @@ export default function Wordbank() {
 
   const bulkImportWords = trpc.wordbank.bulkImportWords.useMutation({
     onSuccess: (data) => {
-      toast.success(`Imported ${data.success} words successfully!`);
-      if (data.skipped > 0) {
-        toast.info(`Skipped ${data.skipped} duplicate words`);
+      const limitSkipped = data.limitSkipped ?? 0;
+      const duplicateSkipped = data.duplicateSkipped ?? 0;
+      const emptySkipped = data.emptySkipped ?? 0;
+      const otherSkipped = Math.max(data.skipped - limitSkipped - duplicateSkipped - emptySkipped, 0);
+      const unsavedWords = data.unsavedWords ?? [];
+
+      if (data.success > 0) {
+        toast.success(`Imported ${data.success} of ${data.total} words successfully.`);
+      }
+      if (duplicateSkipped > 0) {
+        toast.info(`Skipped ${duplicateSkipped} duplicate word${duplicateSkipped !== 1 ? "s" : ""}.`);
+      }
+      if (limitSkipped > 0) {
+        toast.warning(
+          `Saved ${data.success} word${data.success !== 1 ? "s" : ""}. ${limitSkipped} more hit today's free vocabulary limit.`,
+        );
+      }
+      if (otherSkipped > 0) {
+        toast.info(`Skipped ${otherSkipped} empty or invalid entr${otherSkipped === 1 ? "y" : "ies"}.`);
       }
       if (data.failed > 0) {
         toast.warning(`Failed to import ${data.failed} words`);
       }
+      void utils.wordbank.getTodayWordCount.invalidate();
       refetch();
-      setShowImportDialog(false);
-      setImportText("");
+      if (limitSkipped > 0 || data.failed > 0) {
+        setImportText(unsavedWords.join("\n"));
+        setShowImportDialog(true);
+      } else {
+        setShowImportDialog(false);
+        setImportText("");
+      }
     },
     onError: (error) => {
       toast.error(`Import failed: ${error.message}`);
@@ -408,6 +432,14 @@ export default function Wordbank() {
         });
         appendImportWords(data.vocabularyWords.map((item) => item.word));
         toast.success(`Extracted ${data.totalWords} words from ${file.name}`);
+        if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
+          const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
+          if (data.totalWords > remaining) {
+            toast.info(
+              `You can save ${remaining} more word${remaining !== 1 ? "s" : ""} today on the free plan; the rest will remain in the import box.`,
+            );
+          }
+        }
       }
     } catch (error) {
       toast.error("Failed to extract vocabulary: " + (error instanceof Error ? error.message : String(error)));
@@ -452,6 +484,14 @@ export default function Wordbank() {
 
       appendImportWords(extractedWords);
       toast.success(`Extracted ${extractedWords.length} words from ${files.length} photo${files.length > 1 ? "s" : ""}`);
+      if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
+        const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
+        if (extractedWords.length > remaining) {
+          toast.info(
+            `You can save ${remaining} more word${remaining !== 1 ? "s" : ""} today on the free plan; the rest will remain in the import box.`,
+          );
+        }
+      }
     } catch (error) {
       toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
     } finally {
@@ -500,6 +540,18 @@ export default function Wordbank() {
 
     // Use current language filter or default to Spanish
     const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
+    if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
+      const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
+      if (remaining === 0) {
+        toast.warning("You've reached today's free vocabulary save limit. The words will stay here so you can import them after the reset or upgrade.");
+        return;
+      }
+      if (words.length > remaining) {
+        toast.info(
+          `Your free plan can save ${remaining} more word${remaining !== 1 ? "s" : ""} today. The rest will stay in this import box.`,
+        );
+      }
+    }
     bulkImportWords.mutate({ words, targetLanguage });
   };
 
@@ -1083,6 +1135,11 @@ export default function Wordbank() {
                 <p className="text-xs text-gray-400">
                   Change the language filter above to import words for a different language.
                 </p>
+                {todayWordCount?.limit !== null && todayWordCount?.limit !== undefined && (
+                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                    Free plan: {todayWordCount.count}/{todayWordCount.limit} vocabulary saves used today. Extra extracted words stay here for later.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-bold mb-2 block">Paste Words</label>
