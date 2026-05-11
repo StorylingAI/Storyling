@@ -1202,7 +1202,7 @@ export default function Library() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="w-full rounded-button hover-lift active-scale transition-all hidden sm:flex"
+                            className="flex w-full rounded-button hover-lift active-scale transition-all"
                             onClick={(e) => e.stopPropagation()}
                             disabled={regenerateThumbnailMutation.isPending}
                           >

@@ -1,6 +1,22 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 describe("Wordbank and Practice Session Features", () => {
+  describe("Practice entrypoint UI", () => {
+    it("should disable practice when the current filtered word set is empty", () => {
+      const wordbankPage = readFileSync(
+        path.join(repoRoot, "client", "src", "pages", "Wordbank.tsx"),
+        "utf8"
+      );
+
+      expect(wordbankPage).toContain("practiceWordCount");
+      expect(wordbankPage).toContain("disabled={practiceWordCount === 0");
+    });
+  });
+
   describe("Wordbank Schema", () => {
     it("should have correct mastery level enum values", () => {
       const validLevels = ["learning", "familiar", "mastered"];

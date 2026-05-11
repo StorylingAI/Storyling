@@ -9,7 +9,7 @@ export const FREE_TIER_LIMITS = {
   /** Bonus starter stories given on signup */
   bonusStarterStories: 3,
   /** Vocabulary saves per day */
-  vocabSavesPerDay: 3,
+  vocabSavesPerDay: 100,
   /** Dictionary lookups per day */
   dictionaryLookupsPerDay: 10,
   // A1-only restriction removed — free users can access all CEFR levels

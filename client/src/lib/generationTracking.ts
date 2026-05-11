@@ -1,4 +1,5 @@
-const STORAGE_KEY = "storyling:tracked-content-generations";
+export const TRACKED_CONTENT_GENERATIONS_STORAGE_KEY =
+  "storyling:tracked-content-generations";
 
 export const CONTENT_GENERATION_TRACK_EVENT =
   "storyling:track-content-generation";
@@ -17,9 +18,25 @@ export function getTrackedContentGenerationIds(): number[] {
   if (typeof window === "undefined") return [];
 
   try {
-    return normalizeIds(
-      JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) || "[]")
+    const localIds = normalizeIds(
+      JSON.parse(
+        window.localStorage.getItem(TRACKED_CONTENT_GENERATIONS_STORAGE_KEY) ||
+          "[]"
+      )
     );
+    const sessionIds = normalizeIds(
+      JSON.parse(
+        window.sessionStorage.getItem(TRACKED_CONTENT_GENERATIONS_STORAGE_KEY) ||
+          "[]"
+      )
+    );
+    const ids = normalizeIds([...localIds, ...sessionIds]);
+
+    if (sessionIds.length > 0) {
+      setTrackedContentGenerationIds(ids);
+    }
+
+    return ids;
   } catch {
     return [];
   }
@@ -27,7 +44,16 @@ export function getTrackedContentGenerationIds(): number[] {
 
 function setTrackedContentGenerationIds(ids: number[]) {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(normalizeIds(ids)));
+  window.localStorage.setItem(
+    TRACKED_CONTENT_GENERATIONS_STORAGE_KEY,
+    JSON.stringify(normalizeIds(ids))
+  );
+  window.sessionStorage.removeItem(TRACKED_CONTENT_GENERATIONS_STORAGE_KEY);
+}
+
+export function getLatestTrackedContentGenerationId(): number | null {
+  const ids = getTrackedContentGenerationIds();
+  return ids.length > 0 ? ids[ids.length - 1] : null;
 }
 
 export function trackContentGeneration(contentId: number) {

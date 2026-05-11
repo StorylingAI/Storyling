@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import {
   CONTENT_GENERATION_TRACK_EVENT,
+  TRACKED_CONTENT_GENERATIONS_STORAGE_KEY,
   getTrackedContentGenerationIds,
   untrackContentGenerations,
 } from "@/lib/generationTracking";
@@ -28,6 +29,11 @@ export function GenerationStatusWatcher({
 
     const syncTrackedIds = () =>
       setTrackedIds(getTrackedContentGenerationIds());
+    const handleStorageEvent = (event: StorageEvent) => {
+      if (event.key === TRACKED_CONTENT_GENERATIONS_STORAGE_KEY) {
+        syncTrackedIds();
+      }
+    };
     const handleTrackEvent = (event: Event) => {
       const contentId = Number(
         (event as CustomEvent<{ contentId?: number }>).detail?.contentId
@@ -41,11 +47,13 @@ export function GenerationStatusWatcher({
 
     syncTrackedIds();
     window.addEventListener(CONTENT_GENERATION_TRACK_EVENT, handleTrackEvent);
+    window.addEventListener("storage", handleStorageEvent);
     return () => {
       window.removeEventListener(
         CONTENT_GENERATION_TRACK_EVENT,
         handleTrackEvent
       );
+      window.removeEventListener("storage", handleStorageEvent);
     };
   }, [enabled]);
 

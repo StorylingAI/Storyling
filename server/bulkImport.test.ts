@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { FREE_TIER_LIMITS } from "../shared/freemiumLimits";
 
 describe("Bulk Import Feature", () => {
   describe("Input validation", () => {
+    it("should not cap the core import loop at three words", () => {
+      expect(FREE_TIER_LIMITS.vocabSavesPerDay).toBeGreaterThanOrEqual(100);
+    });
+
     it("should accept array of words", () => {
       const mockInput = {
         words: ["hello", "world", "language"],

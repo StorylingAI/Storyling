@@ -1,4 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "fs";
+import path from "path";
+
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 describe("Thumbnail Regeneration", () => {
   it("should have regenerateThumbnail mutation in content router", () => {
@@ -24,6 +28,18 @@ describe("Thumbnail Regeneration", () => {
   it("should handle thumbnail generation errors gracefully", () => {
     // Try-catch block with TRPCError
     expect(true).toBe(true);
+  });
+
+  it("should expose the thumbnail style control on mobile layouts", () => {
+    const libraryPage = readFileSync(
+      path.join(repoRoot, "client", "src", "pages", "Library.tsx"),
+      "utf8"
+    );
+
+    expect(libraryPage).toContain("Change Thumbnail Style");
+    expect(libraryPage).toContain(
+      'className="flex w-full rounded-button hover-lift active-scale transition-all"'
+    );
   });
 });
 

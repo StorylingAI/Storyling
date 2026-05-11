@@ -1795,9 +1795,9 @@ export async function generateFilm(
 
       try {
         let audioData: Buffer | null = null;
+        const { synthesizeSpeechGoogleCloud } = await import("./googleCloudTTS");
 
         if (isSpanishLanguage(params.targetLanguage)) {
-          const { synthesizeSpeechGoogleCloud } = await import("./googleCloudTTS");
           audioData = await synthesizeSpeechGoogleCloud(
             narrationText,
             params.targetLanguage,
@@ -1865,6 +1865,21 @@ export async function generateFilm(
             const audioBuffer = await ttsResponse.arrayBuffer();
             audioData = Buffer.from(audioBuffer);
           }
+
+          if (!audioData) {
+            console.warn(
+              '[Film Generation] ElevenLabs did not return narration audio; using Google Cloud TTS fallback',
+            );
+            audioData = await synthesizeSpeechGoogleCloud(
+              narrationText,
+              params.targetLanguage,
+              gender,
+            );
+          }
+        }
+
+        if (!audioData) {
+          throw new Error('No narration audio was produced by the configured TTS providers');
         }
 
         if (audioData) {
@@ -1890,7 +1905,12 @@ export async function generateFilm(
           }
         }
       } catch (ttsError) {
-        console.error('[Film Generation] TTS generation failed, continuing without narration:', ttsError);
+        console.error('[Film Generation] TTS generation failed:', ttsError);
+        throw new Error(
+          `Failed to generate film narration audio: ${
+            ttsError instanceof Error ? ttsError.message : String(ttsError)
+          }`,
+        );
       }
     }
 

@@ -274,6 +274,16 @@ export default function Wordbank() {
   }, [words]);
 
   const dueCount = dueWords.length;
+  const practiceWordCount = filteredWords.length;
+
+  const handleOpenPracticeModeSelect = () => {
+    if (practiceWordCount === 0) {
+      toast.info("Import or save at least one word before starting practice.");
+      return;
+    }
+
+    setShowModeSelect(true);
+  };
 
   const handlePlayAudio = async (word: string, targetLanguage: string) => {
     try {
@@ -835,7 +845,8 @@ export default function Wordbank() {
                 ))}
                 <Button
                   size="lg"
-                  onClick={() => setShowModeSelect(true)}
+                  onClick={handleOpenPracticeModeSelect}
+                  disabled={practiceWordCount === 0}
                   className="bg-white text-purple-700 hover:bg-white/90 rounded-full font-bold px-6 shadow-lg"
                 >
                   <Play className="w-5 h-5 mr-2" />
@@ -880,7 +891,8 @@ export default function Wordbank() {
           </div>
           <Button
             size="sm"
-            onClick={() => setShowModeSelect(true)}
+            onClick={handleOpenPracticeModeSelect}
+            disabled={practiceWordCount === 0}
             className="rounded-full gap-2 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white"
           >
             <Dumbbell className="h-4 w-4" />
@@ -1103,7 +1115,7 @@ export default function Wordbank() {
             <div className="mt-4">
               <PracticeQuiz
                 quizMode={selectedQuizMode}
-                count={Math.min(filteredWords.length, 10)}
+                count={Math.min(practiceWordCount, 10)}
                 targetLanguage={languageFilter !== "all" ? languageFilter : undefined}
                 masteryLevel={masteryFilter !== "all" ? (masteryFilter as any) : undefined}
                 onComplete={(stats) => {

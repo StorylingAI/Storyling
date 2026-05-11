@@ -25,6 +25,10 @@ vi.mock('./_core/imageGeneration', () => ({
   generateImage: vi.fn(),
 }));
 
+vi.mock('./googleCloudTTS', () => ({
+  synthesizeSpeechGoogleCloud: vi.fn(),
+}));
+
 // Mock videoStitching module
 vi.mock('./videoStitching', () => ({
   splitStoryIntoScenes: vi.fn((text: string) => [text]),
@@ -37,6 +41,7 @@ import { invokeLLM } from './_core/llm';
 import { generateHiggsfieldImage } from './higgsfield';
 import { generateVideo } from './_core/videoGeneration';
 import { generateImage } from './_core/imageGeneration';
+import { synthesizeSpeechGoogleCloud } from './googleCloudTTS';
 import { stitchVideos } from './videoStitching';
 import {
   DEFAULT_FILM_NARRATOR_GENDER,
@@ -48,6 +53,7 @@ const mockedInvokeLLM = vi.mocked(invokeLLM);
 const mockedGenerateImage = vi.mocked(generateHiggsfieldImage);
 const mockedGenerateVideo = vi.mocked(generateVideo);
 const mockedGenerateStillImage = vi.mocked(generateImage);
+const mockedSynthesizeSpeechGoogleCloud = vi.mocked(synthesizeSpeechGoogleCloud);
 const mockedStitchVideos = vi.mocked(stitchVideos);
 
 describe('resolveFilmNarrationSettings', () => {
@@ -662,6 +668,88 @@ describe('generateFilm NSFW retry', () => {
         narrationAudioPath: expect.any(String),
       }),
     );
+  });
+
+  it('should use Google TTS fallback instead of producing a silent film when ElevenLabs fails', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A traveler walks calmly toward a station.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/clip-with-google-narration.mp4',
+      status: 'completed',
+      requestId: 'clip-google-tts',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/final-with-google-narration.mp4',
+      duration: 8,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: 'Unauthorized',
+    }));
+    mockedSynthesizeSpeechGoogleCloud.mockResolvedValueOnce(Buffer.from([9, 8, 7]));
+
+    await generateFilm(
+      {
+        targetLanguage: 'French',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['gare'],
+        theme: 'Adventure',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Bonjour Marie. Elle marche vers la gare.',
+    );
+
+    expect(mockedSynthesizeSpeechGoogleCloud).toHaveBeenCalledWith(
+      'Bonjour Marie. Elle marche vers la gare.',
+      'French',
+      'female',
+    );
+    expect(mockedStitchVideos).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        narrationAudioPath: expect.any(String),
+      }),
+    );
+  });
+
+  it('should abort before paid video generation when no narration provider returns audio', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      statusText: 'Unauthorized',
+    }));
+    mockedSynthesizeSpeechGoogleCloud.mockRejectedValueOnce(new Error('Google TTS unavailable'));
+
+    await expect(generateFilm(
+      {
+        targetLanguage: 'French',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['gare'],
+        theme: 'Adventure',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Bonjour Marie. Elle marche vers la gare.',
+    )).rejects.toThrow('Failed to generate film narration audio');
+
+    expect(mockedGenerateVideo).not.toHaveBeenCalled();
   });
 
   it('should return timestamped transcript and audio alignment for film narration', async () => {

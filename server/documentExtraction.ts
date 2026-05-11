@@ -8,14 +8,14 @@
  * - Plain text files (TXT / CSV)
  */
 
-import { exec, execFile } from "child_process";
+import { execFile } from "child_process";
 import { promisify } from "util";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile, unlink, readFile } from "fs/promises";
 import { randomBytes } from "crypto";
 import path from "path";
 import os from "os";
+import { inflateSync } from "zlib";
 
-const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 async function runPythonScript(scriptPath: string, filePath: string): Promise<string> {
@@ -39,12 +39,449 @@ async function runPythonScript(scriptPath: string, filePath: string): Promise<st
  */
 async function extractTextFromPDF(filePath: string): Promise<string> {
   try {
-    const { stdout } = await execAsync(`pdftotext "${filePath}" -`);
-    return stdout.trim();
+    const { stdout } = await execFileAsync("pdftotext", [filePath, "-"]);
+    const text = stdout.trim();
+    if (text) return text;
   } catch (error) {
-    console.error("[extractTextFromPDF] Error:", error);
-    throw new Error("Failed to extract text from PDF");
+    console.warn(
+      "[extractTextFromPDF] pdftotext failed, using built-in fallback:",
+      error instanceof Error ? error.message : String(error),
+    );
   }
+
+  const fallbackText = await extractTextFromPDFWithFallbackParser(filePath);
+  if (fallbackText) return fallbackText;
+
+  throw new Error("Failed to extract text from PDF");
+}
+
+function decodePdfString(value: string): string {
+  let decoded = "";
+
+  for (let i = 0; i < value.length; i++) {
+    const char = value[i];
+    if (char !== "\\") {
+      decoded += char;
+      continue;
+    }
+
+    const next = value[++i];
+    if (!next) break;
+
+    if (next === "n") decoded += "\n";
+    else if (next === "r") decoded += "\r";
+    else if (next === "t") decoded += "\t";
+    else if (next === "b") decoded += "\b";
+    else if (next === "f") decoded += "\f";
+    else if (next === "(" || next === ")" || next === "\\") decoded += next;
+    else if (/[0-7]/.test(next)) {
+      let octal = next;
+      for (let count = 0; count < 2 && /[0-7]/.test(value[i + 1] || ""); count++) {
+        octal += value[++i];
+      }
+      decoded += String.fromCharCode(parseInt(octal, 8));
+    } else {
+      decoded += next;
+    }
+  }
+
+  if (decoded.charCodeAt(0) === 0xfe && decoded.charCodeAt(1) === 0xff) {
+    const bytes = Buffer.from(decoded, "latin1");
+    let utf16 = "";
+    for (let i = 2; i + 1 < bytes.length; i += 2) {
+      utf16 += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+    }
+    return utf16;
+  }
+
+  return decoded;
+}
+
+function decodeUtf16BeHexString(hex: string): string {
+  const cleaned = hex.replace(/\s+/g, "");
+  if (!cleaned || cleaned.length % 4 !== 0) return "";
+
+  const bytes = Buffer.from(cleaned, "hex");
+  let start = 0;
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    start = 2;
+  }
+
+  let utf16 = "";
+  for (let i = start; i + 1 < bytes.length; i += 2) {
+    utf16 += String.fromCharCode((bytes[i] << 8) | bytes[i + 1]);
+  }
+  return utf16;
+}
+
+function decodePdfHexStringRaw(hex: string): string {
+  const cleaned = hex.replace(/\s+/g, "");
+  if (!cleaned || cleaned.length % 2 !== 0) return "";
+
+  const bytes = Buffer.from(cleaned, "hex");
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) {
+    return decodeUtf16BeHexString(cleaned);
+  }
+
+  return bytes.toString("utf8");
+}
+
+function decodePdfHexString(hex: string, toUnicodeMap?: Map<string, string>): string {
+  const cleaned = hex.replace(/\s+/g, "").toLowerCase();
+  if (!cleaned || cleaned.length % 2 !== 0) return "";
+
+  if (!toUnicodeMap || toUnicodeMap.size === 0) {
+    return decodePdfHexStringRaw(cleaned);
+  }
+
+  const codeLengths = Array.from(new Set(Array.from(toUnicodeMap.keys()).map(key => key.length)))
+    .sort((a, b) => b - a);
+  const fallbackLength = codeLengths[codeLengths.length - 1] || 2;
+  let decoded = "";
+  let index = 0;
+
+  while (index < cleaned.length) {
+    let mapped = false;
+    for (const length of codeLengths) {
+      const code = cleaned.slice(index, index + length);
+      const value = toUnicodeMap.get(code);
+      if (value !== undefined) {
+        decoded += value;
+        index += length;
+        mapped = true;
+        break;
+      }
+    }
+
+    if (!mapped) {
+      const fallbackCode = cleaned.slice(index, index + fallbackLength);
+      decoded += decodePdfHexStringRaw(fallbackCode);
+      index += fallbackLength;
+    }
+  }
+
+  return decoded;
+}
+
+function extractPdfLiteralStrings(source: string): string[] {
+  const strings: string[] = [];
+
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] !== "(") continue;
+
+    let depth = 1;
+    let escaped = false;
+    let value = "";
+
+    for (let j = i + 1; j < source.length; j++) {
+      const char = source[j];
+
+      if (escaped) {
+        value += `\\${char}`;
+        escaped = false;
+        continue;
+      }
+
+      if (char === "\\") {
+        escaped = true;
+        continue;
+      }
+
+      if (char === "(") {
+        depth++;
+        value += char;
+        continue;
+      }
+
+      if (char === ")") {
+        depth--;
+        if (depth === 0) {
+          strings.push(decodePdfString(value));
+          i = j;
+          break;
+        }
+        value += char;
+        continue;
+      }
+
+      value += char;
+    }
+  }
+
+  return strings;
+}
+
+function extractPdfTextOperand(operand: string, toUnicodeMap?: Map<string, string>): string {
+  if (operand.startsWith("[")) {
+    const chunks: string[] = [];
+    const itemPattern = /\((?:\\.|[^\\)])*\)|<[\da-fA-F\s]+>/g;
+    let itemMatch: RegExpExecArray | null;
+
+    while ((itemMatch = itemPattern.exec(operand)) !== null) {
+      const item = itemMatch[0];
+      if (item.startsWith("(")) {
+        chunks.push(...extractPdfLiteralStrings(item));
+      } else if (item.startsWith("<")) {
+        chunks.push(decodePdfHexString(item.slice(1, -1), toUnicodeMap));
+      }
+    }
+
+    return chunks.join("");
+  }
+
+  if (operand.startsWith("(")) {
+    return extractPdfLiteralStrings(operand).join("");
+  }
+
+  if (operand.startsWith("<")) {
+    return decodePdfHexString(operand.slice(1, -1), toUnicodeMap);
+  }
+
+  return "";
+}
+
+function extractTextFromPDFContentStream(
+  stream: Buffer,
+  fontToUnicodeMaps: Map<string, Map<string, string>>,
+): string[] {
+  const content = stream.toString("latin1");
+  const chunks: string[] = [];
+  const textOperators =
+    /(\/([A-Za-z0-9_.-]+)\s+[-+]?\d*\.?\d+\s+Tf)|(\[(?:.|\n|\r)*?\]|\((?:\\.|[^\\)])*\)|<[\da-fA-F\s]+>)\s*(?:Tj|TJ|')/g;
+  let match: RegExpExecArray | null;
+  let currentFontMap: Map<string, string> | undefined;
+
+  while ((match = textOperators.exec(content)) !== null) {
+    const fontName = match[2];
+    if (fontName) {
+      currentFontMap = fontToUnicodeMaps.get(fontName);
+      continue;
+    }
+
+    const operand = match[3];
+    const text = operand ? extractPdfTextOperand(operand, currentFontMap) : "";
+    if (text) chunks.push(text);
+  }
+
+  return chunks;
+}
+
+interface PdfStream {
+  objectNumber?: number;
+  dictionary: string;
+  stream: Buffer;
+}
+
+function getPdfObjectNumberBefore(pdfSource: string, dictionaryStart: number): number | undefined {
+  const prefix = pdfSource.slice(Math.max(0, dictionaryStart - 100), dictionaryStart);
+  const match = prefix.match(/(\d+)\s+\d+\s+obj\s*$/);
+  return match ? Number(match[1]) : undefined;
+}
+
+function inflatePdfStreamIfNeeded(stream: Buffer, dictionary: string): Buffer {
+  if (!/\/FlateDecode\b/.test(dictionary)) return stream;
+
+  try {
+    return inflateSync(stream);
+  } catch (error) {
+    console.warn(
+      "[extractTextFromPDF] Failed to inflate PDF stream:",
+      error instanceof Error ? error.message : String(error),
+    );
+    return stream;
+  }
+}
+
+function collectPdfStreams(pdfBuffer: Buffer, pdfSource: string): PdfStream[] {
+  const streams: PdfStream[] = [];
+  let cursor = 0;
+
+  while (cursor < pdfSource.length) {
+    const streamMarker = pdfSource.indexOf("stream", cursor);
+    if (streamMarker === -1) break;
+
+    let streamStart = streamMarker + "stream".length;
+    if (pdfSource[streamStart] === "\r" && pdfSource[streamStart + 1] === "\n") {
+      streamStart += 2;
+    } else if (pdfSource[streamStart] === "\n" || pdfSource[streamStart] === "\r") {
+      streamStart += 1;
+    }
+
+    const streamEnd = pdfSource.indexOf("endstream", streamStart);
+    if (streamEnd === -1) break;
+
+    const dictionaryStart = pdfSource.lastIndexOf("<<", streamMarker);
+    const dictionaryEnd = pdfSource.lastIndexOf(">>", streamMarker);
+    const dictionary =
+      dictionaryStart !== -1 && dictionaryEnd !== -1 && dictionaryEnd > dictionaryStart
+        ? pdfSource.slice(dictionaryStart, dictionaryEnd + 2)
+        : "";
+
+    streams.push({
+      objectNumber: getPdfObjectNumberBefore(pdfSource, dictionaryStart),
+      dictionary,
+      stream: inflatePdfStreamIfNeeded(pdfBuffer.subarray(streamStart, streamEnd), dictionary),
+    });
+
+    cursor = streamEnd + "endstream".length;
+  }
+
+  return streams;
+}
+
+function collectPdfObjectDefinitions(pdfSource: string, streams: PdfStream[]): Map<number, string> {
+  const objects = new Map<number, string>();
+  const objectPattern = /(\d+)\s+\d+\s+obj\b([\s\S]*?)endobj/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = objectPattern.exec(pdfSource)) !== null) {
+    objects.set(Number(match[1]), match[2].trim());
+  }
+
+  for (const pdfStream of streams) {
+    if (!/\/Type\s*\/ObjStm\b/.test(pdfStream.dictionary)) continue;
+
+    const firstMatch = pdfStream.dictionary.match(/\/First\s+(\d+)/);
+    const countMatch = pdfStream.dictionary.match(/\/N\s+(\d+)/);
+    if (!firstMatch || !countMatch) continue;
+
+    const first = Number(firstMatch[1]);
+    const count = Number(countMatch[1]);
+    const objectStream = pdfStream.stream.toString("latin1");
+    const headerValues = objectStream.slice(0, first).trim().split(/\s+/).map(Number);
+    const body = objectStream.slice(first);
+
+    for (let index = 0; index < count; index++) {
+      const objectNumber = headerValues[index * 2];
+      const offset = headerValues[index * 2 + 1];
+      const nextOffset = index + 1 < count ? headerValues[(index + 1) * 2 + 1] : body.length;
+
+      if (!Number.isFinite(objectNumber) || !Number.isFinite(offset)) continue;
+      objects.set(objectNumber, body.slice(offset, nextOffset).trim());
+    }
+  }
+
+  return objects;
+}
+
+function parsePdfToUnicodeCMap(cmapSource: string): Map<string, string> {
+  const toUnicodeMap = new Map<string, string>();
+  const bfCharPattern = /beginbfchar([\s\S]*?)endbfchar/g;
+  let bfCharMatch: RegExpExecArray | null;
+
+  while ((bfCharMatch = bfCharPattern.exec(cmapSource)) !== null) {
+    const pairPattern = /<([\da-fA-F\s]+)>\s*<([\da-fA-F\s]+)>/g;
+    let pairMatch: RegExpExecArray | null;
+    while ((pairMatch = pairPattern.exec(bfCharMatch[1])) !== null) {
+      const source = pairMatch[1].replace(/\s+/g, "").toLowerCase();
+      const target = decodeUtf16BeHexString(pairMatch[2]);
+      if (source && target) toUnicodeMap.set(source, target);
+    }
+  }
+
+  const bfRangePattern = /beginbfrange([\s\S]*?)endbfrange/g;
+  let bfRangeMatch: RegExpExecArray | null;
+  while ((bfRangeMatch = bfRangePattern.exec(cmapSource)) !== null) {
+    const lines = bfRangeMatch[1].split(/\r?\n/);
+    for (const line of lines) {
+      const rangeWithArray = line.match(/<([\da-fA-F\s]+)>\s*<([\da-fA-F\s]+)>\s*\[([^\]]+)\]/);
+      if (rangeWithArray) {
+        const start = parseInt(rangeWithArray[1].replace(/\s+/g, ""), 16);
+        const targets = Array.from(rangeWithArray[3].matchAll(/<([\da-fA-F\s]+)>/g));
+        targets.forEach((targetMatch, offset) => {
+          const source = (start + offset)
+            .toString(16)
+            .padStart(rangeWithArray[1].replace(/\s+/g, "").length, "0")
+            .toLowerCase();
+          const target = decodeUtf16BeHexString(targetMatch[1]);
+          if (target) toUnicodeMap.set(source, target);
+        });
+        continue;
+      }
+
+      const range = line.match(/<([\da-fA-F\s]+)>\s*<([\da-fA-F\s]+)>\s*<([\da-fA-F\s]+)>/);
+      if (!range) continue;
+
+      const startHex = range[1].replace(/\s+/g, "");
+      const endHex = range[2].replace(/\s+/g, "");
+      const targetHex = range[3].replace(/\s+/g, "");
+      const start = parseInt(startHex, 16);
+      const end = parseInt(endHex, 16);
+      const targetStart = parseInt(targetHex, 16);
+
+      for (let sourceCode = start; sourceCode <= end; sourceCode++) {
+        const source = sourceCode.toString(16).padStart(startHex.length, "0").toLowerCase();
+        const target = decodeUtf16BeHexString((targetStart + sourceCode - start).toString(16).padStart(targetHex.length, "0"));
+        if (target) toUnicodeMap.set(source, target);
+      }
+    }
+  }
+
+  return toUnicodeMap;
+}
+
+function buildPdfFontToUnicodeMaps(
+  objects: Map<number, string>,
+  streams: PdfStream[],
+): Map<string, Map<string, string>> {
+  const cmapByObjectNumber = new Map<number, Map<string, string>>();
+  for (const pdfStream of streams) {
+    if (pdfStream.objectNumber === undefined) continue;
+    const streamText = pdfStream.stream.toString("latin1");
+    if (!/begincmap\b/.test(streamText)) continue;
+
+    const cmap = parsePdfToUnicodeCMap(streamText);
+    if (cmap.size > 0) {
+      cmapByObjectNumber.set(pdfStream.objectNumber, cmap);
+    }
+  }
+
+  const fontObjectMaps = new Map<number, Map<string, string>>();
+  for (const [objectNumber, objectSource] of Array.from(objects.entries())) {
+    const toUnicodeMatch = objectSource.match(/\/ToUnicode\s+(\d+)\s+\d+\s+R/);
+    if (!toUnicodeMatch) continue;
+
+    const cmap = cmapByObjectNumber.get(Number(toUnicodeMatch[1]));
+    if (cmap) {
+      fontObjectMaps.set(objectNumber, cmap);
+    }
+  }
+
+  const fontToUnicodeMaps = new Map<string, Map<string, string>>();
+  for (const objectSource of Array.from(objects.values())) {
+    const resourcePattern = /\/([A-Za-z0-9_.-]+)\s+(\d+)\s+\d+\s+R/g;
+    let resourceMatch: RegExpExecArray | null;
+    while ((resourceMatch = resourcePattern.exec(objectSource)) !== null) {
+      const cmap = fontObjectMaps.get(Number(resourceMatch[2]));
+      if (cmap) {
+        fontToUnicodeMaps.set(resourceMatch[1], cmap);
+      }
+    }
+  }
+
+  return fontToUnicodeMaps;
+}
+
+async function extractTextFromPDFWithFallbackParser(filePath: string): Promise<string> {
+  const pdfBuffer = await readFile(filePath);
+  const pdfSource = pdfBuffer.toString("latin1");
+  const streams = collectPdfStreams(pdfBuffer, pdfSource);
+  const objects = collectPdfObjectDefinitions(pdfSource, streams);
+  const fontToUnicodeMaps = buildPdfFontToUnicodeMaps(objects, streams);
+  const chunks: string[] = [];
+
+  for (const pdfStream of streams) {
+    if (/\/Type\s*\/ObjStm\b/.test(pdfStream.dictionary)) continue;
+    if (/\/Subtype\s*\/OpenType\b/.test(pdfStream.dictionary)) continue;
+
+    chunks.push(...extractTextFromPDFContentStream(pdfStream.stream, fontToUnicodeMaps));
+  }
+
+  return chunks
+    .map(chunk => chunk.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
 }
 
 /**
