@@ -1413,16 +1413,16 @@ export const appRouter = router({
         })();
       }
 
-      // Async backfill: generate Pixar-style thumbnails for completed stories that either:
-      // 1. Don't have a thumbnail at all, or
-      // 2. Have a non-pixar style thumbnail that needs upgrading
+      // Async backfill: generate Pixar-style thumbnails only for completed
+      // stories that do not have any thumbnail yet. Existing thumbnails keep
+      // their chosen style so a per-story style change is not overwritten.
       const storiesNeedingThumbnails =
         process.env.AUTO_GENERATE_MISSING_THUMBNAILS === "true"
           ? content.filter(
               c =>
                 c.status === "completed" &&
                 c.title &&
-                (!c.thumbnailUrl || c.thumbnailStyle !== "pixar")
+                !c.thumbnailUrl
             )
           : [];
       if (storiesNeedingThumbnails.length > 0) {

@@ -1797,85 +1797,77 @@ export async function generateFilm(
         let audioData: Buffer | null = null;
         const { synthesizeSpeechGoogleCloud } = await import("./googleCloudTTS");
 
-        if (isSpanishLanguage(params.targetLanguage)) {
-          audioData = await synthesizeSpeechGoogleCloud(
-            narrationText,
-            params.targetLanguage,
-            gender
-          );
-        } else {
-          const elevenLabsRequestBody = {
-            text: narrationText,
-            model_id: 'eleven_multilingual_v2',
-            voice_settings: {
-              stability: voiceSettings.stability,
-              similarity_boost: voiceSettings.similarity_boost,
-              style: voiceSettings.style,
-              use_speaker_boost: true,
-            },
-          };
+        const elevenLabsRequestBody = {
+          text: narrationText,
+          model_id: 'eleven_multilingual_v2',
+          voice_settings: {
+            stability: voiceSettings.stability,
+            similarity_boost: voiceSettings.similarity_boost,
+            style: voiceSettings.style,
+            use_speaker_boost: true,
+          },
+        };
 
-          try {
-            const timestampResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '/with-timestamps', {
-              method: 'POST',
-              headers: {
-                Accept: 'application/json',
-                'Content-Type': 'application/json',
-                'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
-              },
-              body: JSON.stringify(elevenLabsRequestBody),
-            });
-
-            if (timestampResponse.ok) {
-              const timestampResult = await timestampResponse.json() as ElevenLabsTimestampResponse;
-              if (timestampResult.audio_base64) {
-                audioData = Buffer.from(timestampResult.audio_base64, 'base64');
-                narrationAudioAlignment = timestampResult.normalized_alignment || timestampResult.alignment;
-                subtitleEntries = buildSubtitleCuesFromAlignment(
-                  subtitleTexts,
-                  narrationAudioAlignment,
-                );
-
-                if (!subtitleEntries) {
-                  console.warn('[Film Generation] ElevenLabs timestamps did not match subtitle lines; using weighted subtitle timing fallback');
-                }
-              } else {
-                console.warn('[Film Generation] ElevenLabs timestamp response did not include audio data; using plain TTS fallback');
-              }
-            } else {
-              console.warn('[Film Generation] ElevenLabs timestamp TTS failed:', timestampResponse.statusText);
-            }
-          } catch (timestampError) {
-            console.warn('[Film Generation] ElevenLabs timestamp TTS failed, using plain TTS fallback:', timestampError);
-          }
-
-          const ttsResponse = audioData ? undefined : await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+        try {
+          const timestampResponse = await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId + '/with-timestamps', {
             method: 'POST',
             headers: {
-              Accept: 'audio/mpeg',
+              Accept: 'application/json',
               'Content-Type': 'application/json',
               'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
             },
             body: JSON.stringify(elevenLabsRequestBody),
           });
 
-          if (ttsResponse && !ttsResponse.ok) {
-            console.error('[Film Generation] TTS failed:', ttsResponse.statusText);
-          } else if (ttsResponse) {
-            const audioBuffer = await ttsResponse.arrayBuffer();
-            audioData = Buffer.from(audioBuffer);
-          }
+          if (timestampResponse.ok) {
+            const timestampResult = await timestampResponse.json() as ElevenLabsTimestampResponse;
+            if (timestampResult.audio_base64) {
+              audioData = Buffer.from(timestampResult.audio_base64, 'base64');
+              narrationAudioAlignment = timestampResult.normalized_alignment || timestampResult.alignment;
+              subtitleEntries = buildSubtitleCuesFromAlignment(
+                subtitleTexts,
+                narrationAudioAlignment,
+              );
 
-          if (!audioData) {
-            console.warn(
-              '[Film Generation] ElevenLabs did not return narration audio; using Google Cloud TTS fallback',
-            );
-            audioData = await synthesizeSpeechGoogleCloud(
-              narrationText,
-              params.targetLanguage,
-              gender,
-            );
+              if (!subtitleEntries) {
+                console.warn('[Film Generation] ElevenLabs timestamps did not match subtitle lines; using weighted subtitle timing fallback');
+              }
+            } else {
+              console.warn('[Film Generation] ElevenLabs timestamp response did not include audio data; using plain TTS fallback');
+            }
+          } else {
+            console.warn('[Film Generation] ElevenLabs timestamp TTS failed:', timestampResponse.statusText);
           }
+        } catch (timestampError) {
+          console.warn('[Film Generation] ElevenLabs timestamp TTS failed, using plain TTS fallback:', timestampError);
+        }
+
+        const ttsResponse = audioData ? undefined : await fetch('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+          method: 'POST',
+          headers: {
+            Accept: 'audio/mpeg',
+            'Content-Type': 'application/json',
+            'xi-api-key': process.env.ELEVENLABS_API_KEY || '',
+          },
+          body: JSON.stringify(elevenLabsRequestBody),
+        });
+
+        if (ttsResponse && !ttsResponse.ok) {
+          console.error('[Film Generation] TTS failed:', ttsResponse.statusText);
+        } else if (ttsResponse) {
+          const audioBuffer = await ttsResponse.arrayBuffer();
+          audioData = Buffer.from(audioBuffer);
+        }
+
+        if (!audioData) {
+          console.warn(
+            '[Film Generation] ElevenLabs did not return narration audio; using Google Cloud TTS fallback',
+          );
+          audioData = await synthesizeSpeechGoogleCloud(
+            narrationText,
+            params.targetLanguage,
+            gender,
+          );
         }
 
         if (!audioData) {

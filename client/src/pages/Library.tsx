@@ -110,10 +110,34 @@ export default function Library() {
     return map;
   }, [allProgress]);
 
+  const [regeneratingThumbnailIds, setRegeneratingThumbnailIds] = useState<Set<number>>(new Set());
+
+  const setThumbnailRegenerating = (contentId: number, isRegenerating: boolean) => {
+    setRegeneratingThumbnailIds((previousIds) => {
+      const nextIds = new Set(previousIds);
+      if (isRegenerating) {
+        nextIds.add(contentId);
+      } else {
+        nextIds.delete(contentId);
+      }
+      return nextIds;
+    });
+  };
+
   const regenerateThumbnailMutation = trpc.content.regenerateThumbnail.useMutation({
+    onMutate: (variables) => {
+      setThumbnailRegenerating(variables.contentId, true);
+    },
     onSuccess: () => {
-      // Invalidate library query to refetch with new thumbnail
       utils.content.getLibrary.invalidate();
+    },
+    onError: (error) => {
+      toast.error(`Thumbnail update failed: ${error.message}`);
+    },
+    onSettled: (_data, _error, variables) => {
+      if (variables) {
+        setThumbnailRegenerating(variables.contentId, false);
+      }
     },
   });
 
@@ -924,7 +948,10 @@ export default function Library() {
             {/* Story Grid */}
             {filteredLibrary.length > 0 && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3" data-tutorial="story-grid">
-            {filteredLibrary.map((content) => (
+            {filteredLibrary.map((content) => {
+              const isRegeneratingThumbnail = regeneratingThumbnailIds.has(content.id);
+
+              return (
               <Card 
                 key={content.id} 
                 className={`overflow-hidden rounded-2xl shadow-playful hover-lift transition-all border-0 animate-slide-up flex flex-row sm:flex-col md:flex-col ${
@@ -1204,9 +1231,9 @@ export default function Library() {
                             size="sm"
                             className="flex w-full rounded-button hover-lift active-scale transition-all"
                             onClick={(e) => e.stopPropagation()}
-                            disabled={regenerateThumbnailMutation.isPending}
+                            disabled={isRegeneratingThumbnail}
                           >
-                            {regenerateThumbnailMutation.isPending ? (
+                            {isRegeneratingThumbnail ? (
                               <>
                                 <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                                 Generating...
@@ -1285,7 +1312,8 @@ export default function Library() {
                 </CardContent>
                 </div>
               </Card>
-            ))}
+              );
+            })}
               </div>
             )}
           </>

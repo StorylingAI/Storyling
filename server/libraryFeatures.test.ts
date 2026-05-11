@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import path from "path";
 
 const repoRoot = path.resolve(import.meta.dirname, "..");
@@ -40,6 +40,49 @@ describe("Thumbnail Regeneration", () => {
     expect(libraryPage).toContain(
       'className="flex w-full rounded-button hover-lift active-scale transition-all"'
     );
+  });
+
+  it("should not reference missing thumbnail style preview assets", () => {
+    const libraryPage = readFileSync(
+      path.join(repoRoot, "client", "src", "pages", "Library.tsx"),
+      "utf8"
+    );
+    const previewAssetPaths = Array.from(
+      libraryPage.matchAll(/src="(\/style-preview-[^"]+)"/g),
+      match => match[1]
+    );
+
+    for (const assetPath of previewAssetPaths) {
+      const diskPath = path.join(
+        repoRoot,
+        "client",
+        "public",
+        assetPath.replace(/^\//, "")
+      );
+      expect(existsSync(diskPath), `${assetPath} should exist`).toBe(true);
+    }
+  });
+
+  it("should keep thumbnail regeneration pending state scoped to one story card", () => {
+    const libraryPage = readFileSync(
+      path.join(repoRoot, "client", "src", "pages", "Library.tsx"),
+      "utf8"
+    );
+
+    expect(libraryPage).toContain("regeneratingThumbnailIds.has(content.id)");
+    expect(libraryPage).not.toContain(
+      "disabled={regenerateThumbnailMutation.isPending}"
+    );
+  });
+
+  it("should only auto-backfill stories with missing thumbnails", () => {
+    const routers = readFileSync(
+      path.join(repoRoot, "server", "routers.ts"),
+      "utf8"
+    );
+
+    expect(routers).toContain("!c.thumbnailUrl");
+    expect(routers).not.toContain('c.thumbnailStyle !== "pixar"');
   });
 });
 

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Loader2, Upload, ArrowRight, Sparkles, BookOpen, Headphones, Film, ArrowLeft, FileText, X, Volume2, Camera, Check } from "lucide-react";
@@ -1656,32 +1656,32 @@ export default function CreateStory() {
 
       {/* Vocabulary Preview Dialog */}
       <Dialog open={showVocabPreview} onOpenChange={setShowVocabPreview}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-3xl sm:max-w-3xl max-h-[80vh] overflow-hidden flex flex-col gap-0">
+          <DialogHeader className="shrink-0 gap-3 pb-4 pr-8">
             <DialogTitle className="text-2xl font-bold">Select Vocabulary Words</DialogTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              Review and select the words you want to include in your story. All words are selected by default.
-            </p>
-          </DialogHeader>
-          
-          <div className="flex items-center justify-between py-3 border-b">
-            <div className="flex items-center gap-2">
-              <Checkbox 
-                id="select-all"
-                checked={extractedVocab.length > 0 && extractedVocab.every(w => w.selected)}
-                onCheckedChange={toggleAllWords}
-              />
-              <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                Select All ({extractedVocab.filter(w => w.selected).length}/{extractedVocab.length})
-              </label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex min-w-0 items-center gap-2">
+                <Checkbox
+                  id="select-all"
+                  checked={extractedVocab.length > 0 && extractedVocab.every(w => w.selected)}
+                  onCheckedChange={toggleAllWords}
+                  className="shrink-0"
+                />
+                <label htmlFor="select-all" className="min-w-0 text-sm font-medium leading-none cursor-pointer">
+                  Select All ({extractedVocab.filter(w => w.selected).length}/{extractedVocab.length})
+                </label>
+              </div>
+              <Badge variant="secondary" className="w-fit shrink-0 whitespace-nowrap">
+                {extractedVocab.filter(w => w.selected).length} selected
+              </Badge>
             </div>
-            <Badge variant="secondary">
-              {extractedVocab.filter(w => w.selected).length} selected
-            </Badge>
-          </div>
+            <DialogDescription className="text-sm leading-relaxed text-muted-foreground">
+              Review and select the words you want to include in your story. All words are selected by default.
+            </DialogDescription>
+          </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto py-4">
-            <div className="grid gap-2">
+          <div className="flex-1 min-h-0 overflow-y-auto border-y py-3 pr-1">
+            <div className="grid gap-2 pr-2">
               {extractedVocab.map((vocab, index) => (
                 <div
                   key={index}
@@ -1693,13 +1693,13 @@ export default function CreateStory() {
                     id={`word-${index}`}
                     checked={vocab.selected}
                     onCheckedChange={() => toggleWordSelection(index)}
-                    className="mt-1"
+                    className="mt-1 shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <label
                         htmlFor={`word-${index}`}
-                        className="font-medium text-lg cursor-pointer"
+                        className="min-w-0 break-words font-medium text-lg cursor-pointer"
                       >
                         {vocab.word}
                       </label>
@@ -1718,7 +1718,7 @@ export default function CreateStory() {
                       )}
                     </div>
                     {vocab.translation && (
-                      <p className="text-sm text-muted-foreground mt-1">
+                      <p className="text-sm text-muted-foreground mt-1 break-words">
                         {vocab.translation}
                       </p>
                     )}
@@ -1728,7 +1728,7 @@ export default function CreateStory() {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-4 border-t">
+          <div className="shrink-0 flex flex-col gap-3 pt-4 sm:flex-row">
             <Button
               variant="outline"
               onClick={() => {

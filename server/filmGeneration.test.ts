@@ -670,6 +670,65 @@ describe('generateFilm NSFW retry', () => {
     );
   });
 
+  it('should use ElevenLabs first for Spanish film narration', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A traveler learns reflexive verbs in a sunny plaza.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/spanish-clip.mp4',
+      status: 'completed',
+      requestId: 'clip-spanish-tts',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/spanish-final.mp4',
+      duration: 8,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        audio_base64: Buffer.from([1, 2, 3]).toString('base64'),
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateFilm(
+      {
+        targetLanguage: 'Spanish',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['levantarse'],
+        theme: 'Daily Life',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Me levanto temprano. Me preparo para ir a la plaza.',
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('https://api.elevenlabs.io/v1/text-to-speech/'),
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'xi-api-key': expect.any(String),
+        }),
+      }),
+    );
+    expect(mockedSynthesizeSpeechGoogleCloud).not.toHaveBeenCalled();
+  });
+
   it('should use Google TTS fallback instead of producing a silent film when ElevenLabs fails', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test',
