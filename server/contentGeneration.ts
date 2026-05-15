@@ -129,8 +129,8 @@ function getTargetWordCount(
 ): string {
   if (mode === "film") {
     const safeDuration = Math.max(15, targetVideoDuration ?? 30);
-    const minWords = Math.max(35, Math.round(safeDuration * 1.8));
-    const maxWords = Math.max(minWords + 8, Math.round(safeDuration * 2.2));
+    const minWords = Math.max(45, Math.round(safeDuration * 2.8));
+    const maxWords = Math.max(minWords + 10, Math.round(safeDuration * 3.4));
     return `${minWords}-${maxWords}`;
   }
 
@@ -1764,7 +1764,7 @@ export async function generateFilm(
     const scenes = params.sceneBeats?.length
       ? fitSceneTextsToClipCount(params.sceneBeats, clipCount)
       : splitStoryIntoScenes(storyText, plannedVideoDuration, clipDuration);
-    let subtitleTexts = buildNarrationSubtitleLines(storyText, scenes);
+    let subtitleTexts = buildNarrationSubtitleLines(storyText, splitStoryIntoScenes(storyText, plannedVideoDuration, clipDuration));
     console.log(
       `[Film Generation] Split into ${scenes.length} scenes (${params.sceneBeats?.length ? "story beats" : "story text"})`,
     );
@@ -1777,20 +1777,8 @@ export async function generateFilm(
       const gender = params.narratorGender || 'female';
       const voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
       const voiceSettings = getVoiceSettings(params.voiceType);
-      const fullStoryWordCount = storyText.split(/\s+/).filter(Boolean).length;
-      const maxNarrationWords = Math.max(35, Math.round(targetVideoDuration * 2.2));
-      const narrationSourceText = fullStoryWordCount > maxNarrationWords
-        ? scenes.join(' ')
-        : storyText;
-
-      if (narrationSourceText !== storyText) {
-        console.log(
-          `[Film Generation] Condensing narration from ${fullStoryWordCount} words to fit ${targetVideoDuration}s target`,
-        );
-      }
-
-      const cleanText = sanitizeNarrationText(narrationSourceText);
-      subtitleTexts = buildNarrationSubtitleLines(cleanText, scenes);
+      const cleanText = sanitizeNarrationText(storyText);
+      subtitleTexts = buildNarrationSubtitleLines(cleanText, splitStoryIntoScenes(cleanText, plannedVideoDuration, clipDuration));
       const narrationText = buildNarrationTextFromSubtitleLines(subtitleTexts);
 
       try {

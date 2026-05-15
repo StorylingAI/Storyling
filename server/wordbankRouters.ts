@@ -19,6 +19,7 @@ import {
 } from "./wordbankDb";
 import { isDueForReview, getDaysUntilReview } from "./srsAlgorithm";
 import { normalizeLearningLanguage } from "@shared/languagePreferences";
+import { normalizeWordbankTargetLanguage } from "@shared/wordbankImport";
 
 export const wordbankRouter = router({
   checkWordExists: protectedProcedure
@@ -29,10 +30,11 @@ export const wordbankRouter = router({
       })
     )
     .query(async ({ input, ctx }) => {
+      const targetLanguage = normalizeWordbankTargetLanguage(input.targetLanguage);
       const exists = await checkWordInWordbank(
         ctx.user.id,
         input.word,
-        input.targetLanguage
+        targetLanguage
       );
       return { exists };
     }),
@@ -47,6 +49,7 @@ export const wordbankRouter = router({
     .mutation(async ({ input, ctx }) => {
       const { invokeLLM } = await import("./_core/llm");
       const dailyWindow = getDailyWindow(ctx.user.timezone || null);
+      const targetLanguage = normalizeWordbankTargetLanguage(input.targetLanguage);
       const results = {
         total: input.words.length,
         success: 0,
@@ -77,7 +80,7 @@ export const wordbankRouter = router({
           const exists = await checkWordInWordbank(
             ctx.user.id,
             trimmedWord,
-            input.targetLanguage
+            targetLanguage
           );
 
           if (exists) {
@@ -100,47 +103,57 @@ export const wordbankRouter = router({
             }
           }
 
-          // Get translation using LLM
-          const response = await invokeLLM({
-            messages: [
-              {
-                role: "system",
-                content: "You are a language translation assistant. Translate the given word to the target language and provide a brief definition.",
-              },
-              {
-                role: "user",
-                content: `Translate the word "${trimmedWord}" to ${translationLanguage}. Provide the translation and a brief definition.`,
-              },
-            ],
-            response_format: {
-              type: "json_schema",
-              json_schema: {
-                name: "word_translation",
-                strict: true,
-                schema: {
-                  type: "object",
-                  properties: {
-                    word: { type: "string", description: "The original word" },
-                    translation: { type: "string", description: "Translation in target language" },
-                    definition: { type: "string", description: "Brief definition" },
-                    sourceLanguage: { type: "string", description: "Detected source language code" },
+          let translation = "";
+          try {
+            // Get translation using LLM, but do not drop the word if translation fails.
+            const response = await invokeLLM({
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a language translation assistant. Translate the given word to the target language and provide a brief definition.",
+                },
+                {
+                  role: "user",
+                  content: `Translate the word "${trimmedWord}" to ${translationLanguage}. Provide the translation and a brief definition.`,
+                },
+              ],
+              response_format: {
+                type: "json_schema",
+                json_schema: {
+                  name: "word_translation",
+                  strict: true,
+                  schema: {
+                    type: "object",
+                    properties: {
+                      word: { type: "string", description: "The original word" },
+                      translation: { type: "string", description: "Translation in target language" },
+                      definition: { type: "string", description: "Brief definition" },
+                      sourceLanguage: { type: "string", description: "Detected source language code" },
+                    },
+                    required: ["word", "translation", "definition", "sourceLanguage"],
+                    additionalProperties: false,
                   },
-                  required: ["word", "translation", "definition", "sourceLanguage"],
-                  additionalProperties: false,
                 },
               },
-            },
-          });
+            });
 
-          const content = response.choices[0].message.content;
-          const translationData = JSON.parse(typeof content === "string" ? content : "{}");
+            const content = response.choices[0].message.content;
+            const translationData = JSON.parse(typeof content === "string" ? content : "{}");
+            translation = typeof translationData.translation === "string"
+              ? translationData.translation
+              : "";
+          } catch (translationError) {
+            results.errors.push(
+              `"${trimmedWord}": imported without translation (${translationError instanceof Error ? translationError.message : "translation unavailable"})`,
+            );
+          }
 
           // Save to wordbank
           await saveWordToWordbank({
             userId: ctx.user.id,
             word: trimmedWord,
-            translation: translationData.translation,
-            targetLanguage: input.targetLanguage,
+            translation,
+            targetLanguage,
           });
           await recordDailyVocabSave(ctx.user.id, dailyWindow);
 
@@ -168,11 +181,12 @@ export const wordbankRouter = router({
       })
     )
     .mutation(async ({ input, ctx }) => {
+      const targetLanguage = normalizeWordbankTargetLanguage(input.targetLanguage);
       // Check if word already exists
       const exists = await checkWordInWordbank(
         ctx.user.id,
         input.word,
-        input.targetLanguage
+        targetLanguage
       );
 
       if (exists) {
@@ -193,6 +207,7 @@ export const wordbankRouter = router({
       const result = await saveWordToWordbank({
         userId: ctx.user.id,
         ...input,
+        targetLanguage,
       });
       await recordDailyVocabSave(ctx.user.id, dailyWindow);
 
@@ -200,7 +215,7 @@ export const wordbankRouter = router({
       try {
         const wordCount = await getWordbankByUserId(ctx.user.id);
         const { completeChallenge, TUTORIAL_CHALLENGES, getVocabularyRequirement } = await import("./tutorialRouter");
-        const requiredCount = getVocabularyRequirement(input.targetLanguage);
+        const requiredCount = getVocabularyRequirement(targetLanguage);
         
         if (wordCount.length >= requiredCount) {
           await completeChallenge(ctx.user.id, TUTORIAL_CHALLENGES.ADD_VOCABULARY);
@@ -243,6 +258,7 @@ export const wordbankRouter = router({
         pinyin: wordbank.pinyin,
         translation: wordbank.translation,
         targetLanguage: wordbank.targetLanguage,
+        masteryLevel: wordbank.masteryLevel,
         exampleSentences: wordbank.exampleSentences,
         audioUrl: wordbank.audioUrl,
         nextReviewDate: wordMastery.nextReviewDate,
@@ -269,7 +285,10 @@ export const wordbankRouter = router({
   getMyWordsByLanguage: protectedProcedure
     .input(z.object({ targetLanguage: z.string() }))
     .query(async ({ input, ctx }) => {
-      return await getWordbankByUserIdAndLanguage(ctx.user.id, input.targetLanguage);
+      return await getWordbankByUserIdAndLanguage(
+        ctx.user.id,
+        normalizeWordbankTargetLanguage(input.targetLanguage),
+      );
     }),
 
   checkWordSaved: protectedProcedure
@@ -280,7 +299,11 @@ export const wordbankRouter = router({
       })
     )
     .query(async ({ input, ctx }) => {
-      return await checkWordInWordbank(ctx.user.id, input.word, input.targetLanguage);
+      return await checkWordInWordbank(
+        ctx.user.id,
+        input.word,
+        normalizeWordbankTargetLanguage(input.targetLanguage),
+      );
     }),
 
   removeWord: protectedProcedure
@@ -1408,8 +1431,11 @@ Return in JSON format.`,
 
       // Build query conditions
       const conditions = [eq(wordbank.userId, ctx.user.id)];
-      if (input.targetLanguage) {
-        conditions.push(eq(wordbank.targetLanguage, input.targetLanguage));
+      const targetLanguage = input.targetLanguage
+        ? normalizeWordbankTargetLanguage(input.targetLanguage)
+        : undefined;
+      if (targetLanguage) {
+        conditions.push(eq(wordbank.targetLanguage, targetLanguage));
       }
       if (input.masteryLevel) {
         conditions.push(eq(wordbank.masteryLevel, input.masteryLevel));
@@ -1459,7 +1485,7 @@ Return in JSON format.`,
 
       return {
         csv: csvContent,
-        filename: `wordbank_${input.targetLanguage || "all"}_${new Date().toISOString().split("T")[0]}.csv`,
+        filename: `wordbank_${targetLanguage || "all"}_${new Date().toISOString().split("T")[0]}.csv`,
       };
     }),
 
@@ -1482,8 +1508,11 @@ Return in JSON format.`,
 
       // Build query conditions
       const conditions = [eq(wordbank.userId, ctx.user.id)];
-      if (input.targetLanguage) {
-        conditions.push(eq(wordbank.targetLanguage, input.targetLanguage));
+      const targetLanguage = input.targetLanguage
+        ? normalizeWordbankTargetLanguage(input.targetLanguage)
+        : undefined;
+      if (targetLanguage) {
+        conditions.push(eq(wordbank.targetLanguage, targetLanguage));
       }
       if (input.masteryLevel) {
         conditions.push(eq(wordbank.masteryLevel, input.masteryLevel));
@@ -1505,7 +1534,7 @@ Return in JSON format.`,
       // Add subtitle with filters
       doc.setFontSize(11);
       const filters = [];
-      if (input.targetLanguage) filters.push(`Language: ${input.targetLanguage}`);
+      if (targetLanguage) filters.push(`Language: ${targetLanguage}`);
       if (input.masteryLevel) filters.push(`Level: ${input.masteryLevel}`);
       if (filters.length > 0) {
         doc.text(filters.join(" | "), 14, 28);
@@ -1542,7 +1571,7 @@ Return in JSON format.`,
 
       return {
         pdf: pdfBase64,
-        filename: `wordbank_${input.targetLanguage || "all"}_${new Date().toISOString().split("T")[0]}.pdf`,
+        filename: `wordbank_${targetLanguage || "all"}_${new Date().toISOString().split("T")[0]}.pdf`,
       };
     }),
 });

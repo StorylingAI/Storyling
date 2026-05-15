@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildLineTranslationsForDisplay,
   normalizeLineTranslations,
   normalizeStringArray,
   normalizeVocabularyTranslations,
@@ -61,13 +62,51 @@ describe("content display normalization", () => {
     ]);
   });
 
+  it("does not pair film subtitle segments with unrelated translations by index", () => {
+    const result = buildLineTranslationsForDisplay(
+      [
+        {
+          startTime: 0,
+          endTime: 3,
+          text: "Clara se sienta a desayunar en la mesa con su madre.",
+        },
+        { startTime: 3, endTime: 6, text: "Ana abre su cuaderno azul." },
+      ],
+      [
+        {
+          original: "Ana se levanta temprano cada dia.",
+          english: "Ana wakes up early every day.",
+        },
+        {
+          original: "Ella suele sentir que el dia va a ser bueno.",
+          english: "She usually feels that the day is going to be good.",
+        },
+        {
+          original: "Ana abre su cuaderno azul.",
+          english: "Ana opens her blue notebook.",
+        },
+      ],
+    );
+
+    expect(result).toEqual([
+      {
+        original: "Clara se sienta a desayunar en la mesa con su madre.",
+        english: "",
+      },
+      {
+        original: "Ana abre su cuaderno azul.",
+        english: "Ana opens her blue notebook.",
+      },
+    ]);
+  });
+
   it("splits Chinese punctuation-separated vocabulary lists", () => {
-    expect(normalizeStringArray(["喜欢， 展会， 软件、成功；快乐"])).toEqual([
-      "喜欢",
-      "展会",
-      "软件",
-      "成功",
-      "快乐",
+    expect(normalizeStringArray(["xihuan\uFF0C zhanhui\uFF0C ruanjian\u3001chenggong\uFF1Bkuaile"])).toEqual([
+      "xihuan",
+      "zhanhui",
+      "ruanjian",
+      "chenggong",
+      "kuaile",
     ]);
   });
 });

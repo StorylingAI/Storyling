@@ -127,6 +127,7 @@ docs/proposal-*.md
 .claude/
 CLAUDE.md
 CLAUDE*.md
+AGENTS.md
 .tldr/
 .tldrignore
 .cursorrules

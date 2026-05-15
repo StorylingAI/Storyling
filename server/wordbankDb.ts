@@ -1,13 +1,18 @@
 import { getDb } from "./db";
 import { wordbank, wordMastery, type Wordbank, type InsertWordbank } from "../drizzle/schema";
 import { eq, and, desc } from "drizzle-orm";
+import { normalizeWordbankTargetLanguage } from "@shared/wordbankImport";
 
 export async function saveWordToWordbank(data: InsertWordbank): Promise<Wordbank> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
+  const normalizedData = {
+    ...data,
+    targetLanguage: normalizeWordbankTargetLanguage(data.targetLanguage),
+  };
   
   // Insert word into wordbank
-  const [result] = await db.insert(wordbank).values(data);
+  const [result] = await db.insert(wordbank).values(normalizedData);
   const savedWord = await getWordbankById(result.insertId);
   
   // Automatically create word_mastery record for SRS
@@ -15,9 +20,9 @@ export async function saveWordToWordbank(data: InsertWordbank): Promise<Wordbank
   const nextReview = new Date(now); // Review immediately (due now)
   
   await db.insert(wordMastery).values({
-    userId: data.userId,
-    word: data.word,
-    targetLanguage: data.targetLanguage,
+    userId: normalizedData.userId,
+    word: normalizedData.word,
+    targetLanguage: normalizedData.targetLanguage,
     easinessFactor: 2500, // Default 2.5 * 1000
     interval: 1, // 1 day
     repetitions: 0,
@@ -53,13 +58,14 @@ export async function getWordbankByUserIdAndLanguage(
 ): Promise<Wordbank[]> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
+  const normalizedTargetLanguage = normalizeWordbankTargetLanguage(targetLanguage);
   return await db
     .select()
     .from(wordbank)
     .where(
       and(
         eq(wordbank.userId, userId),
-        eq(wordbank.targetLanguage, targetLanguage)
+        eq(wordbank.targetLanguage, normalizedTargetLanguage)
       )
     )
     .orderBy(desc(wordbank.createdAt));
@@ -72,6 +78,7 @@ export async function checkWordInWordbank(
 ): Promise<boolean> {
   const db = await getDb();
   if (!db) throw new Error("Database connection failed");
+  const normalizedTargetLanguage = normalizeWordbankTargetLanguage(targetLanguage);
   const [result] = await db
     .select()
     .from(wordbank)
@@ -79,7 +86,7 @@ export async function checkWordInWordbank(
       and(
         eq(wordbank.userId, userId),
         eq(wordbank.word, word),
-        eq(wordbank.targetLanguage, targetLanguage)
+        eq(wordbank.targetLanguage, normalizedTargetLanguage)
       )
     )
     .limit(1);

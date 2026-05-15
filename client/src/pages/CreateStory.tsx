@@ -30,7 +30,12 @@ import { PageOnboardingTutorial } from "@/components/PageOnboardingTutorial";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 import { MobileNav } from "@/components/MobileNav";
-import { trackContentGeneration, untrackContentGenerations } from "@/lib/generationTracking";
+import {
+  getLatestTrackedContentGenerationId,
+  trackContentGeneration,
+  untrackContentGenerations,
+} from "@/lib/generationTracking";
+import { normalizeWordbankTargetLanguage, parseWordImportText } from "@shared/wordbankImport";
 
 
 const LANGUAGES = [
@@ -200,8 +205,11 @@ function BackgroundSparkles() {
 export default function CreateStory() {
   const { user, isAuthenticated } = useAuth();
   const [location, setLocation] = useLocation();
+  const utils = trpc.useUtils();
   const [step, setStep] = useState(1);
-  const [generatingContentId, setGeneratingContentId] = useState<number | null>(null);
+  const [generatingContentId, setGeneratingContentId] = useState<number | null>(() =>
+    getLatestTrackedContentGenerationId(),
+  );
   const completionToastShownRef = useRef(false);
 
   // Read URL params for pre-filling from level test and Wordbank.
@@ -334,6 +342,35 @@ export default function CreateStory() {
     frequency?: string;
     selected: boolean;
   }>>([]);
+
+  const saveExtractedWordsMutation = trpc.wordbank.bulkImportWords.useMutation({
+    onSuccess: (data) => {
+      if (data.success > 0) {
+        toast.success(`Saved ${data.success} extracted word${data.success !== 1 ? "s" : ""} to Wordbank.`);
+      }
+      if ((data.duplicateSkipped ?? 0) > 0) {
+        toast.info(`${data.duplicateSkipped} extracted word${data.duplicateSkipped !== 1 ? "s were" : " was"} already in Wordbank.`);
+      }
+      if ((data.limitSkipped ?? 0) > 0) {
+        toast.warning(`${data.limitSkipped} extracted word${data.limitSkipped !== 1 ? "s" : ""} could not be saved because today's free vocabulary limit was reached.`);
+      }
+      void utils.wordbank.getMyWords.invalidate();
+      void utils.wordbank.getTodayWordCount.invalidate();
+    },
+    onError: (error) => {
+      toast.warning(`Words were added to the story, but could not be saved to Wordbank: ${error.message}`);
+    },
+  });
+
+  const saveExtractedWordsToWordbank = (words: string[]) => {
+    const cleanedWords = parseWordImportText(words.join("\n"));
+    if (cleanedWords.length === 0) return;
+
+    saveExtractedWordsMutation.mutate({
+      words: cleanedWords,
+      targetLanguage: normalizeWordbankTargetLanguage(effectiveLanguage || targetLanguage || "Spanish"),
+    });
+  };
 
   const generateMutation = trpc.content.generate.useMutation({
     onSuccess: (data) => {
@@ -598,16 +635,17 @@ export default function CreateStory() {
   }
 
   const handleConfirmVocabSelection = () => {
-    const selectedWords = extractedVocab
+    const selectedWordList = extractedVocab
       .filter(w => w.selected)
-      .map(w => w.word)
-      .join(", ");
+      .map(w => w.word);
+    const selectedWords = selectedWordList.join(", ");
     
     if (selectedWords) {
       setVocabularyText(prev => {
         const existing = prev.trim();
         return existing ? `${existing}, ${selectedWords}` : selectedWords;
       });
+      saveExtractedWordsToWordbank(selectedWordList);
       toast.success(`Added ${extractedVocab.filter(w => w.selected).length} words to your story!`);
     }
     
@@ -709,6 +747,7 @@ export default function CreateStory() {
         }
 
         const importedWords = mergeVocabularyWords(words);
+        saveExtractedWordsToWordbank(words);
         setUploadedFileName(file.name);
         toast.success(`Imported ${importedWords} words from ${file.name}`);
       } catch (error) {
@@ -814,6 +853,7 @@ export default function CreateStory() {
       }
 
       const addedWords = mergeVocabularyWords(collectedWords);
+      saveExtractedWordsToWordbank(collectedWords);
       if (addedWords === totalWords) {
         toast.success(`Extracted ${totalWords} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
       } else {

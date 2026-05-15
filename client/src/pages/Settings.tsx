@@ -18,12 +18,12 @@ import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Input } from "../components/ui/input";
 import { UserAvatar } from "../components/UserAvatar";
+import { normalizeWordbankTargetLanguage, parseWordImportText } from "@shared/wordbankImport";
 
 function BulkImport() {
-  const { data: user } = trpc.auth.me.useQuery();
   const utils = trpc.useUtils();
   const [wordList, setWordList] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState("");
+  const [targetLanguage, setTargetLanguage] = useState("es");
   const [importStatus, setImportStatus] = useState<"idle" | "importing" | "success" | "error">("idle");
   const [importResults, setImportResults] = useState<{
     total: number;
@@ -43,6 +43,7 @@ function BulkImport() {
       setImportResults(data);
       setWordList("");
       utils.wordbank.getMyWords.invalidate();
+      utils.wordbank.getTodayWordCount.invalidate();
     },
     onError: (error) => {
       setImportStatus("error");
@@ -56,11 +57,7 @@ function BulkImport() {
       return;
     }
 
-    // Parse words from textarea (comma or newline separated)
-    const words = wordList
-      .split(/[,\n]/)
-      .map((w) => w.trim())
-      .filter(Boolean);
+    const words = parseWordImportText(wordList);
 
     if (words.length === 0) {
       alert("Please enter at least one word");
@@ -72,7 +69,10 @@ function BulkImport() {
       return;
     }
 
-    bulkImport.mutate({ words, targetLanguage });
+    bulkImport.mutate({
+      words,
+      targetLanguage: normalizeWordbankTargetLanguage(targetLanguage),
+    });
   };
 
   const languages = [

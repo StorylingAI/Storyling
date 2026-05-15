@@ -1866,47 +1866,143 @@ export const appRouter = router({
           });
         }
 
-        try {
-          console.log(
-            "[Story Regeneration] Starting for content ID:",
-            input.contentId
-          );
+        await updateGeneratedContent(input.contentId, {
+          status: "generating",
+          progress: 5,
+          progressStage: "Regenerating story...",
+          failureReason: null,
+        });
 
-          const words = splitVocabularyInput(vocabList.words);
+        const userTranslationLanguage =
+          ctx.user.preferredTranslationLanguage || "English";
+        const words = splitVocabularyInput(vocabList.words);
 
-          // First generate the story content
-          const storyResult = await generateStory({
-            theme: content.theme,
-            vocabularyWords: words,
-            targetLanguage: vocabList.targetLanguage,
-            proficiencyLevel: vocabList.proficiencyLevel,
-            translationLanguage:
-              ctx.user.preferredTranslationLanguage || "English",
-            mode: content.mode as "podcast" | "film",
-            targetSceneCount: content.mode === "film" ? 6 : undefined,
-          });
+        void (async () => {
+          try {
+            console.log(
+              "[Story Regeneration] Starting for content ID:",
+              input.contentId
+            );
 
-          console.log(
-            "[Story Regeneration] Story generated, updating database"
-          );
+            const targetVideoDuration = content.mode === "film" ? 30 : undefined;
 
-          // Update the content with new story data (keeping original audio/video)
-          await updateGeneratedContent(input.contentId, {
-            title: storyResult.title,
-            storyText: storyResult.storyText,
-            lineTranslations: storyResult.lineTranslations as any,
-            vocabularyTranslations: storyResult.vocabularyTranslations as any,
-            status: "completed",
-          });
+            const storyResult = await generateStory({
+              theme: content.theme,
+              vocabularyWords: words,
+              targetLanguage: vocabList.targetLanguage,
+              proficiencyLevel: vocabList.proficiencyLevel,
+              translationLanguage: userTranslationLanguage,
+              mode: content.mode as "podcast" | "film",
+              targetSceneCount: content.mode === "film" ? 6 : undefined,
+              targetVideoDuration,
+            });
 
-          return { success: true, title: storyResult.title };
-        } catch (error) {
-          console.error("[Story Regeneration] Error:", error);
-          throw new TRPCError({
-            code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to regenerate story",
-          });
-        }
+            let audioUrl = content.audioUrl;
+            let videoUrl = content.videoUrl;
+            let transcript = content.transcript;
+            let audioAlignment = content.audioAlignment;
+            let thumbnailUrl = content.thumbnailUrl;
+
+            if (content.mode === "podcast" && content.voiceType) {
+              await updateGeneratedContent(input.contentId, {
+                progress: 45,
+                progressStage: "Regenerating audio...",
+              });
+
+              const podcast = (await generatePodcast(
+                {
+                  targetLanguage: vocabList.targetLanguage,
+                  proficiencyLevel: vocabList.proficiencyLevel,
+                  vocabularyWords: words,
+                  theme: content.theme,
+                  voiceType: content.voiceType,
+                  narratorGender: content.narratorGender || undefined,
+                },
+                storyResult.storyText,
+              )) as {
+                audioUrl: string;
+                transcript: string;
+                audioAlignment?: any;
+              };
+
+              audioUrl = podcast.audioUrl;
+              transcript = podcast.transcript;
+              audioAlignment = podcast.audioAlignment || null;
+              videoUrl = null;
+            } else if (content.mode === "film" && content.cinematicStyle) {
+              await updateGeneratedContent(input.contentId, {
+                progress: 45,
+                progressStage: "Regenerating video...",
+              });
+
+              const narration = resolveFilmNarrationSettings(
+                content.voiceType || undefined,
+                content.narratorGender || undefined,
+              );
+              const film = await generateFilm(
+                {
+                  targetLanguage: vocabList.targetLanguage,
+                  proficiencyLevel: vocabList.proficiencyLevel,
+                  vocabularyWords: words,
+                  theme: content.theme,
+                  cinematicStyle: content.cinematicStyle,
+                  targetVideoDuration: targetVideoDuration || 30,
+                  musicVolume: content.musicVolume ?? 20,
+                  selectedMusicTrack: content.selectedMusicTrack || undefined,
+                  addSubtitles: true,
+                  voiceType: narration.voiceType,
+                  narratorGender: narration.narratorGender,
+                  sceneBeats: storyResult.visualBeats,
+                },
+                storyResult.storyText,
+                async (stage: string, progress: number) => {
+                  await updateGeneratedContent(input.contentId, {
+                    progress: 45 + Math.floor(progress * 0.45),
+                    progressStage: stage,
+                  });
+                },
+              );
+
+              videoUrl = film.videoUrl;
+              transcript = film.transcript;
+              audioAlignment = film.audioAlignment || null;
+              thumbnailUrl = film.thumbnailUrl || thumbnailUrl;
+              audioUrl = null;
+            }
+
+            await updateGeneratedContent(input.contentId, {
+              title: storyResult.title,
+              titleTranslation: storyResult.titleTranslation,
+              storyText: storyResult.storyText,
+              lineTranslations: storyResult.lineTranslations as any,
+              vocabularyTranslations: storyResult.vocabularyTranslations as any,
+              audioUrl,
+              videoUrl,
+              transcript,
+              audioAlignment: audioAlignment as any,
+              thumbnailUrl,
+              status: "completed",
+              progress: 100,
+              progressStage: "Completed",
+              failureReason: null,
+            });
+
+            console.log(
+              "[Story Regeneration] Completed for content ID:",
+              input.contentId
+            );
+          } catch (error) {
+            console.error("[Story Regeneration] Error:", error);
+            await updateGeneratedContent(input.contentId, {
+              status: "failed",
+              progressStage: "Regeneration failed",
+              failureReason:
+                error instanceof Error ? error.message : String(error),
+            });
+          }
+        })();
+
+        return { success: true, contentId: input.contentId };
       }),
 
     regenerateTitle: protectedProcedure

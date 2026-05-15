@@ -23,6 +23,8 @@ import PracticeQuiz from "@/components/PracticeQuiz";
 import { useLocation } from "wouter";
 import { useScrollToTop } from "@/hooks/useScrollToTop";
 import { PageOnboardingTutorial } from "@/components/PageOnboardingTutorial";
+import { LATAM_SPANISH_LABEL, SPAIN_SPANISH_LABEL } from "@shared/languagePreferences";
+import { normalizeWordbankTargetLanguage, parseWordImportText } from "@shared/wordbankImport";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +34,8 @@ import {
 } from "@/components/ui/dialog";
 
 const SUPPORTED_WORD_LANGUAGES = [
-  "Spanish",
+  SPAIN_SPANISH_LABEL,
+  LATAM_SPANISH_LABEL,
   "French",
   "German",
   "Italian",
@@ -76,6 +79,10 @@ export default function Wordbank() {
   const { user: authUser } = useAuth();
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
   const utils = trpc.useUtils();
+  const getImportTargetLanguage = () =>
+    normalizeWordbankTargetLanguage(
+      languageFilter !== "all" ? languageFilter : SPAIN_SPANISH_LABEL,
+    );
 
   // Handle "Create Story from My Words" CTA
   const handleCreateStoryFromWords = () => {
@@ -258,7 +265,13 @@ export default function Wordbank() {
         languageFilter === "all" || word.targetLanguage === languageFilter;
 
       const isMastered = (word.easinessFactor ?? 0) >= 2500 && (word.interval ?? 0) >= 30;
-      const matchesMasteryFilter = showMastered ? true : !isMastered;
+      const masteryLevel =
+        (word as { masteryLevel?: "learning" | "familiar" | "mastered" }).masteryLevel ||
+        (isMastered ? "mastered" : "learning");
+      const matchesMasteryFilter =
+        masteryFilter !== "all"
+          ? masteryLevel === masteryFilter
+          : showMastered || masteryLevel !== "mastered";
 
       return matchesSearch && matchesLanguage && matchesMasteryFilter;
     });
@@ -353,14 +366,24 @@ export default function Wordbank() {
     }
   };
 
-  const appendImportWords = (newWords: string[]) => {
-    const cleanedWords = newWords.map((word) => word.trim()).filter(Boolean);
-    if (cleanedWords.length === 0) return;
+  const importWordsNow = (rawWords: string[], emptyMessage: string) => {
+    const words = parseWordImportText(rawWords.join("\n"));
+    if (words.length === 0) {
+      toast.error(emptyMessage);
+      return 0;
+    }
 
-    setImportText((current) => {
-      const separator = current.trim() ? "\n" : "";
-      return `${current.trimEnd()}${separator}${cleanedWords.join("\n")}`;
+    if (bulkImportWords.isPending) {
+      toast.info("An import is already running. Please wait for it to finish.");
+      return 0;
+    }
+
+    setImportText(words.join("\n"));
+    bulkImportWords.mutate({
+      words,
+      targetLanguage: getImportTargetLanguage(),
     });
+    return words.length;
   };
 
   const readFileAsBase64 = (file: File) =>
@@ -428,27 +451,28 @@ export default function Wordbank() {
 
     try {
       if (mimeType === "text/plain" || mimeType === "text/csv") {
-        appendImportWords((await file.text()).split(/[\n,，、;；]+/));
-        toast.success(`Loaded words from ${file.name}`);
+        const importedCount = importWordsNow(
+          [await file.text()],
+          `No words found in ${file.name}`,
+        );
+        if (importedCount > 0) {
+          toast.success(`Importing ${importedCount} words from ${file.name}`);
+        }
       } else {
         const base64Data = await readFileAsBase64(file);
-        const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
         const data = await uploadDocumentMutation.mutateAsync({
           fileData: base64Data,
           fileName: file.name,
           mimeType,
-          targetLanguage,
+          targetLanguage: getImportTargetLanguage(),
           maxWords: 100,
         });
-        appendImportWords(data.vocabularyWords.map((item) => item.word));
-        toast.success(`Extracted ${data.totalWords} words from ${file.name}`);
-        if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
-          const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
-          if (data.totalWords > remaining) {
-            toast.info(
-              `You can save ${remaining} more word${remaining !== 1 ? "s" : ""} today on the free plan; the rest will remain in the import box.`,
-            );
-          }
+        const importedCount = importWordsNow(
+          data.vocabularyWords.map((item) => item.word),
+          `No vocabulary found in ${file.name}`,
+        );
+        if (importedCount > 0) {
+          toast.success(`Extracted and importing ${importedCount} words from ${file.name}`);
         }
       }
     } catch (error) {
@@ -474,7 +498,6 @@ export default function Wordbank() {
     setIsProcessingImportPhoto(true);
 
     try {
-      const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
       const extractedWords: string[] = [];
 
       for (const file of files) {
@@ -482,25 +505,17 @@ export default function Wordbank() {
         const data = await ocrMutation.mutateAsync({
           imageBase64: base64Data,
           mimeType: file.type || "image/jpeg",
-          targetLanguage,
+          targetLanguage: getImportTargetLanguage(),
         });
         extractedWords.push(...data.vocabulary);
       }
 
-      if (extractedWords.length === 0) {
-        toast.error("No vocabulary found in the selected photo.");
-        return;
-      }
-
-      appendImportWords(extractedWords);
-      toast.success(`Extracted ${extractedWords.length} words from ${files.length} photo${files.length > 1 ? "s" : ""}`);
-      if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
-        const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
-        if (extractedWords.length > remaining) {
-          toast.info(
-            `You can save ${remaining} more word${remaining !== 1 ? "s" : ""} today on the free plan; the rest will remain in the import box.`,
-          );
-        }
+      const importedCount = importWordsNow(
+        extractedWords,
+        "No vocabulary found in the selected photo.",
+      );
+      if (importedCount > 0) {
+        toast.success(`Extracted and importing ${importedCount} words from ${files.length} photo${files.length > 1 ? "s" : ""}`);
       }
     } catch (error) {
       toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
@@ -535,13 +550,7 @@ export default function Wordbank() {
       return;
     }
 
-    const normalizedImportText = importText.replace(/[，、；]/g, ",");
-    const words = Array.from(new Set(
-      normalizedImportText
-        .split(/[\n,，、;]+/)
-        .map((word) => word.trim())
-        .filter(Boolean)
-    ));
+    const words = parseWordImportText(importText);
 
     if (words.length === 0) {
       toast.error("No valid words found. Enter one word per line.");
@@ -549,7 +558,7 @@ export default function Wordbank() {
     }
 
     // Use current language filter or default to Spanish
-    const targetLanguage = languageFilter !== "all" ? languageFilter : "Spanish";
+    const targetLanguage = getImportTargetLanguage();
     if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
       const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
       if (remaining === 0) {
@@ -1142,7 +1151,7 @@ export default function Wordbank() {
             <div className="space-y-4 mt-4">
               <div>
                 <label className="text-sm font-bold mb-1 block">
-                  Target Language: {languageFilter !== "all" ? languageFilter : "Spanish"}
+                  Target Language: {getImportTargetLanguage()}
                 </label>
                 <p className="text-xs text-gray-400">
                   Change the language filter above to import words for a different language.
@@ -1188,7 +1197,7 @@ export default function Wordbank() {
                 <Button
                   variant="outline"
                   type="button"
-                  disabled={isProcessingImportFile}
+                  disabled={isProcessingImportFile || bulkImportWords.isPending}
                   onClick={() => fileInputRef.current?.click()}
                   className="h-auto w-full justify-start rounded-xl border-gray-300 px-4 py-3 text-left"
                 >
@@ -1205,7 +1214,7 @@ export default function Wordbank() {
                 <Button
                   variant="outline"
                   type="button"
-                  disabled={isProcessingImportPhoto}
+                  disabled={isProcessingImportPhoto || bulkImportWords.isPending}
                   onClick={() => photoInputRef.current?.click()}
                   className="h-auto w-full justify-start rounded-xl border-gray-300 px-4 py-3 text-left"
                 >

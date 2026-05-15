@@ -1051,12 +1051,20 @@ export default function Library() {
                       : 0;
                     
                     return progressPercent > 0 && progressPercent < 100 ? (
-                      <div className="absolute top-3 right-3 z-10">
-                        <Badge className="bg-purple-600 text-white shadow-lg">
+                      <button
+                        type="button"
+                        className="absolute top-3 right-3 z-10"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setLocation(`/content/${content.id}`);
+                        }}
+                        aria-label={`Continue ${content.title || "this film"}`}
+                      >
+                        <Badge className="bg-purple-600 text-white shadow-lg hover:bg-purple-700">
                           <Play className="h-3 w-3 mr-1" />
                           Continue
                         </Badge>
-                      </div>
+                      </button>
                     ) : null;
                   })()}
                   

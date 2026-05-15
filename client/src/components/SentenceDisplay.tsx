@@ -405,8 +405,11 @@ export function SentenceDisplay({
       return cleanOriginal === cleanSentence || cleanOriginal.includes(cleanSentence) || cleanSentence.includes(cleanOriginal);
     });
     
-    return match || safeLineTranslations[currentSentenceIndex] || null;
-  }, [currentSentence, currentSentenceIndex, safeLineTranslations]);
+    if (match) return match;
+    return timedSubtitleSegments.length > 0
+      ? null
+      : safeLineTranslations[currentSentenceIndex] || null;
+  }, [currentSentence, currentSentenceIndex, safeLineTranslations, timedSubtitleSegments.length]);
 
   // Helper function to check if a word is in vocabulary list
   const isVocabularyWord = (word: string): boolean => {

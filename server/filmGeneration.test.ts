@@ -670,6 +670,80 @@ describe('generateFilm NSFW retry', () => {
     );
   });
 
+  it('should never use visual scene beats as narration when story text is longer than the duration target', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A visual-only kitchen shot with morning light.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/story-clip.mp4',
+      status: 'completed',
+      requestId: 'clip-story-narration',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/final-story-narration.mp4',
+      duration: 30,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        statusText: 'timestamps unavailable',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer,
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const storyText = [
+      'Ana se levanta temprano cada dia y abre la ventana para mirar la calle tranquila.',
+      'Despues prepara cafe, busca su cuaderno azul y repasa las palabras nuevas antes de salir.',
+      'En la cocina saluda a su madre, escucha una cancion suave y sonrie porque entiende cada frase.',
+      'Cuando llega su amigo Pablo, Ana explica su rutina con calma y los dos practican juntos.',
+      'Al final de la manana, Ana se siente segura, organizada y lista para aprender mas espanol.',
+    ].join(' ');
+    const visualBeat = 'Wide visual-only beat: Clara stands in a kitchen holding books while sunlight enters.';
+
+    await generateFilm(
+      {
+        targetLanguage: 'Spanish',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['levantarse'],
+        theme: 'Slice-of-Life',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 30,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+        sceneBeats: [visualBeat],
+      },
+      storyText,
+    );
+
+    const plainTtsBody = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(plainTtsBody.text).toContain('Ana se levanta temprano');
+    expect(plainTtsBody.text).not.toContain('Wide visual-only beat');
+    expect(mockedStitchVideos).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sceneTexts: expect.arrayContaining([
+          expect.stringContaining('Ana se levanta temprano'),
+        ]),
+      }),
+    );
+  });
+
   it('should use ElevenLabs first for Spanish film narration', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test',

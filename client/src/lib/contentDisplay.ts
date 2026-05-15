@@ -11,6 +11,12 @@ export interface DisplayVocabularyData {
   exampleSentences: string[];
 }
 
+export interface DisplaySubtitleSegment {
+  startTime: number;
+  endTime: number;
+  text: string;
+}
+
 function maybeParseJson(value: unknown): unknown {
   if (typeof value !== "string") {
     return value;
@@ -126,6 +132,54 @@ export function normalizeLineTranslations(value: unknown): DisplayLineTranslatio
       },
     ];
   });
+}
+
+function normalizeForLineMatch(value: string): string {
+  return value
+    .replace(/\*\*(.+?)\*\*/g, "$1")
+    .replace(/\*(.+?)\*/g, "$1")
+    .replace(/_(.+?)_/g, "$1")
+    .replace(/~~(.+?)~~/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function findMatchingLineTranslation(
+  text: string,
+  lineTranslations: DisplayLineTranslation[],
+): DisplayLineTranslation | null {
+  const cleanText = normalizeForLineMatch(text);
+  if (!cleanText) return null;
+
+  return (
+    lineTranslations.find((translation) => {
+      const cleanOriginal = normalizeForLineMatch(translation.original);
+      return cleanOriginal === cleanText;
+    }) || null
+  );
+}
+
+export function buildLineTranslationsForDisplay(
+  subtitleSegments: DisplaySubtitleSegment[],
+  lineTranslations: unknown,
+): DisplayLineTranslation[] {
+  const safeLineTranslations = normalizeLineTranslations(lineTranslations);
+  if (subtitleSegments.length === 0) {
+    return safeLineTranslations;
+  }
+
+  return subtitleSegments
+    .map((segment) => {
+      const original = safeString(segment.text).trim();
+      if (!original) return null;
+      const match = findMatchingLineTranslation(original, safeLineTranslations);
+      return {
+        original,
+        english: match?.english || "",
+        ...(match?.pinyin ? { pinyin: match.pinyin } : {}),
+      };
+    })
+    .filter((line): line is DisplayLineTranslation => line !== null);
 }
 
 export function normalizeVocabularyTranslations(

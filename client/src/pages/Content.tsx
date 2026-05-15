@@ -75,7 +75,12 @@ import { MobileNav } from "@/components/MobileNav";
 import { ShareStoryModal } from "@/components/ShareStoryModal";
 import { useEntitlements } from "@/hooks/useEntitlements";
 import { Crown, Lock } from "lucide-react";
-import { normalizeStringArray, safeString } from "@/lib/contentDisplay";
+import {
+  buildLineTranslationsForDisplay,
+  normalizeStringArray,
+  safeString,
+} from "@/lib/contentDisplay";
+import { trackContentGeneration } from "@/lib/generationTracking";
 
 type FilmSubtitleSegment = {
   startTime: number;
@@ -211,6 +216,20 @@ export default function Content() {
     () => (content?.mode === "film" ? parseFilmSubtitleSegments(content.transcript) : []),
     [content?.mode, content?.transcript],
   );
+  const displayStoryText = useMemo(
+    () =>
+      content?.mode === "film" && filmSubtitleSegments.length > 0
+        ? filmSubtitleSegments.map((segment) => segment.text).join(" ")
+        : content?.storyText,
+    [content?.mode, content?.storyText, filmSubtitleSegments],
+  );
+  const displayLineTranslations = useMemo(
+    () =>
+      content?.mode === "film" && filmSubtitleSegments.length > 0
+        ? buildLineTranslationsForDisplay(filmSubtitleSegments, content.lineTranslations)
+        : content?.lineTranslations,
+    [content?.mode, content?.lineTranslations, filmSubtitleSegments],
+  );
 
   const { data: favorites } = trpc.content.getFavorites.useQuery(undefined, {
     enabled: isAuthenticated,
@@ -316,10 +335,16 @@ export default function Content() {
   
   const regenerateStoryMutation = trpc.content.regenerateStory.useMutation({
     onSuccess: (data) => {
-      toast.success(`Story regenerated with improved formatting!`);
+      if (data.contentId) {
+        trackContentGeneration(data.contentId);
+      }
+      toast.success(
+        content?.mode === "film" || content?.mode === "podcast"
+          ? "Regeneration started. The media will update when it is ready."
+          : "Story regenerated with improved formatting!",
+      );
       utils.content.getById.invalidate({ id: contentId });
-      // Reload the page to show the new content
-      window.location.reload();
+      utils.content.getLibrary.invalidate();
     },
     onError: (error: any) => {
       toast.error(`Failed to regenerate story: ${error.message}`);
@@ -1227,10 +1252,10 @@ export default function Content() {
               <CardContent className="p-0">
                 <SentenceDisplay
                   key={`${content.id}-${content.mode}`}
-                  storyText={content.storyText}
+                  storyText={displayStoryText}
                   vocabularyWords={vocabularyWordList}
                   storyLanguage={content.targetLanguage}
-                  lineTranslations={content.lineTranslations as any}
+                  lineTranslations={displayLineTranslations as any}
                   audioRef={content.mode === "podcast" ? audioRef : videoRef}
                   isPlaying={isPlaying}
                   onSentenceChange={setCurrentSentence}
@@ -1468,8 +1493,8 @@ export default function Content() {
             <Card className="rounded-2xl shadow-sm border border-gray-100 bg-white text-gray-900 dark:bg-white dark:text-gray-900">
               <CardContent className="pt-6">
                 <StoryDisplay
-                  storyText={content.storyText}
-                  lineTranslations={content.lineTranslations as any}
+                  storyText={displayStoryText}
+                  lineTranslations={displayLineTranslations as any}
                   vocabularyTranslations={content.vocabularyTranslations as any}
                   targetLanguage={content.targetLanguage}
                   audioRef={content.mode === "podcast" ? audioRef : undefined}
