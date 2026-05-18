@@ -859,24 +859,6 @@ export async function generatePodcast(
     .replace(/~~(.+?)~~/g, '$1');     // Remove strikethrough: ~~text~~ -> text
 
   try {
-    if (isSpanishLanguage(params.targetLanguage)) {
-      try {
-        const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
-        const audioUrl = await generateSpeechGoogleCloud(
-          cleanText,
-          params.targetLanguage,
-          gender
-        );
-
-        return { audioUrl, transcript: storyText };
-      } catch (error) {
-        console.warn(
-          "[Podcast Generation] Google Cloud TTS failed for Spanish, falling back to ElevenLabs:",
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-    }
-
     const voiceSettings = getVoiceSettings(params.voiceType);
     const requestBody = {
       text: cleanText,
@@ -937,22 +919,56 @@ export async function generatePodcast(
       return { audioData: Buffer.from(audioBuffer) };
     };
 
+    const synthesizeWithGoogleCloudFallback = async (
+      elevenLabsError: unknown,
+    ): Promise<{ audioUrl: string; transcript: string }> => {
+      const { generateSpeechGoogleCloud } = await import("./googleCloudTTS");
+      console.warn(
+        "[Podcast Generation] ElevenLabs failed for Spanish, falling back to Google Cloud TTS:",
+        elevenLabsError instanceof Error ? elevenLabsError.message : String(elevenLabsError),
+      );
+
+      const audioUrl = await generateSpeechGoogleCloud(
+        cleanText,
+        params.targetLanguage,
+        gender,
+      );
+
+      return { audioUrl, transcript: storyText };
+    };
+
     let voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
-    let synthesis: { audioData: Buffer; audioAlignment?: ElevenLabsAlignment };
+    let synthesis: { audioData: Buffer; audioAlignment?: ElevenLabsAlignment } | null = null;
+    let lastElevenLabsError: unknown = null;
 
     try {
       synthesis = await synthesizeWithElevenLabs(voiceId);
     } catch (error) {
-      if (params.voiceType === "Warm & Friendly") {
-        throw error;
+      lastElevenLabsError = error;
+
+      if (params.voiceType !== "Warm & Friendly") {
+        console.warn(
+          `[Podcast Generation] Voice "${params.voiceType}" failed, falling back to Warm & Friendly:`,
+          error instanceof Error ? error.message : String(error),
+        );
+
+        try {
+          voiceId = getNativeVoiceId(params.targetLanguage, "Warm & Friendly", gender);
+          synthesis = await synthesizeWithElevenLabs(voiceId);
+        } catch (fallbackError) {
+          lastElevenLabsError = fallbackError;
+        }
+      }
+    }
+
+    if (!synthesis) {
+      if (isSpanishLanguage(params.targetLanguage)) {
+        return await synthesizeWithGoogleCloudFallback(lastElevenLabsError);
       }
 
-      console.warn(
-        `[Podcast Generation] Voice "${params.voiceType}" failed, falling back to Warm & Friendly:`,
-        error instanceof Error ? error.message : String(error),
-      );
-      voiceId = getNativeVoiceId(params.targetLanguage, "Warm & Friendly", gender);
-      synthesis = await synthesizeWithElevenLabs(voiceId);
+      throw lastElevenLabsError instanceof Error
+        ? lastElevenLabsError
+        : new Error("ElevenLabs TTS failed");
     }
 
     // Upload to S3

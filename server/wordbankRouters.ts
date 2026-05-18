@@ -19,7 +19,10 @@ import {
 } from "./wordbankDb";
 import { isDueForReview, getDaysUntilReview } from "./srsAlgorithm";
 import { normalizeLearningLanguage } from "@shared/languagePreferences";
-import { normalizeWordbankTargetLanguage } from "@shared/wordbankImport";
+import {
+  normalizeWordbankTargetLanguage,
+  shouldSkipWordImportCandidate,
+} from "@shared/wordbankImport";
 
 export const wordbankRouter = router({
   checkWordExists: protectedProcedure
@@ -44,10 +47,12 @@ export const wordbankRouter = router({
       z.object({
         words: z.array(z.string()).min(1).max(100),
         targetLanguage: z.string(),
+        generateTranslations: z.boolean().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
-      const { invokeLLM } = await import("./_core/llm");
+      const generateTranslations = input.generateTranslations !== false;
+      const llm = generateTranslations ? await import("./_core/llm") : null;
       const dailyWindow = getDailyWindow(ctx.user.timezone || null);
       const targetLanguage = normalizeWordbankTargetLanguage(input.targetLanguage);
       const results = {
@@ -73,6 +78,12 @@ export const wordbankRouter = router({
           if (!trimmedWord) {
             results.skipped++;
             results.emptySkipped++;
+            continue;
+          }
+
+          if (shouldSkipWordImportCandidate(trimmedWord, targetLanguage)) {
+            results.skipped++;
+            results.errors.push(`"${trimmedWord}" does not look like ${targetLanguage} vocabulary`);
             continue;
           }
 
@@ -104,48 +115,50 @@ export const wordbankRouter = router({
           }
 
           let translation = "";
-          try {
-            // Get translation using LLM, but do not drop the word if translation fails.
-            const response = await invokeLLM({
-              messages: [
-                {
-                  role: "system",
-                  content: "You are a language translation assistant. Translate the given word to the target language and provide a brief definition.",
-                },
-                {
-                  role: "user",
-                  content: `Translate the word "${trimmedWord}" to ${translationLanguage}. Provide the translation and a brief definition.`,
-                },
-              ],
-              response_format: {
-                type: "json_schema",
-                json_schema: {
-                  name: "word_translation",
-                  strict: true,
-                  schema: {
-                    type: "object",
-                    properties: {
-                      word: { type: "string", description: "The original word" },
-                      translation: { type: "string", description: "Translation in target language" },
-                      definition: { type: "string", description: "Brief definition" },
-                      sourceLanguage: { type: "string", description: "Detected source language code" },
+          if (llm) {
+            try {
+              // Get translation using LLM, but do not drop the word if translation fails.
+              const response = await llm.invokeLLM({
+                messages: [
+                  {
+                    role: "system",
+                    content: "You are a language translation assistant. Translate the given word to the target language and provide a brief definition.",
+                  },
+                  {
+                    role: "user",
+                    content: `Translate the word "${trimmedWord}" to ${translationLanguage}. Provide the translation and a brief definition.`,
+                  },
+                ],
+                response_format: {
+                  type: "json_schema",
+                  json_schema: {
+                    name: "word_translation",
+                    strict: true,
+                    schema: {
+                      type: "object",
+                      properties: {
+                        word: { type: "string", description: "The original word" },
+                        translation: { type: "string", description: "Translation in target language" },
+                        definition: { type: "string", description: "Brief definition" },
+                        sourceLanguage: { type: "string", description: "Detected source language code" },
+                      },
+                      required: ["word", "translation", "definition", "sourceLanguage"],
+                      additionalProperties: false,
                     },
-                    required: ["word", "translation", "definition", "sourceLanguage"],
-                    additionalProperties: false,
                   },
                 },
-              },
-            });
+              });
 
-            const content = response.choices[0].message.content;
-            const translationData = JSON.parse(typeof content === "string" ? content : "{}");
-            translation = typeof translationData.translation === "string"
-              ? translationData.translation
-              : "";
-          } catch (translationError) {
-            results.errors.push(
-              `"${trimmedWord}": imported without translation (${translationError instanceof Error ? translationError.message : "translation unavailable"})`,
-            );
+              const content = response.choices[0].message.content;
+              const translationData = JSON.parse(typeof content === "string" ? content : "{}");
+              translation = typeof translationData.translation === "string"
+                ? translationData.translation
+                : "";
+            } catch (translationError) {
+              results.errors.push(
+                `"${trimmedWord}": imported without translation (${translationError instanceof Error ? translationError.message : "translation unavailable"})`,
+              );
+            }
           }
 
           // Save to wordbank

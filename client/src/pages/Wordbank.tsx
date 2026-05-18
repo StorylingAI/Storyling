@@ -366,8 +366,16 @@ export default function Wordbank() {
     }
   };
 
-  const importWordsNow = (rawWords: string[], emptyMessage: string) => {
-    const words = parseWordImportText(rawWords.join("\n"));
+  const importWordsNow = (
+    rawWords: string[],
+    emptyMessage: string,
+    source: "text" | "csv" = "text",
+  ) => {
+    const targetLanguage = getImportTargetLanguage();
+    const words = parseWordImportText(rawWords.join("\n"), {
+      source,
+      targetLanguage,
+    });
     if (words.length === 0) {
       toast.error(emptyMessage);
       return 0;
@@ -381,7 +389,7 @@ export default function Wordbank() {
     setImportText(words.join("\n"));
     bulkImportWords.mutate({
       words,
-      targetLanguage: getImportTargetLanguage(),
+      targetLanguage,
     });
     return words.length;
   };
@@ -454,6 +462,7 @@ export default function Wordbank() {
         const importedCount = importWordsNow(
           [await file.text()],
           `No words found in ${file.name}`,
+          mimeType === "text/csv" ? "csv" : "text",
         );
         if (importedCount > 0) {
           toast.success(`Importing ${importedCount} words from ${file.name}`);
@@ -470,6 +479,7 @@ export default function Wordbank() {
         const importedCount = importWordsNow(
           data.vocabularyWords.map((item) => item.word),
           `No vocabulary found in ${file.name}`,
+          "text",
         );
         if (importedCount > 0) {
           toast.success(`Extracted and importing ${importedCount} words from ${file.name}`);
@@ -513,6 +523,7 @@ export default function Wordbank() {
       const importedCount = importWordsNow(
         extractedWords,
         "No vocabulary found in the selected photo.",
+        "text",
       );
       if (importedCount > 0) {
         toast.success(`Extracted and importing ${importedCount} words from ${files.length} photo${files.length > 1 ? "s" : ""}`);
@@ -550,15 +561,14 @@ export default function Wordbank() {
       return;
     }
 
-    const words = parseWordImportText(importText);
+    const targetLanguage = getImportTargetLanguage();
+    const words = parseWordImportText(importText, { targetLanguage });
 
     if (words.length === 0) {
       toast.error("No valid words found. Enter one word per line.");
       return;
     }
 
-    // Use current language filter or default to Spanish
-    const targetLanguage = getImportTargetLanguage();
     if (todayWordCount?.limit !== null && todayWordCount?.limit !== undefined) {
       const remaining = Math.max(todayWordCount.limit - todayWordCount.count, 0);
       if (remaining === 0) {

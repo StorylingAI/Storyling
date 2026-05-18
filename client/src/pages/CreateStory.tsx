@@ -35,7 +35,16 @@ import {
   trackContentGeneration,
   untrackContentGenerations,
 } from "@/lib/generationTracking";
-import { normalizeWordbankTargetLanguage, parseWordImportText } from "@shared/wordbankImport";
+import {
+  loadCreateStoryDraft,
+  resolveDraftValue,
+  saveCreateStoryDraft,
+} from "@/lib/createStoryDraft";
+import {
+  createWordbankImportBatches,
+  normalizeWordbankTargetLanguage,
+  parseWordImportText,
+} from "@shared/wordbankImport";
 
 
 const LANGUAGES = [
@@ -218,14 +227,22 @@ export default function CreateStory() {
   const languageParam = urlParams.get('language');
   const levelParam = urlParams.get('level');
   const vocabParam = urlParams.get('vocab');
+  const draft = useMemo(() => loadCreateStoryDraft(), []);
+  const initialTargetLanguage = resolveDraftValue(languageParam, draft?.targetLanguage, "");
 
   // Step 1 state
-  const [targetLanguage, setTargetLanguage] = useState(languageParam || "");
-  const [spanishDialect, setSpanishDialect] = useState<"spain" | "latam" | "">("")
-  const [proficiencyLevel, setProficiencyLevel] = useState(levelParam || "");
-  const [vocabularyText, setVocabularyText] = useState(vocabParam || "");
-  const [topicPrompt, setTopicPrompt] = useState("");
-  const [translationLanguage, setTranslationLanguage] = useState("");
+  const [targetLanguage, setTargetLanguage] = useState(initialTargetLanguage);
+  const [spanishDialect, setSpanishDialect] = useState<"spain" | "latam" | "">(
+    initialTargetLanguage === "Spanish" ? draft?.spanishDialect || "" : "",
+  )
+  const [proficiencyLevel, setProficiencyLevel] = useState(
+    resolveDraftValue(levelParam, draft?.proficiencyLevel, ""),
+  );
+  const [vocabularyText, setVocabularyText] = useState(
+    resolveDraftValue(vocabParam, draft?.vocabularyText, ""),
+  );
+  const [topicPrompt, setTopicPrompt] = useState(draft?.topicPrompt || "");
+  const [translationLanguage, setTranslationLanguage] = useState(draft?.translationLanguage || "");
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessingPhoto, setIsProcessingPhoto] = useState(false);
@@ -244,21 +261,21 @@ export default function CreateStory() {
   }, [userData, translationLanguage]);
 
   // Step 2 state
-  const [mode, setMode] = useState<"podcast" | "film" | "">("");
+  const [mode, setMode] = useState<"podcast" | "film" | "">(draft?.mode || "");
 
   // Step 3 state
-  const [theme, setTheme] = useState("");
-  const [storyLength, setStoryLength] = useState<"short" | "medium" | "long">("medium");
-  const [voiceType, setVoiceType] = useState("");
-  const [narratorGender, setNarratorGender] = useState<"male" | "female">("female");
+  const [theme, setTheme] = useState(draft?.theme || "");
+  const [storyLength, setStoryLength] = useState<"short" | "medium" | "long">(draft?.storyLength || "medium");
+  const [voiceType, setVoiceType] = useState(draft?.voiceType || "");
+  const [narratorGender, setNarratorGender] = useState<"male" | "female">(draft?.narratorGender || "female");
   const [playingPreview, setPlayingPreview] = useState<string | null>(null);
   const [previewAudio, setPreviewAudio] = useState<HTMLAudioElement | null>(null);
-  const [cinematicStyle, setCinematicStyle] = useState("");
-  const [videoDuration, setVideoDuration] = useState<number>(30);
-  const [backgroundMusic, setBackgroundMusic] = useState<string>("none");
-  const [musicVolume, setMusicVolume] = useState<number>(20);
-  const [selectedMusicTrack, setSelectedMusicTrack] = useState<string>("");
-  const [addSubtitles, setAddSubtitles] = useState<boolean>(true);
+  const [cinematicStyle, setCinematicStyle] = useState(draft?.cinematicStyle || "");
+  const [videoDuration, setVideoDuration] = useState<number>(draft?.videoDuration ?? 30);
+  const [backgroundMusic, setBackgroundMusic] = useState<string>(draft?.backgroundMusic || "none");
+  const [musicVolume, setMusicVolume] = useState<number>(draft?.musicVolume ?? 20);
+  const [selectedMusicTrack, setSelectedMusicTrack] = useState<string>(draft?.selectedMusicTrack || "");
+  const [addSubtitles, setAddSubtitles] = useState<boolean>(draft?.addSubtitles ?? true);
   const [showPaywallModal, setShowPaywallModal] = useState(false);
   const [paywallHeadline, setPaywallHeadline] = useState<PaywallHeadline>("keep_going");
   const [showPersonalizedOverlay, setShowPersonalizedOverlay] = useState(false);
@@ -268,12 +285,12 @@ export default function CreateStory() {
 
   // Check usage stats for feature gating
   const { data: usageStats } = trpc.subscription.getUsageStats.useQuery({ timezone });
-  const [subtitleFontSize, setSubtitleFontSize] = useState<"small" | "medium" | "large">("medium");
-  const [subtitlePosition, setSubtitlePosition] = useState<"top" | "bottom">("bottom");
-  const [subtitleColor, setSubtitleColor] = useState<"white" | "yellow" | "cyan">("white");
-  const [subtitleFontFamily, setSubtitleFontFamily] = useState<"Arial" | "Times New Roman" | "Courier New" | "Georgia" | "Verdana">("Arial");
-  const [subtitleOutlineThickness, setSubtitleOutlineThickness] = useState<number>(2);
-  const [subtitleBackgroundOpacity, setSubtitleBackgroundOpacity] = useState<number>(0);
+  const [subtitleFontSize, setSubtitleFontSize] = useState<"small" | "medium" | "large">(draft?.subtitleFontSize || "medium");
+  const [subtitlePosition, setSubtitlePosition] = useState<"top" | "bottom">(draft?.subtitlePosition || "bottom");
+  const [subtitleColor, setSubtitleColor] = useState<"white" | "yellow" | "cyan">(draft?.subtitleColor || "white");
+  const [subtitleFontFamily, setSubtitleFontFamily] = useState<"Arial" | "Times New Roman" | "Courier New" | "Georgia" | "Verdana">(draft?.subtitleFontFamily || "Arial");
+  const [subtitleOutlineThickness, setSubtitleOutlineThickness] = useState<number>(draft?.subtitleOutlineThickness ?? 2);
+  const [subtitleBackgroundOpacity, setSubtitleBackgroundOpacity] = useState<number>(draft?.subtitleBackgroundOpacity ?? 0);
   const [playingMusicPreview, setPlayingMusicPreview] = useState<string | null>(null);
   const [musicPreviewAudio, setMusicPreviewAudio] = useState<HTMLAudioElement | null>(null);
   
@@ -333,6 +350,60 @@ export default function CreateStory() {
     return false;
   }, [mode, theme, voiceType, cinematicStyle]);
 
+  useEffect(() => {
+    saveCreateStoryDraft({
+      step,
+      targetLanguage,
+      spanishDialect,
+      proficiencyLevel,
+      vocabularyText,
+      topicPrompt,
+      translationLanguage,
+      mode,
+      theme,
+      storyLength,
+      voiceType,
+      narratorGender,
+      cinematicStyle,
+      videoDuration,
+      backgroundMusic,
+      musicVolume,
+      selectedMusicTrack,
+      addSubtitles,
+      subtitleFontSize,
+      subtitlePosition,
+      subtitleColor,
+      subtitleFontFamily,
+      subtitleOutlineThickness,
+      subtitleBackgroundOpacity,
+    });
+  }, [
+    step,
+    targetLanguage,
+    spanishDialect,
+    proficiencyLevel,
+    vocabularyText,
+    topicPrompt,
+    translationLanguage,
+    mode,
+    theme,
+    storyLength,
+    voiceType,
+    narratorGender,
+    cinematicStyle,
+    videoDuration,
+    backgroundMusic,
+    musicVolume,
+    selectedMusicTrack,
+    addSubtitles,
+    subtitleFontSize,
+    subtitlePosition,
+    subtitleColor,
+    subtitleFontFamily,
+    subtitleOutlineThickness,
+    subtitleBackgroundOpacity,
+  ]);
+
   // State for vocabulary preview dialog
   const [showVocabPreview, setShowVocabPreview] = useState(false);
   const [extractedVocab, setExtractedVocab] = useState<Array<{
@@ -343,33 +414,60 @@ export default function CreateStory() {
     selected: boolean;
   }>>([]);
 
-  const saveExtractedWordsMutation = trpc.wordbank.bulkImportWords.useMutation({
-    onSuccess: (data) => {
-      if (data.success > 0) {
-        toast.success(`Saved ${data.success} extracted word${data.success !== 1 ? "s" : ""} to Wordbank.`);
+  const saveExtractedWordsMutation = trpc.wordbank.bulkImportWords.useMutation();
+
+  const saveExtractedWordsToWordbank = async (words: string[]) => {
+    const batches = createWordbankImportBatches(words);
+    if (batches.length === 0) return;
+
+    const results: Array<{ success: number; duplicateSkipped?: number; limitSkipped?: number }> = [];
+    const normalizedTargetLanguage = normalizeWordbankTargetLanguage(effectiveLanguage || targetLanguage || "Spanish");
+    let saveError: unknown = null;
+
+    try {
+      for (const batch of batches) {
+        const result = await saveExtractedWordsMutation.mutateAsync({
+          words: batch,
+          targetLanguage: normalizedTargetLanguage,
+          generateTranslations: false,
+        });
+        results.push(result);
       }
-      if ((data.duplicateSkipped ?? 0) > 0) {
-        toast.info(`${data.duplicateSkipped} extracted word${data.duplicateSkipped !== 1 ? "s were" : " was"} already in Wordbank.`);
+    } catch (error) {
+      saveError = error;
+    }
+
+    if (results.length > 0) {
+      const totals = results.reduce<{ success: number; duplicateSkipped: number; limitSkipped: number }>(
+        (acc, data) => ({
+          success: acc.success + data.success,
+          duplicateSkipped: acc.duplicateSkipped + (data.duplicateSkipped ?? 0),
+          limitSkipped: acc.limitSkipped + (data.limitSkipped ?? 0),
+        }),
+        { success: 0, duplicateSkipped: 0, limitSkipped: 0 },
+      );
+
+      if (totals.success > 0) {
+        toast.success(`Saved ${totals.success} extracted word${totals.success !== 1 ? "s" : ""} to Wordbank.`);
       }
-      if ((data.limitSkipped ?? 0) > 0) {
-        toast.warning(`${data.limitSkipped} extracted word${data.limitSkipped !== 1 ? "s" : ""} could not be saved because today's free vocabulary limit was reached.`);
+      if (totals.duplicateSkipped > 0) {
+        toast.info(`${totals.duplicateSkipped} extracted word${totals.duplicateSkipped !== 1 ? "s were" : " was"} already in Wordbank.`);
       }
+      if (totals.limitSkipped > 0) {
+        toast.warning(`${totals.limitSkipped} extracted word${totals.limitSkipped !== 1 ? "s" : ""} could not be saved because today's free vocabulary limit was reached.`);
+      }
+
       void utils.wordbank.getMyWords.invalidate();
       void utils.wordbank.getTodayWordCount.invalidate();
-    },
-    onError: (error) => {
-      toast.warning(`Words were added to the story, but could not be saved to Wordbank: ${error.message}`);
-    },
-  });
+    }
 
-  const saveExtractedWordsToWordbank = (words: string[]) => {
-    const cleanedWords = parseWordImportText(words.join("\n"));
-    if (cleanedWords.length === 0) return;
-
-    saveExtractedWordsMutation.mutate({
-      words: cleanedWords,
-      targetLanguage: normalizeWordbankTargetLanguage(effectiveLanguage || targetLanguage || "Spanish"),
-    });
+    if (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError);
+      const prefix = results.length > 0
+        ? "Some words were saved to Wordbank, but the auto-save did not fully finish"
+        : "Words were added to the story, but could not be saved to Wordbank";
+      toast.warning(`${prefix}: ${message}`);
+    }
   };
 
   const generateMutation = trpc.content.generate.useMutation({
@@ -645,7 +743,7 @@ export default function CreateStory() {
         const existing = prev.trim();
         return existing ? `${existing}, ${selectedWords}` : selectedWords;
       });
-      saveExtractedWordsToWordbank(selectedWordList);
+      void saveExtractedWordsToWordbank(selectedWordList);
       toast.success(`Added ${extractedVocab.filter(w => w.selected).length} words to your story!`);
     }
     
@@ -738,7 +836,10 @@ export default function CreateStory() {
     if (mimeType === "text/csv") {
       try {
         const text = await file.text();
-        const words = splitVocabularyText(text);
+        const words = parseWordImportText(text, {
+          source: "csv",
+          targetLanguage: effectiveLanguage || targetLanguage,
+        });
 
         if (words.length === 0) {
           toast.error("No words found in the CSV file");
@@ -747,7 +848,7 @@ export default function CreateStory() {
         }
 
         const importedWords = mergeVocabularyWords(words);
-        saveExtractedWordsToWordbank(words);
+        void saveExtractedWordsToWordbank(words);
         setUploadedFileName(file.name);
         toast.success(`Imported ${importedWords} words from ${file.name}`);
       } catch (error) {
@@ -830,7 +931,6 @@ export default function CreateStory() {
     setIsProcessingPhoto(true);
 
     try {
-      let totalWords = 0;
       const collectedWords: string[] = [];
 
       for (const file of files) {
@@ -842,7 +942,6 @@ export default function CreateStory() {
         });
 
         if (data.wordCount > 0) {
-          totalWords += data.wordCount;
           collectedWords.push(...data.vocabulary);
         }
       }
@@ -852,12 +951,21 @@ export default function CreateStory() {
         return;
       }
 
-      const addedWords = mergeVocabularyWords(collectedWords);
-      saveExtractedWordsToWordbank(collectedWords);
-      if (addedWords === totalWords) {
-        toast.success(`Extracted ${totalWords} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
+      const filteredWords = parseWordImportText(collectedWords.join("\n"), {
+        targetLanguage: effectiveLanguage || targetLanguage,
+      });
+
+      if (filteredWords.length === 0) {
+        toast.error("No target-language vocabulary found in the selected images. Please try clearer photos.");
+        return;
+      }
+
+      const addedWords = mergeVocabularyWords(filteredWords);
+      void saveExtractedWordsToWordbank(filteredWords);
+      if (addedWords === filteredWords.length) {
+        toast.success(`Extracted ${filteredWords.length} words from ${files.length} photo${files.length > 1 ? "s" : ""}!`);
       } else {
-        toast.success(`Extracted ${totalWords} words and added ${addedWords} new word${addedWords !== 1 ? "s" : ""} after removing duplicates.`);
+        toast.success(`Extracted ${filteredWords.length} target-language words and added ${addedWords} new word${addedWords !== 1 ? "s" : ""} after removing duplicates.`);
       }
     } catch (error) {
       toast.error("Failed to extract vocabulary from photo: " + (error instanceof Error ? error.message : String(error)));
