@@ -274,6 +274,55 @@ const normalizeResponseFormat = ({
   };
 };
 
+// Hard cap for a single LLM HTTP call. Long story generations on slow upstreams can
+// blow past the undici default headers timeout (5 min), so we use an explicit timeout
+// that's longer than typical generations but bounded.
+const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 9 * 60 * 1000; // 9 minutes
+// Retry budget on transient failures (network errors, 408, 429, 5xx).
+const DEFAULT_LLM_MAX_ATTEMPTS = 3;
+const DEFAULT_LLM_RETRY_BASE_DELAY_MS = 1500;
+
+function resolveLlmTimeoutMs(): number {
+  const raw = Number(process.env.LLM_REQUEST_TIMEOUT_MS);
+  if (Number.isFinite(raw) && raw > 0) {
+    return raw;
+  }
+  return DEFAULT_LLM_REQUEST_TIMEOUT_MS;
+}
+
+function resolveLlmMaxAttempts(): number {
+  const raw = Number(process.env.LLM_MAX_ATTEMPTS);
+  if (Number.isFinite(raw) && raw >= 1) {
+    return Math.min(Math.floor(raw), 5);
+  }
+  return DEFAULT_LLM_MAX_ATTEMPTS;
+}
+
+function isTransientFetchError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const cause = (error as { cause?: { code?: string } }).cause;
+  const code = cause?.code ?? "";
+  // undici/network transient codes worth retrying
+  return [
+    "UND_ERR_HEADERS_TIMEOUT",
+    "UND_ERR_BODY_TIMEOUT",
+    "UND_ERR_SOCKET",
+    "UND_ERR_CONNECT_TIMEOUT",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "EAI_AGAIN",
+    "ENOTFOUND",
+  ].includes(code) || /fetch failed/i.test(error.message);
+}
+
+function isRetryableHttpStatus(status: number): boolean {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
   resolveApiKey(); // throws if no valid key
 
@@ -318,21 +367,73 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetch(resolveApiUrl(), {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${resolveApiKey()}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  const apiUrl = resolveApiUrl();
+  const apiKey = resolveApiKey();
+  const requestBody = JSON.stringify(payload);
+  const timeoutMs = resolveLlmTimeoutMs();
+  const maxAttempts = resolveLlmMaxAttempts();
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
-    );
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeoutHandle = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        const httpError = new Error(
+          `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
+        );
+
+        if (attempt < maxAttempts && isRetryableHttpStatus(response.status)) {
+          lastError = httpError;
+          console.warn(
+            `[invokeLLM] HTTP ${response.status} on attempt ${attempt}/${maxAttempts}; retrying`,
+          );
+          await sleep(DEFAULT_LLM_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+          continue;
+        }
+
+        throw httpError;
+      }
+
+      return (await response.json()) as InvokeResult;
+    } catch (error) {
+      lastError = error;
+
+      const aborted =
+        (error as Error)?.name === "AbortError" ||
+        (error as { code?: string })?.code === "ABORT_ERR";
+
+      if (attempt < maxAttempts && (aborted || isTransientFetchError(error))) {
+        console.warn(
+          `[invokeLLM] Transient failure on attempt ${attempt}/${maxAttempts} (${
+            aborted ? "timeout" : "network"
+          }); retrying`,
+          error instanceof Error ? error.message : String(error),
+        );
+        await sleep(DEFAULT_LLM_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1));
+        continue;
+      }
+
+      throw error;
+    } finally {
+      clearTimeout(timeoutHandle);
+    }
   }
 
-  return (await response.json()) as InvokeResult;
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("LLM invoke failed after retries");
 }

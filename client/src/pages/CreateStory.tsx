@@ -227,6 +227,30 @@ export default function CreateStory() {
   const languageParam = urlParams.get('language');
   const levelParam = urlParams.get('level');
   const vocabParam = urlParams.get('vocab');
+  const vocabSourceParam = urlParams.get('vocabSource');
+  // When the user clicks "Create Story with My Words" from the Wordbank, we stash
+  // the full list in sessionStorage so we can pass dozens of words without blowing
+  // the URL length limit. The stash is consumed and cleared on first render.
+  const vocabFromStorage = useMemo(() => {
+    if (vocabSourceParam !== "wordbank" || typeof window === "undefined") {
+      return "";
+    }
+    try {
+      const raw = sessionStorage.getItem("createStory.vocabFromWordbank");
+      if (!raw) return "";
+      sessionStorage.removeItem("createStory.vocabFromWordbank");
+      const parsed = JSON.parse(raw) as { words?: unknown };
+      if (Array.isArray(parsed.words)) {
+        return parsed.words
+          .map((w) => (typeof w === "string" ? w.trim() : ""))
+          .filter(Boolean)
+          .join(", ");
+      }
+    } catch (error) {
+      console.warn("[CreateStory] Failed to read wordbank vocab stash", error);
+    }
+    return "";
+  }, [vocabSourceParam]);
   const draft = useMemo(() => loadCreateStoryDraft(), []);
   const initialTargetLanguage = resolveDraftValue(languageParam, draft?.targetLanguage, "");
 
@@ -239,7 +263,8 @@ export default function CreateStory() {
     resolveDraftValue(levelParam, draft?.proficiencyLevel, ""),
   );
   const [vocabularyText, setVocabularyText] = useState(
-    resolveDraftValue(vocabParam, draft?.vocabularyText, ""),
+    // sessionStorage (Wordbank) > ?vocab param > saved draft > empty
+    vocabFromStorage || resolveDraftValue(vocabParam, draft?.vocabularyText, ""),
   );
   const [topicPrompt, setTopicPrompt] = useState(draft?.topicPrompt || "");
   const [translationLanguage, setTranslationLanguage] = useState(draft?.translationLanguage || "");

@@ -89,11 +89,37 @@ export default function Wordbank() {
     if (authUser?.subscriptionTier !== "premium") {
       // Upgrade Trigger #4: Show personalized story overlay for free users
       setShowPersonalizedOverlay(true);
-    } else {
-      // Premium users go directly to create page with words pre-filled
-      const wordsList = words.map((w: any) => w.word).slice(0, 15).join(", ");
-      setLocation(`/create?vocab=${encodeURIComponent(wordsList)}`);
+      return;
     }
+    // Premium users go directly to create page with all selected wordbank words.
+    // Deduplicate case-insensitively to avoid forms like "Levantarse, levantarse".
+    // Use sessionStorage instead of the URL query string so we don't hit URL
+    // length limits when the user has many saved words.
+    const seen = new Set<string>();
+    const wordsList: string[] = [];
+    for (const w of words as Array<{ word?: string }>) {
+      const raw = (w?.word ?? "").trim();
+      if (!raw) continue;
+      const key = raw.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      wordsList.push(raw);
+    }
+
+    try {
+      sessionStorage.setItem(
+        "createStory.vocabFromWordbank",
+        JSON.stringify({ words: wordsList, savedAt: Date.now() }),
+      );
+    } catch (storageError) {
+      // SessionStorage can fail in private mode; fall back to URL with a safe cap.
+      console.warn("[Wordbank] sessionStorage write failed, falling back to URL", storageError);
+      const fallback = wordsList.slice(0, 60).join(", ");
+      setLocation(`/create?vocab=${encodeURIComponent(fallback)}`);
+      return;
+    }
+
+    setLocation(`/create?vocabSource=wordbank`);
   };
 
   // Fetch wordbank words

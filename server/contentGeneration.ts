@@ -107,13 +107,13 @@ function buildStoryGenerationInstructions(
   if (mode === "film") {
     const sceneCount = targetSceneCount ?? 6;
     return `${sharedInstructions.join("\n")}
-6. Use minimal dialogue and rely mostly on clean narrated action
+6. Blend short character dialogue with narration. Include 1-2 brief direct-speech lines (under 15 words each) when a moment is clearly being spoken by a character; keep the rest as narrated action that drives the scene forward
 7. Keep the cast visually simple: one main adult, maximum two recurring adults
 8. Keep locations limited and reusable so scenes feel visually consistent
 9. Avoid crowds, slapstick, fights, dancing, fast chases, object juggling, and complex hand-focused actions
 10. Keep props simple and stable: at most one clearly held or carried prop in a beat
 11. Write visually clean sentences so each beat is easy to render as a short AI video clip
-12. Provide exactly ${sceneCount} visual beats in story order, each representing one simple moment
+12. Provide exactly ${sceneCount} visual beats in story order, each representing one simple moment. Each visual beat MUST describe the same moment the matching story line describes, so the film visually tracks the script
 13. Keep the spoken narration concise enough to fit comfortably within about ${targetVideoDuration ?? 30} seconds
 14. Keep consecutive beats in the same visual world with smooth progression: same outfit, same setting family, same time-of-day block, and no abrupt visual resets unless the story explicitly changes location`;
   }
@@ -217,6 +217,13 @@ Important translation requirement:
 - Translate titleTranslation, every lineTranslations.english value, and every vocabularyTranslations.translation value into ${translationLanguage}.
 - Do not write those translation values in English unless ${translationLanguage} is English.
 - The JSON property is still named "english" for backwards compatibility, but its value must be ${translationLanguage}.
+
+CRITICAL LANGUAGE PURITY RULES for storyText, title, and lineTranslations.original:
+- These fields MUST be written ENTIRELY in ${targetLanguage}.
+- DO NOT include ${translationLanguage} translations, glosses, or parentheticals inside storyText.
+- DO NOT include patterns like "word (translation)", "word - translation", quoted English glosses, or bilingual phrasing inside storyText.
+- Place all ${translationLanguage} content ONLY inside titleTranslation, lineTranslations[].english, and vocabularyTranslations[*].translation.
+- The narrator will read storyText aloud, so any ${translationLanguage} text leaking into storyText will be spoken — this MUST NOT happen.
 
 ${buildStoryResponseFormatInstructions(targetLanguage, translationLanguage, isChinese, mode, targetSceneCount)}
 - title: Story title in ${targetLanguage}
@@ -850,13 +857,10 @@ export async function generatePodcast(
 ): Promise<{ audioUrl: string; transcript: string; audioAlignment?: ElevenLabsAlignment }> {
   const gender = params.narratorGender || "female";
 
-  // Strip markdown formatting (bold, italic, etc.) from story text for clean TTS
-  // This prevents glitches when ElevenLabs encounters markdown syntax like **word**
-  const cleanText = storyText
-    .replace(/\*\*(.+?)\*\*/g, '$1')  // Remove bold: **text** -> text
-    .replace(/\*(.+?)\*/g, '$1')      // Remove italic: *text* -> text
-    .replace(/_(.+?)_/g, '$1')        // Remove underscore italic: _text_ -> text
-    .replace(/~~(.+?)~~/g, '$1');     // Remove strikethrough: ~~text~~ -> text
+  // Strip markdown formatting AND inline bilingual glosses before sending to TTS.
+  // The narrator should only ever speak the target language; if the LLM slips a
+  // parenthetical English translation into storyText, ElevenLabs will read it.
+  const cleanText = sanitizeNarrationForTTS(storyText);
 
   try {
     const voiceSettings = getVoiceSettings(params.voiceType);
@@ -1161,17 +1165,34 @@ function resolveFilmClipDuration(
 ): FilmClipDuration {
   const envDuration = Number(process.env.FILM_CLIP_DURATION_SECONDS);
 
+  // Pick the longest provider-supported clip length that still divides cleanly
+  // into the requested film duration. This avoids the previous behavior where
+  // a user asked for 30s and got a hard-coded 8s clip (4 clips = 32s = 32s
+  // narration target). Targeting an exact divisor keeps the final cut close
+  // to what the user picked.
   if (videoProvider === "replicate") {
-    if ([4, 6, 8].includes(envDuration)) {
+    const supported: FilmClipDuration[] = [8, 6, 4];
+    if (supported.includes(envDuration as FilmClipDuration)) {
       return envDuration as 4 | 6 | 8;
+    }
+    for (const candidate of supported) {
+      if (targetVideoDuration % candidate === 0) {
+        return candidate as 4 | 6 | 8;
+      }
     }
     if (targetVideoDuration <= 4) return 4;
     if (targetVideoDuration <= 6) return 6;
     return DEFAULT_REPLICATE_FILM_CLIP_DURATION_SECONDS;
   }
 
-  if ([5, 10, 15].includes(envDuration)) {
+  const supportedHiggsfield: FilmClipDuration[] = [15, 10, 5];
+  if (supportedHiggsfield.includes(envDuration as FilmClipDuration)) {
     return envDuration as 5 | 10 | 15;
+  }
+  for (const candidate of supportedHiggsfield) {
+    if (targetVideoDuration % candidate === 0) {
+      return candidate as 5 | 10 | 15;
+    }
   }
 
   if (targetVideoDuration <= 15) {
@@ -1278,6 +1299,49 @@ function sanitizeNarrationText(text: string): string {
     .replace(/~~(.+?)~~/g, '$1')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+/**
+ * Strip inline bilingual glosses from a story before sending it to TTS.
+ *
+ * Some LLM generations slip parenthetical translations into storyText such as
+ *   "Maria fue al mercado (Maria went to the market)."
+ * or em-dash glosses such as
+ *   "Maria fue al mercado — Maria went to the market."
+ * The TTS narrator would then read the English aloud, breaking immersion. We
+ * remove obviously-bilingual segments while keeping legitimate parentheses
+ * that stay in-language (e.g. "(2020)").
+ */
+function sanitizeNarrationForTTS(text: string): string {
+  let cleaned = sanitizeNarrationText(text);
+
+  // Remove parenthetical groups whose contents look like Latin-script English
+  // translations: a sequence containing common English connector words.
+  // We keep parentheticals that are short, numeric, or use non-Latin script.
+  cleaned = cleaned.replace(/\s*\(([^()]{2,160})\)/g, (match, inner: string) => {
+    const lowered = inner.toLowerCase();
+    const looksEnglish =
+      /\b(the|and|of|to|is|was|are|with|that|this|in|on|for|at|from|by|she|he|it|they|we|you|i)\b/.test(
+        lowered,
+      );
+    return looksEnglish ? "" : match;
+  });
+
+  // Remove em-dash / hyphen-space glosses at end of clauses that look like
+  // "<target sentence> — <english translation>." This is best-effort: we only
+  // strip when the trailing fragment is heavy with English stop-words.
+  cleaned = cleaned.replace(
+    /\s*[—–-]\s+([^.!?\n]{3,200})(?=[.!?\n]|$)/g,
+    (match, fragment: string) => {
+      const lowered = fragment.toLowerCase();
+      const englishHits = (
+        lowered.match(/\b(the|and|of|to|is|was|are|with|that|this|in|on|for|at|from|by|she|he|it|they|we|you|i)\b/g) || []
+      ).length;
+      return englishHits >= 2 ? "" : match;
+    },
+  );
+
+  return cleaned.replace(/\s+/g, " ").trim();
 }
 
 function buildNarrationTextFromSubtitleLines(subtitleTexts: string[]): string {
@@ -1766,7 +1830,12 @@ export async function generateFilm(
   try {
     videoProvider = resolveVideoProvider();
     const clipDuration = resolveFilmClipDuration(targetVideoDuration, videoProvider);
-    const clipCount = Math.max(1, Math.ceil(targetVideoDuration / clipDuration));
+    // Round to nearest to avoid overshooting the user-selected length by a
+    // full clip. With the previous Math.ceil, asking for 30s with 8s clips
+    // produced 4 clips = 32s; asking for 20s with 10s clips produced 2 clips
+    // = 20s (fine). With Math.round we honor the chosen length more closely:
+    // 30s with 8s -> 4 clips = 32s (within 7%); 30s with 6s -> 5 clips = 30s.
+    const clipCount = Math.max(1, Math.round(targetVideoDuration / clipDuration));
     const plannedVideoDuration = clipCount * clipDuration;
     const videoModel = resolveFilmVideoModel();
     const transientRetryLimit = resolveFilmClipTransientRetries();

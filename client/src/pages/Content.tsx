@@ -1161,6 +1161,24 @@ export default function Content() {
                     onEnded={handleMediaEnded}
                   />
                 )}
+                {/* Floating caption overlay so the learner can read the script
+                    in target + translation language while the film is playing,
+                    without scrolling down to the SentenceDisplay panel. */}
+                {Array.isArray(displayLineTranslations) &&
+                  displayLineTranslations[currentSentence] && (
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 px-4 sm:px-8 pb-4 sm:pb-6 z-10 flex justify-center">
+                      <div className="max-w-3xl w-full text-center bg-black/55 backdrop-blur-sm rounded-xl px-3 py-2 sm:px-5 sm:py-3 shadow-lg">
+                        <p className="text-white text-base sm:text-lg font-semibold leading-snug drop-shadow">
+                          {(displayLineTranslations[currentSentence] as any)?.original}
+                        </p>
+                        {(displayLineTranslations[currentSentence] as any)?.english && (
+                          <p className="text-white/85 text-xs sm:text-sm leading-snug mt-1">
+                            {(displayLineTranslations[currentSentence] as any).english}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 {/* Video Controls Overlay */}
                 <div className="absolute top-4 right-4 flex gap-2">
                   <div className="relative" ref={qualityMenuRef}>

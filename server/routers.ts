@@ -125,10 +125,20 @@ const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const VOCABULARY_LIST_SEPARATOR = /[,;\n\r\uFF0C\u3001\uFF1B]+/;
 
 function splitVocabularyInput(value?: string | null): string[] {
-  return (value || "")
-    .split(VOCABULARY_LIST_SEPARATOR)
-    .map(word => word.trim())
-    .filter(Boolean);
+  // Deduplicate case-insensitively while preserving the first-seen casing so
+  // that previously-merged lists ("Levantarse, levantarse, ...") do not surface
+  // the same word twice in story metadata.
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const raw of (value || "").split(VOCABULARY_LIST_SEPARATOR)) {
+    const word = raw.trim();
+    if (!word) continue;
+    const key = word.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(word);
+  }
+  return result;
 }
 
 function buildCuteStoryThumbnailPrompt(theme?: string | null, title?: string | null): string {
@@ -1306,8 +1316,37 @@ export const appRouter = router({
           content.vocabularyTranslations
         );
 
+        // Lazy-fill missing thumbnails for completed stories. The post-generation
+        // background job can fail silently (e.g. image provider rate limit). When
+        // the owner re-opens such a story we kick off a background fill so the
+        // Library no longer shows a blank tile and "Change Thumbnail" works.
+        let thumbnailUrl = content.thumbnailUrl;
+        if (
+          !thumbnailUrl &&
+          content.status === "completed" &&
+          content.userId === ctx.user.id &&
+          process.env.GENERATE_STORY_THUMBNAILS !== "false"
+        ) {
+          generateStoryThumbnailImage(content.theme, content.title)
+            .then(async (generatedThumbnailUrl) => {
+              if (generatedThumbnailUrl) {
+                await updateGeneratedContent(content.id, {
+                  thumbnailUrl: generatedThumbnailUrl,
+                  thumbnailStyle: "pixar" as any,
+                });
+              }
+            })
+            .catch((thumbnailError) => {
+              console.error(
+                "[getById] Lazy thumbnail backfill failed:",
+                thumbnailError,
+              );
+            });
+        }
+
         return {
           ...content,
+          thumbnailUrl,
           targetLanguage: matchingList?.targetLanguage || "Unknown",
           vocabularyWords,
           // Ensure vocabularyTranslations is always an object, never null
@@ -1632,6 +1671,9 @@ export const appRouter = router({
           }
 
           const { url } = await generateImage({ prompt: thumbnailPrompt });
+          if (!url) {
+            throw new Error("Image generation returned no URL");
+          }
           console.log("[Thumbnail Regeneration] Success! Thumbnail URL:", url);
 
           // Update the content with new thumbnail and style
@@ -1647,9 +1689,16 @@ export const appRouter = router({
           return { success: true, thumbnailUrl: url };
         } catch (error) {
           console.error("[Thumbnail Regeneration] Error:", error);
+          // Surface the underlying cause so the client toast is actionable
+          // (the previous generic message hid auth/rate-limit issues from users).
+          const detail =
+            error instanceof Error ? error.message : String(error ?? "");
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: "Failed to regenerate thumbnail",
+            message: detail
+              ? `Failed to regenerate thumbnail: ${detail}`
+              : "Failed to regenerate thumbnail",
+            cause: error instanceof Error ? error : undefined,
           });
         }
       }),
