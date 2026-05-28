@@ -670,6 +670,68 @@ describe('generateFilm NSFW retry', () => {
     );
   });
 
+  it('should strip inline English glosses before film narration TTS', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test',
+      created: Date.now(),
+      model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A traveler starts the day near a sunny station.' }, finish_reason: 'stop' }],
+    });
+    mockedGenerateVideo.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/clip-with-clean-narration.mp4',
+      status: 'completed',
+      requestId: 'clip-clean-tts',
+    });
+    mockedStitchVideos.mockResolvedValueOnce({
+      videoUrl: 'https://example.com/final-clean-narration.mp4',
+      duration: 8,
+      clipCount: 1,
+      fileSize: 123456,
+    });
+
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        audio_base64: Buffer.from([1, 2, 3]).toString('base64'),
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await generateFilm(
+      {
+        targetLanguage: 'Spanish',
+        proficiencyLevel: 'A2',
+        vocabularyWords: ['levantarse'],
+        theme: 'Daily Life',
+        cinematicStyle: 'Playful Animation',
+        targetVideoDuration: 8,
+        addSubtitles: true,
+        voiceType: 'Warm & Friendly',
+      },
+      'Me levanto temprano (I get up early). Camino a la escuela.',
+    );
+
+    const ttsBody = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+
+    expect(ttsBody.text).toBe('Me levanto temprano. Camino a la escuela.');
+    expect(ttsBody.text).not.toContain('I get up early');
+    expect(mockedStitchVideos).toHaveBeenCalledWith(
+      expect.any(Array),
+      expect.objectContaining({
+        sceneTexts: [
+          'Me levanto temprano.',
+          'Camino a la escuela.',
+        ],
+      }),
+    );
+  });
+
   it('should never use visual scene beats as narration when story text is longer than the duration target', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test',

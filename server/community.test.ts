@@ -56,7 +56,7 @@ describe("Community Features", () => {
     const [achievement] = await db
       .insert(achievements)
       .values({
-        key: "test_badge",
+        key: `test_badge_${Date.now()}`,
         name: "Test Badge",
         description: "Test badge description",
         icon: "🏆",
@@ -96,6 +96,7 @@ describe("Community Features", () => {
       expect(profile).toBeDefined();
       expect(profile.user.id).toBe(testUserId);
       expect(profile.user.name).toBe("Test Creator");
+      expect(profile.user).not.toHaveProperty("email");
       expect(profile.stats.totalCollections).toBeGreaterThanOrEqual(1);
       expect(profile.stats.badgesEarned).toBeGreaterThanOrEqual(1);
       expect(profile.collections.length).toBeGreaterThanOrEqual(0);

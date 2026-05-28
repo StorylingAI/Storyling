@@ -34,6 +34,7 @@ import {
   collectionItems,
   organizationAdmins,
   users,
+  type User,
 } from "../drizzle/schema";
 import { eq, and, inArray, sql } from "drizzle-orm";
 import {
@@ -123,6 +124,63 @@ const AVATAR_UPLOAD_SCHEMA = z
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 const VOCABULARY_LIST_SEPARATOR = /[,;\n\r\uFF0C\u3001\uFF1B]+/;
+
+type ClientUser = Pick<
+  User,
+  | "id"
+  | "email"
+  | "name"
+  | "avatarUrl"
+  | "emailVerified"
+  | "loginMethod"
+  | "role"
+  | "preferredLanguage"
+  | "preferredTranslationLanguage"
+  | "subscriptionTier"
+  | "subscriptionStatus"
+  | "subscriptionCurrentPeriodEnd"
+  | "premiumOnboardingCompleted"
+  | "weeklyGoal"
+  | "weeklyProgress"
+  | "weekStartDate"
+  | "weeklyGoalStreak"
+  | "lastWeekGoalReached"
+  | "bonusStoryCredits"
+  | "createdAt"
+  | "updatedAt"
+  | "lastSignedIn"
+  | "timezone"
+>;
+
+function toClientUser(user: User | null | undefined): ClientUser | null {
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    avatarUrl: user.avatarUrl,
+    emailVerified: user.emailVerified,
+    loginMethod: user.loginMethod,
+    role: user.role,
+    preferredLanguage: user.preferredLanguage,
+    preferredTranslationLanguage: user.preferredTranslationLanguage,
+    subscriptionTier: user.subscriptionTier,
+    subscriptionStatus: user.subscriptionStatus,
+    subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
+    premiumOnboardingCompleted: user.premiumOnboardingCompleted,
+    weeklyGoal: user.weeklyGoal,
+    weeklyProgress: user.weeklyProgress,
+    weekStartDate: user.weekStartDate,
+    weeklyGoalStreak: user.weeklyGoalStreak,
+    lastWeekGoalReached: user.lastWeekGoalReached,
+    bonusStoryCredits: user.bonusStoryCredits,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    lastSignedIn: user.lastSignedIn,
+    timezone: user.timezone,
+  };
+}
 
 function splitVocabularyInput(value?: string | null): string[] {
   // Deduplicate case-insensitively while preserving the first-seen casing so
@@ -353,7 +411,7 @@ export const appRouter = router({
       }),
   }),
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => toClientUser(opts.ctx.user)),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -413,7 +471,7 @@ export const appRouter = router({
           .from(users)
           .where(eq(users.id, ctx.user.id))
           .limit(1);
-        return { success: true, user: updatedUser };
+        return { success: true, user: toClientUser(updatedUser) };
       }),
     uploadAvatar: protectedProcedure
       .input(
@@ -472,7 +530,7 @@ export const appRouter = router({
           .where(eq(users.id, ctx.user.id))
           .limit(1);
 
-        return { success: true, avatarUrl: url, user: updatedUser };
+        return { success: true, avatarUrl: url, user: toClientUser(updatedUser) };
       }),
     removeAvatar: protectedProcedure.mutation(async ({ ctx }) => {
       const db = await getDb();
@@ -493,7 +551,7 @@ export const appRouter = router({
         .where(eq(users.id, ctx.user.id))
         .limit(1);
 
-      return { success: true, user: updatedUser };
+      return { success: true, user: toClientUser(updatedUser) };
     }),
     completePremiumOnboarding: protectedProcedure.mutation(async ({ ctx }) => {
       const db = await getDb();

@@ -135,6 +135,7 @@ AGENTS.md
 .gift/
 .mission/
 docs/
+./*.pdf
 
 # Database
 *.db

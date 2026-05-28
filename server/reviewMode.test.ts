@@ -1,6 +1,35 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { Context } from "./_core/context";
+
+vi.mock("./_core/llm", () => ({
+  invokeLLM: vi.fn(async ({ messages }: { messages: Array<{ content: string }> }) => {
+    const userPrompt = messages.at(-1)?.content || "";
+    const wordList = userPrompt
+      .match(/vocabulary words: ([\s\S]+?)\. Each question/)?.[1]
+      ?.split(",")
+      .map(word => word.trim())
+      .filter(Boolean) || ["sample"];
+
+    return {
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              questions: wordList.map((word, index) => ({
+                word,
+                question: `What does ${word} mean?`,
+                options: ["first", "second", "third", "fourth"],
+                correctIndex: index % 4,
+                explanation: `${word} is included in the review quiz.`,
+              })),
+            }),
+          },
+        },
+      ],
+    };
+  }),
+}));
 
 describe("Review Mode", () => {
   const testUserId = 777777;

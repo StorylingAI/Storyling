@@ -1862,7 +1862,7 @@ export async function generateFilm(
       const gender = params.narratorGender || 'female';
       const voiceId = getNativeVoiceId(params.targetLanguage, params.voiceType, gender);
       const voiceSettings = getVoiceSettings(params.voiceType);
-      const cleanText = sanitizeNarrationText(storyText);
+      const cleanText = sanitizeNarrationForTTS(storyText);
       subtitleTexts = buildNarrationSubtitleLines(cleanText, splitStoryIntoScenes(cleanText, plannedVideoDuration, clipDuration));
       const narrationText = buildNarrationTextFromSubtitleLines(subtitleTexts);
 

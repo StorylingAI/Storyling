@@ -224,7 +224,6 @@ export const leaderboardRouter = router({
         .select({
           id: users.id,
           name: users.name,
-          email: users.email,
           avatarUrl: users.avatarUrl,
           createdAt: users.createdAt,
         })
@@ -319,7 +318,6 @@ export const leaderboardRouter = router({
         user: {
           id: user.id,
           name: user.name || "Anonymous",
-          email: user.email,
           avatarUrl: user.avatarUrl,
           joinedAt: user.createdAt,
         },

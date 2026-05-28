@@ -84,6 +84,7 @@ describe("Wordbank Enhancements", () => {
       const result = await testCaller.wordbank.bulkImportWords({
         words: ["hello", "world", "friend"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       expect(result.total).toBe(3);
@@ -96,12 +97,14 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["test", "duplicate"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       // Try to import again
       const result = await testCaller.wordbank.bulkImportWords({
         words: ["test", "duplicate", "new"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       expect(result.skipped).toBeGreaterThan(0);
@@ -125,6 +128,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["export", "test"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       const result = await testCaller.wordbank.exportToCSV({
@@ -142,6 +146,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["french"],
         targetLanguage: "French",
+        generateTranslations: false,
       });
 
       const result = await testCaller.wordbank.exportToCSV({
@@ -161,6 +166,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["pdf", "export"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       const result = await testCaller.wordbank.exportToPDF({
@@ -181,6 +187,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["srs", "test"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       const words = await testCaller.wordbank.getMyWords();
@@ -199,6 +206,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["mastery"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       const words = await testCaller.wordbank.getMyWords();
@@ -225,6 +233,7 @@ describe("Wordbank Enhancements", () => {
       await testCaller.wordbank.bulkImportWords({
         words: ["reset"],
         targetLanguage: "Spanish",
+        generateTranslations: false,
       });
 
       const words = await testCaller.wordbank.getMyWords();

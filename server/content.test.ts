@@ -1,6 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appRouter } from "./routers";
 import type { TrpcContext } from "./_core/context";
+
+vi.mock("./contentGeneration", () => ({
+  generatePreview: vi.fn(async () => "A short QA preview story."),
+  generateStory: vi.fn(async () => ({
+    title: "QA Story",
+    titleTranslation: "QA Story",
+    storyText: "Bonjour. Ceci est une histoire de test.",
+    lineTranslations: [],
+    vocabularyTranslations: [],
+  })),
+  generatePodcast: vi.fn(async () => ({
+    audioUrl: "https://example.com/storyling-test-audio.mp3",
+    transcript: "Bonjour. Ceci est une histoire de test.",
+    audioAlignment: null,
+  })),
+  generateFilm: vi.fn(async () => ({
+    videoUrl: "https://example.com/storyling-test-video.mp4",
+    thumbnailUrl: "https://example.com/storyling-test-thumbnail.jpg",
+  })),
+}));
 
 type AuthenticatedUser = NonNullable<TrpcContext["user"]>;
 
@@ -12,6 +32,7 @@ function createAuthContext(): { ctx: TrpcContext } {
     name: "Test User",
     loginMethod: "manus",
     role: "user",
+    subscriptionTier: "premium",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),

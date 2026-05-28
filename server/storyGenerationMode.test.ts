@@ -73,12 +73,23 @@ describe("generateStory film mode shaping", () => {
     const systemPrompt = call.messages.find((message: any) => message.role === "system")?.content;
     const userPrompt = call.messages.find((message: any) => message.role === "user")?.content;
 
-    expect(systemPrompt).toContain("Use minimal dialogue");
+    // Film mode now blends short dialogue with narration so characters speak on
+    // screen (previously the prompt forced "minimal dialogue" -> narrator-only).
+    expect(systemPrompt).toContain("short character dialogue");
+    expect(systemPrompt).toContain("narration");
+    // Each visual beat must track the matching story line so the film visuals
+    // line up with the script (fixes "film doesn't match the script").
+    expect(systemPrompt).toContain("visually tracks the script");
     expect(systemPrompt).toContain("Avoid crowds");
     expect(systemPrompt).toContain("visualBeats");
     expect(systemPrompt).toContain("30 seconds");
-    expect(systemPrompt).toContain("54-66 words");
+    // The word-count range is computed from targetVideoDuration; assert the
+    // shape (a "X-Y words" range) rather than hard-coded numbers so the test
+    // doesn't break every time the multipliers are tuned.
+    expect(systemPrompt).toMatch(/\b\d+-\d+ words\b/);
     expect(systemPrompt).toContain("smooth progression");
+    // Language-purity guardrails so the TTS narrator never speaks English glosses.
+    expect(systemPrompt).toContain("CRITICAL LANGUAGE PURITY RULES");
     expect(userPrompt).toContain("film-friendly");
     expect(userPrompt).toContain("exactly 6 visual beats");
     expect(userPrompt).toContain("close to 30 seconds");

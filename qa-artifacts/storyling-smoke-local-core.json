@@ -1,0 +1,433 @@
+{
+  "meta": {
+    "baseUrl": "http://localhost:3100",
+    "startedAt": "2026-05-27T17:10:45.537Z",
+    "liveGeneration": false,
+    "filmGeneration": false,
+    "finishedAt": "2026-05-27T17:11:08.268Z",
+    "status": "passed"
+  },
+  "checks": [
+    {
+      "name": "HTTP /api/health",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.585Z",
+      "statusCode": 200,
+      "contentType": "application/json; charset=utf-8"
+    },
+    {
+      "name": "HTTP /",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.593Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /login",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.597Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /signup",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.601Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /pricing",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.605Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /contact",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.608Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /faq",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.613Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /about",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.617Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /privacy",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.620Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /terms",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.625Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "HTTP /blog",
+      "status": "passed",
+      "at": "2026-05-27T17:10:45.629Z",
+      "statusCode": 200,
+      "contentType": "text/html; charset=UTF-8"
+    },
+    {
+      "name": "email sign-in",
+      "status": "passed",
+      "at": "2026-05-27T17:10:47.658Z",
+      "summary": {
+        "success": true,
+        "emailVerified": false
+      }
+    },
+    {
+      "name": "authenticated user",
+      "status": "passed",
+      "at": "2026-05-27T17:10:48.176Z",
+      "summary": {
+        "id": 318,
+        "email": "loopus_web@hotmail.fr",
+        "name": "Loopus",
+        "avatarUrl": "https://www.storyling.ai/uploads/avatars/user-318/1776272018660-f569260d76454309.png",
+        "emailVerified": false,
+        "loginMethod": "email",
+        "role": "admin",
+        "preferredLanguage": "en",
+        "preferredTranslationLanguage": "English",
+        "subscriptionTier": "premium",
+        "subscriptionStatus": "active",
+        "subscriptionCurrentPeriodEnd": null,
+        "premiumOnboardingCompleted": false,
+        "weeklyGoal": 5,
+        "weeklyProgress": 1,
+        "weekStartDate": "2026-05-25T00:00:00.000Z",
+        "weeklyGoalStreak": 0,
+        "lastWeekGoalReached": false,
+        "bonusStoryCredits": 3,
+        "createdAt": "2026-03-31T09:27:36.000Z",
+        "updatedAt": "2026-05-27T17:10:48.000Z",
+        "lastSignedIn": "2026-05-27T17:10:47.000Z",
+        "timezone": null
+      }
+    },
+    {
+      "name": "auth.me redaction",
+      "status": "passed",
+      "at": "2026-05-27T17:10:48.176Z"
+    },
+    {
+      "name": "subscription details",
+      "status": "passed",
+      "at": "2026-05-27T17:10:49.310Z",
+      "summary": {
+        "tier": "premium",
+        "status": "active",
+        "isPremium": true,
+        "billingPeriod": "annual",
+        "currentPeriodEnd": null,
+        "cancelAtPeriodEnd": false,
+        "paymentMethod": {
+          "brand": "visa",
+          "last4": "4242",
+          "expMonth": 11,
+          "expYear": 2029
+        }
+      }
+    },
+    {
+      "name": "usage stats",
+      "status": "passed",
+      "at": "2026-05-27T17:10:49.939Z",
+      "summary": {
+        "tier": "premium",
+        "storiesToday": 0,
+        "storiesThisMonth": 0,
+        "storiesLimit": null,
+        "canCreateStory": true,
+        "canUseFilmFormat": true,
+        "nextResetAt": null
+      }
+    },
+    {
+      "name": "library list",
+      "status": "passed",
+      "at": "2026-05-27T17:10:51.554Z",
+      "summary": {
+        "type": "array",
+        "count": 24
+      }
+    },
+    {
+      "name": "library story detail",
+      "status": "passed",
+      "at": "2026-05-27T17:10:52.425Z",
+      "summary": {
+        "id": 72,
+        "status": "completed",
+        "mode": "podcast",
+        "title": "La aventura del organizador de viaje",
+        "hasStoryText": true,
+        "hasAudioUrl": true,
+        "hasVideoUrl": false,
+        "hasThumbnailUrl": false,
+        "failureReason": null
+      }
+    },
+    {
+      "name": "favorites list",
+      "status": "passed",
+      "at": "2026-05-27T17:10:53.026Z",
+      "summary": {
+        "type": "array",
+        "count": 2
+      }
+    },
+    {
+      "name": "public profile",
+      "status": "passed",
+      "at": "2026-05-27T17:10:54.433Z",
+      "summary": {
+        "user": {
+          "id": 318,
+          "name": "Loopus",
+          "avatarUrl": "https://www.storyling.ai/uploads/avatars/user-318/1776272018660-f569260d76454309.png",
+          "joinedAt": "2026-03-31T09:27:36.000Z"
+        },
+        "stats": {
+          "totalCollections": 1,
+          "totalClones": 1,
+          "publicCollections": 1,
+          "badgesEarned": 0
+        },
+        "collections": [
+          {
+            "id": 2,
+            "name": "Voyage en France",
+            "description": "A small collection to easily learn French",
+            "color": "#3B82F6",
+            "cloneCount": 1,
+            "isPublic": true,
+            "shareToken": "36bb44fa4f57ee553509a98a2bfb4c383b71b95c992df1d6b551c081797a823c",
+            "createdAt": "2026-03-31T12:36:10.000Z",
+            "itemCount": 5
+          }
+        ],
+        "badges": [],
+        "recentActivity": [
+          {
+            "id": 2,
+            "name": "Voyage en France",
+            "cloneCount": 1,
+            "createdAt": "2026-03-31T12:36:10.000Z"
+          }
+        ]
+      }
+    },
+    {
+      "name": "profile email privacy",
+      "status": "passed",
+      "at": "2026-05-27T17:10:54.433Z"
+    },
+    {
+      "name": "settings preferred language",
+      "status": "passed",
+      "at": "2026-05-27T17:10:55.058Z",
+      "summary": {
+        "success": true
+      }
+    },
+    {
+      "name": "settings translation language",
+      "status": "passed",
+      "at": "2026-05-27T17:10:55.673Z",
+      "summary": {
+        "success": true
+      }
+    },
+    {
+      "name": "settings profile update",
+      "status": "passed",
+      "at": "2026-05-27T17:10:56.501Z",
+      "summary": {
+        "success": true,
+        "user": {
+          "id": 318,
+          "email": "loopus_web@hotmail.fr",
+          "name": "Loopus",
+          "avatarUrl": "https://www.storyling.ai/uploads/avatars/user-318/1776272018660-f569260d76454309.png",
+          "emailVerified": false,
+          "loginMethod": "email",
+          "role": "admin",
+          "preferredLanguage": "en",
+          "preferredTranslationLanguage": "English",
+          "subscriptionTier": "premium",
+          "subscriptionStatus": "active",
+          "subscriptionCurrentPeriodEnd": null,
+          "premiumOnboardingCompleted": false,
+          "weeklyGoal": 5,
+          "weeklyProgress": 1,
+          "weekStartDate": "2026-05-25T00:00:00.000Z",
+          "weeklyGoalStreak": 0,
+          "lastWeekGoalReached": false,
+          "bonusStoryCredits": 3,
+          "createdAt": "2026-03-31T09:27:36.000Z",
+          "updatedAt": "2026-05-27T17:10:57.000Z",
+          "lastSignedIn": "2026-05-27T17:10:56.000Z",
+          "timezone": null
+        }
+      }
+    },
+    {
+      "name": "breadcrumb preferences",
+      "status": "passed",
+      "at": "2026-05-27T17:10:57.121Z",
+      "summary": {
+        "showIcons": true,
+        "compactMode": false,
+        "hideOnMobile": false
+      }
+    },
+    {
+      "name": "breadcrumb preferences save",
+      "status": "passed",
+      "at": "2026-05-27T17:10:58.140Z",
+      "summary": {
+        "showIcons": true,
+        "compactMode": false,
+        "hideOnMobile": false
+      }
+    },
+    {
+      "name": "weekly goal status",
+      "status": "passed",
+      "at": "2026-05-27T17:10:58.977Z",
+      "summary": {
+        "weeklyGoal": 5,
+        "weeklyProgress": 1,
+        "weekStartDate": "2026-05-25T00:00:00.000Z",
+        "isGoalReached": false,
+        "weeklyGoalStreak": 0
+      }
+    },
+    {
+      "name": "weekly goal save",
+      "status": "passed",
+      "at": "2026-05-27T17:10:59.581Z",
+      "summary": {
+        "success": true
+      }
+    },
+    {
+      "name": "wordbank daily count",
+      "status": "passed",
+      "at": "2026-05-27T17:11:00.849Z",
+      "summary": {
+        "count": 0,
+        "limit": null,
+        "canSave": true,
+        "nextResetAt": "2026-05-28T00:00:00.000Z"
+      }
+    },
+    {
+      "name": "wordbank list",
+      "status": "passed",
+      "at": "2026-05-27T17:11:01.533Z",
+      "summary": {
+        "type": "array",
+        "count": 87
+      }
+    },
+    {
+      "name": "wordbank save word",
+      "status": "passed",
+      "at": "2026-05-27T17:11:03.697Z",
+      "summary": {
+        "id": 321,
+        "userId": 318,
+        "word": "qa-smoke-1779901861533",
+        "pinyin": null,
+        "translation": "QA smoke marker",
+        "targetLanguage": "Spanish (Spain / Castellano)",
+        "exampleSentences": [
+          "Esta es una prueba de QA."
+        ],
+        "audioUrl": null,
+        "masteryLevel": "learning",
+        "timesCorrect": 0,
+        "timesIncorrect": 0,
+        "lastPracticedAt": null,
+        "nextReviewDate": null,
+        "easeFactor": 2.5,
+        "interval": 1,
+        "repetitions": 0,
+        "createdAt": "2026-05-27T17:11:03.000Z"
+      }
+    },
+    {
+      "name": "wordbank check saved",
+      "status": "passed",
+      "at": "2026-05-27T17:11:04.361Z",
+      "summary": {
+        "exists": true
+      }
+    },
+    {
+      "name": "wordbank remove word",
+      "status": "passed",
+      "at": "2026-05-27T17:11:05.020Z",
+      "summary": {
+        "success": true
+      }
+    },
+    {
+      "name": "wordbank rollback",
+      "status": "passed",
+      "at": "2026-05-27T17:11:05.020Z",
+      "beforeCount": 87,
+      "removedWordId": 321
+    },
+    {
+      "name": "wordbank due count",
+      "status": "passed",
+      "at": "2026-05-27T17:11:05.682Z",
+      "summary": {
+        "count": 87
+      }
+    },
+    {
+      "name": "wordbank review stats",
+      "status": "passed",
+      "at": "2026-05-27T17:11:06.340Z",
+      "summary": {
+        "total": 87,
+        "dueToday": 87,
+        "learning": 87,
+        "familiar": 0,
+        "mastered": 0
+      }
+    },
+    {
+      "name": "story preview generation",
+      "status": "passed",
+      "at": "2026-05-27T17:11:08.268Z",
+      "summary": {
+        "previewLength": 212
+      }
+    }
+  ],
+  "generatedContent": []
+}
