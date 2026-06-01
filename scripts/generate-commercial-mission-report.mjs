@@ -271,7 +271,7 @@ statusTable(
 );
 
 paragraph(
-  "Note on coverage: every validation that could not be executed on the live online environment due to the depleted Replicate credit was carried out locally on a development workstation against a separate Replicate environment. This ensured that the film generation code path was fully exercised end to end (subtitle synthesis, narration, retry logic, clip stitching and provider error handling) so that no part of the feature surface relies on assumptions rather than observed behavior.",
+  "Note on coverage: every validation that could not be executed on the live online environment due to the depleted Replicate credit was carried out locally on a development workstation against a separate Replicate environment.",
 );
 
 title("Launch Checklist");

@@ -1,16 +1,16 @@
 import { useLocation } from "wouter";
 import {
-  CirclePlus,
   HelpCircle,
   MessageCircleMore,
   Settings,
+  Sparkles,
   User,
 } from "lucide-react";
 
 const TABS = [
   { id: "tutorial", label: "Show Tutorial", icon: HelpCircle, path: null },
   { id: "chat", label: "Chat", icon: MessageCircleMore, path: null, badge: true },
-  { id: "create", label: "Create", icon: CirclePlus, path: "/create" },
+  { id: "create", label: "Create Story", icon: Sparkles, path: "/create" },
   { id: "settings", label: "Settings", icon: Settings, path: "/settings" },
   { id: "profile", label: "Profile", icon: User, path: null },
 ] as const;
