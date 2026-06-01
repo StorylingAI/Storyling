@@ -9,6 +9,24 @@ import { ExpirationPlugin } from 'workbox-expiration';
 // ─── Precache build assets (injected by vite-plugin-pwa) ───
 precacheAndRoute(self.__WB_MANIFEST);
 
+// ─── Take control immediately on update ───────────────────────────────
+// Without this, a freshly deployed SW stays in "waiting" until every tab
+// of the site is closed, so returning users keep seeing the old bundle.
+// skipWaiting() activates the new SW right away; clients.claim() makes it
+// control already-open pages so the next reload serves fresh assets.
+self.addEventListener('install', () => {
+  self.skipWaiting();
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+// Support manual trigger from the app (updateSW(true) posts this message).
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 // ─── Google Fonts: CacheFirst, 1 year ───
 registerRoute(
   ({ url }) =>

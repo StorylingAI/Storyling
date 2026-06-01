@@ -71,10 +71,28 @@ const trpcClient = trpc.createClient({
   ],
 });
 
-// Register PWA service worker — auto-update silently
-registerSW({
+// Register PWA service worker — auto-update.
+// When a new SW takes control (via skipWaiting + clients.claim in sw.ts),
+// reload once so the page picks up the freshly deployed assets. Without
+// this, users keep running the old bundle until they manually clear cache.
+if ('serviceWorker' in navigator) {
+  // Only reload on a genuine update (a controller was already active at load),
+  // not on the first-ever install where claiming control is expected.
+  const hadController = !!navigator.serviceWorker.controller;
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (reloading || !hadController) return;
+    reloading = true;
+    window.location.reload();
+  });
+}
+
+const updateSW = registerSW({
+  immediate: true,
   onNeedRefresh() {
-    // Silent auto-reload on next navigation
+    // A new version is waiting — activate it now; the controllerchange
+    // listener above triggers the reload once it takes control.
+    updateSW(true);
   },
   onOfflineReady() {
     console.log('[PWA] App ready for offline use');
