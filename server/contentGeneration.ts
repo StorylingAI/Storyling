@@ -1649,6 +1649,8 @@ function isTransientClipFailure(message: string): boolean {
   const normalizedMessage = message.toLowerCase();
   return (
     normalizedMessage.includes('e004') ||
+    normalizedMessage.includes('unexpected error') ||
+    normalizedMessage.includes('handling prediction') ||
     normalizedMessage.includes('timeout') ||
     normalizedMessage.includes('temporarily unavailable') ||
     normalizedMessage.includes('rate limit') ||

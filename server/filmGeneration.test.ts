@@ -481,6 +481,47 @@ describe('generateFilm NSFW retry', () => {
     expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
   });
 
+  it('should retry Replicate "unexpected error handling prediction" (E6716) failures', async () => {
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test', created: Date.now(), model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'Character sheet data' }, finish_reason: 'stop' }],
+    });
+
+    mockedInvokeLLM.mockResolvedValueOnce({
+      id: 'test', created: Date.now(), model: 'gpt-4o-mini',
+      choices: [{ index: 0, message: { role: 'assistant' as const, content: 'A lone traveler walks through a quiet snowy path.' }, finish_reason: 'stop' }],
+    });
+
+    // Production scenario: Replicate returns a failed prediction (not a thrown error)
+    // carrying the provider's internal infrastructure error message.
+    mockedGenerateVideo
+      .mockResolvedValueOnce({
+        videoUrl: '',
+        status: 'failed',
+        requestId: 'req-e6716',
+        error: 'Director: unexpected error handling prediction (E6716)',
+      })
+      .mockResolvedValueOnce({
+        videoUrl: 'https://example.com/recovered-after-e6716.mp4',
+        status: 'completed',
+        requestId: 'req-recovered-e6716',
+      });
+
+    const result = await generateFilm(
+      {
+        targetLanguage: 'French', proficiencyLevel: 'A2',
+        vocabularyWords: ['neige'], theme: 'Comedy',
+        cinematicStyle: 'Photorealistic Drama', targetVideoDuration: 5,
+        addSubtitles: false,
+      },
+      'Le voyageur marche dans la neige.',
+    );
+
+    expect(result.videoUrl).toBe('https://example.com/recovered-after-e6716.mp4');
+    expect(mockedGenerateVideo).toHaveBeenCalledTimes(2);
+    expect(mockedInvokeLLM).toHaveBeenCalledTimes(2);
+  });
+
   it('should create reference stills and animate them with the same subject lock across clips', async () => {
     mockedInvokeLLM.mockResolvedValueOnce({
       id: 'test',
